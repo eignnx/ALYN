@@ -31,6 +31,27 @@ pub enum TyckErr {
         operand_ty: Ty,
         expected_ty: String,
     },
+    WrongArgType {
+        span: Span,
+        fname: Intern<String>,
+        nth_arg: usize,
+        actual_arg_ty: Ty,
+        expected_arg_ty: Ty,
+    },
+    WrongNumArgs {
+        span: Span,
+        fname: Intern<String>,
+        expected: usize,
+        actual: usize,
+    },
+    UnknownFn {
+        span: Span,
+        fname: Intern<String>,
+    },
+    CalledNonCallable {
+        span: Span,
+        fname: Intern<String>,
+    },
 }
 
 pub type TyckResult<T> = Result<T, TyckErr>;
@@ -83,7 +104,43 @@ impl Ann<RVal> {
                     let _ = self.set_ty(ty.clone());
                 })
             }
-            RVal::Call(intern, anns) => todo!(),
+            RVal::Call(fname, args) => {
+                let Some(data) = tcx.get(&fname) else {
+                    return Err(TyckErr::UnknownFn {
+                        span: self.span,
+                        fname: fname.clone(),
+                    })
+                };
+                let subr_ty = data.ty.clone();
+                let Ty::Subr(arg_tys, ret_ty) = subr_ty else {
+                    return Err(TyckErr::CalledNonCallable {
+                        span: self.span,
+                        fname: fname.clone(),
+                    })
+                };
+                let ret_ty = (*ret_ty).clone();
+                if arg_tys.len() != args.len() {
+                    return Err(TyckErr::WrongNumArgs {
+                        span: self.span,
+                        fname: fname.clone(),
+                        expected: arg_tys.len(),
+                        actual: args.len(),
+                    });
+                }
+                for (i, (arg, expected_arg_ty)) in args.iter_mut().zip(arg_tys.iter()).enumerate() {
+                    let actual_arg_ty = arg.infer_ty(tcx)?;
+                    if &actual_arg_ty != expected_arg_ty {
+                        return Err(TyckErr::WrongArgType {
+                            span: arg.span,
+                            fname: fname.clone(),
+                            nth_arg: i + 1,
+                            actual_arg_ty,
+                            expected_arg_ty: expected_arg_ty.clone(),
+                        });
+                    }
+                }
+                Ok(self.set_ty(ret_ty))
+            }
         }
     }
 }
