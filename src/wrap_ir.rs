@@ -1,10 +1,14 @@
 #![allow(unused)]
 
+use crate::ir::{Binop, LVal, RVal, Relop, Stmt};
+use crate::names::{Lbl, Tmp};
 use std::rc::Rc;
-use crate::ir::{Binop, LVal, Lbl, RVal, Relop, Stmt, Tmp};
 
+/// AKA: `exp`
 pub enum IrWrap {
+    /// AKA: `Ex`
     RVal(RVal),
+    /// AKA: `Nx`
     Stmt(Stmt),
     /// A closure that produces a statement from a conditional once fed both an
     /// `if_true` label and an `if_false` label.
@@ -22,10 +26,13 @@ pub enum IrWrap {
     ///     Lbl("end"),
     /// ]
     /// ```
+    ///
+    /// AKA: `Cx`
     Cond(Box<dyn Fn(Lbl, Lbl) -> Stmt>),
 }
 
 impl IrWrap {
+    /// AKA: `unEx`
     pub fn as_expr(&self) -> RVal {
         match self {
             IrWrap::RVal(rval) => rval.clone(),
@@ -34,31 +41,33 @@ impl IrWrap {
                 let r = Tmp::fresh("r");
                 let t = Lbl::fresh("t");
                 let f = Lbl::fresh("f");
-                RVal::seq([
-                    Rc::new(Stmt::Move(r.into(), 1.into())),
-                    Rc::new(mk_stmt(t, f)),
-                    Rc::new(f.into()),
-                    Rc::new(Stmt::Move(r.into(), 0.into())),
-                    Rc::new(t.into())
-                ], r.into())
+                RVal::seq(
+                    [
+                        Rc::new(Stmt::Move(r.into(), 1.into())),
+                        Rc::new(mk_stmt(t, f)),
+                        Rc::new(f.into()),
+                        Rc::new(Stmt::Move(r.into(), 0.into())),
+                        Rc::new(t.into()),
+                    ],
+                    r.into(),
+                )
             }
         }
     }
 
+    /// AKA: `unNx`
     pub fn as_stmt(&self) -> Stmt {
         match self {
             IrWrap::Stmt(stmt) => stmt.clone(),
             IrWrap::RVal(rval) => Stmt::RVal(rval.clone()),
             IrWrap::Cond(mk_stmt) => {
                 let after = Lbl::fresh("after_cond");
-                Stmt::Seq(
-                    Rc::new(mk_stmt(after, after)),
-                    Rc::new(Stmt::Lbl(after)),
-                )
+                Stmt::Seq(Rc::new(mk_stmt(after, after)), Rc::new(Stmt::Lbl(after)))
             }
         }
     }
 
+    /// AKA: `unCx`
     pub fn as_cond(self) -> Box<dyn Fn(Lbl, Lbl) -> Stmt> {
         match self {
             IrWrap::Cond(mk_stmt) => mk_stmt,
@@ -71,7 +80,7 @@ impl IrWrap {
                 e2: 0.into(),
                 if_true: t,
                 if_false: f,
-            })
+            }),
         }
     }
 }

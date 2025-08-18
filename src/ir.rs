@@ -1,46 +1,13 @@
 //! Intermediate Representation
 #![allow(unused)]
 
-use std::{cell::Cell, rc::Rc, sync::atomic::{AtomicUsize, Ordering}};
-use internment::Intern;
+use crate::names::{Lbl, Tmp};
 use derive_more::From;
-
-#[derive(Debug, Clone, Copy)]
-pub struct Lbl(Intern<String>);
-
-impl From<&str> for Lbl {
-    fn from(name: &str) -> Self {
-        Self(Intern::new(name.into()))
-    }
-}
-
-pub static LBL_ID: AtomicUsize = AtomicUsize::new(0);
-
-impl Lbl {
-    pub fn fresh(base_name: &str) -> Self {
-        let id = LBL_ID.fetch_add(1, Ordering::SeqCst);
-        Self(Intern::new(format!("{base_name}#{id}")))
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Tmp(Intern<String>);
-
-impl From<&str> for Tmp {
-    fn from(name: &str) -> Self {
-        Self(Intern::new(name.into()))
-    }
-}
-
-pub static TMP_ID: AtomicUsize = AtomicUsize::new(0);
-
-impl Tmp {
-    pub fn fresh(base_name: &str) -> Self {
-        let id = TMP_ID.fetch_add(1, Ordering::SeqCst);
-        Self(Intern::new(format!("{base_name}#{id}")))
-    }
-}
-
+use internment::Intern;
+use std::{
+    rc::Rc,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Binop {
@@ -55,13 +22,17 @@ pub enum Binop {
 #[derive(Debug, Clone, From)]
 pub enum RVal {
     #[from]
+    /// AKA: `Const`
     Int(i64),
     #[from]
+    /// AKA: `Name`
     Lbl(Lbl),
     #[from]
+    /// AKA: `Temp, Mem`
     LVal(LVal),
     Binop(Binop, Rc<RVal>, Rc<RVal>),
     Call(Rc<RVal>, Vec<Rc<RVal>>),
+    /// AKA: `ESeq`
     Seq(Rc<Stmt>, Rc<RVal>),
 }
 
@@ -72,8 +43,7 @@ impl From<Tmp> for RVal {
 }
 
 impl RVal {
-    pub fn seq<const N: usize>(stmts: [Rc<Stmt>; N], result: RVal) -> Self
-    {
+    pub fn seq<const N: usize>(stmts: [Rc<Stmt>; N], result: RVal) -> Self {
         let mut acc = result;
         for stmt in stmts.into_iter().rev() {
             acc = RVal::Seq(stmt, Rc::new(acc));
@@ -85,6 +55,7 @@ impl RVal {
 #[derive(Debug, Clone, From)]
 pub enum LVal {
     #[from]
+    /// AKA: `Temp`
     Tmp(Tmp),
     Mem(Rc<RVal>),
 }
@@ -102,8 +73,11 @@ pub enum Relop {
 #[derive(Debug, Clone, From)]
 pub enum Stmt {
     Move(LVal, RVal),
+    /// AKA: `Exp`
     RVal(RVal),
+    /// AKA: `Jump`
     Jmp(RVal, Vec<Lbl>),
+    /// AKA: `CJump`
     Br {
         op: Relop,
         e1: RVal,
@@ -113,6 +87,7 @@ pub enum Stmt {
     },
     Seq(Rc<Stmt>, Rc<Stmt>),
     #[from]
+    /// AKA: `Label`
     Lbl(Lbl),
 }
 
@@ -132,16 +107,16 @@ fn asdf() {
             e2: Tmp::from("b").into(),
             if_true: Lbl::from("t"),
             if_false: Lbl::from("z"),
-    }),
+        }),
         Rc::new(Stmt::Seq(
-                Rc::new(Lbl::from("z").into()),
-                Rc::new(Stmt::Br {
-                    op: Relop::Lt,
-                    e1: Tmp::from("c").into(),
-                    e2: Tmp::from("d").into(),
-                    if_true: Lbl::from("t"),
-                    if_false: Lbl::from("f"),
-                })
-        ))
+            Rc::new(Lbl::from("z").into()),
+            Rc::new(Stmt::Br {
+                op: Relop::Lt,
+                e1: Tmp::from("c").into(),
+                e2: Tmp::from("d").into(),
+                if_true: Lbl::from("t"),
+                if_false: Lbl::from("f"),
+            }),
+        )),
     );
 }
