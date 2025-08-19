@@ -4,6 +4,7 @@ mod ast;
 mod frame;
 mod ir;
 mod names;
+mod tcx;
 mod ty;
 mod tyck;
 

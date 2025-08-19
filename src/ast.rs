@@ -48,20 +48,33 @@ impl std::fmt::Debug for Span {
 
 #[derive(Debug)]
 pub struct Module {
-    filename: String,
-    decls: Vec<Ann<SubrDecl>>,
+    pub filename: String,
+    pub decls: Vec<Ann<SubrDecl>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SubrDecl {
-    name: Intern<String>,
-    params: Vec<Ann<Param>>,
-    ret_ty: Ty,
-    body: Vec<Ann<Stmt>>,
+    pub name: Intern<String>,
+    pub params: Vec<Ann<Param>>,
+    pub ret_ty: Ty,
+    pub body: Vec<Ann<Stmt>>,
+}
+
+impl SubrDecl {
+    pub fn subr_ty(&self) -> Ty {
+        let mut param_tys = vec![];
+        for param in &self.params {
+            param_tys.push(param.ty.as_ref().cloned().unwrap());
+        }
+        Ty::Subr(param_tys, Box::new(self.ret_ty.clone()))
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct Param(Intern<String>, Ty);
+pub struct Param {
+    pub name: Intern<String>,
+    pub ty: Ty,
+}
 
 /// `X` type parameter is for x-tra data (like type of the expression, source
 /// code span)
@@ -71,8 +84,9 @@ pub enum Stmt {
     RVal(Ann<RVal>),
     Let(Intern<String>, Ann<RVal>),
     Assign(Ann<LVal>, Ann<RVal>),
-    If(RVal, Vec<Stmt>, Option<Vec<Stmt>>),
-    While(RVal, Vec<Stmt>),
+    If(Ann<RVal>, Vec<Ann<Stmt>>, Option<Vec<Ann<Stmt>>>),
+    While(Ann<RVal>, Vec<Ann<Stmt>>),
+    Ret(Option<Ann<RVal>>),
 }
 
 #[derive(Debug, Clone, From)]

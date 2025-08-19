@@ -1,14 +1,8 @@
 use crate::ast::*;
+use crate::tcx::{SymData, Tcx};
 use crate::ty::Ty;
 use internment::Intern;
 use std::collections::HashMap;
-
-type Tcx = HashMap<Intern<String>, SymData>;
-
-#[derive(Debug)]
-struct SymData {
-    ty: Ty,
-}
 
 pub enum TyckErr {
     UnknownVariable {
@@ -51,6 +45,30 @@ pub enum TyckErr {
     CalledNonCallable {
         span: Span,
         fname: Intern<String>,
+    },
+    ShadowedVarName {
+        span: Span,
+        varname: Intern<String>,
+    },
+    InvalidAssignment {
+        span: Span,
+        lhs_ty: Ty,
+        rhs_ty: Ty,
+    },
+    NonBoolCond {
+        span: Span,
+        actual_ty: Ty,
+    },
+    WrongRetTy {
+        span: Span,
+        expected_ty: Ty,
+        actual_ty: Ty,
+    },
+    RetValInVoidSubr {
+        span: Span,
+    },
+    RetVoidInNonVoidSubr {
+        span: Span,
     },
 }
 
@@ -109,14 +127,14 @@ impl Ann<RVal> {
                     return Err(TyckErr::UnknownFn {
                         span: self.span,
                         fname: fname.clone(),
-                    })
+                    });
                 };
                 let subr_ty = data.ty.clone();
                 let Ty::Subr(arg_tys, ret_ty) = subr_ty else {
                     return Err(TyckErr::CalledNonCallable {
                         span: self.span,
                         fname: fname.clone(),
-                    })
+                    });
                 };
                 let ret_ty = (*ret_ty).clone();
                 if arg_tys.len() != args.len() {
@@ -200,5 +218,138 @@ impl Unop {
                 }),
             },
         }
+    }
+}
+
+impl Ann<Stmt> {
+    fn infer_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
+        match &mut self.value {
+            Stmt::RVal(rval) => rval.infer_ty(tcx).map(|_| ()),
+            Stmt::Let(varname, rhs) => {
+                let ty = rhs.infer_ty(tcx)?;
+                if let Some(_prev) = tcx.insert(varname.clone(), SymData { ty }) {
+                    return Err(TyckErr::ShadowedVarName {
+                        span: self.span,
+                        varname: varname.clone(),
+                    });
+                }
+                Ok(())
+            }
+            Stmt::Assign(lhs, rhs) => {
+                let rhs_ty = rhs.infer_ty(tcx)?;
+                let lhs_ty = lhs.infer_ty(tcx)?;
+                if rhs_ty != lhs_ty {
+                    return Err(TyckErr::InvalidAssignment {
+                        span: self.span,
+                        lhs_ty,
+                        rhs_ty,
+                    });
+                };
+                Ok(())
+            }
+            Stmt::If(cond, true_branch, opt_false_branch) => {
+                let cond_ty = cond.infer_ty(tcx)?;
+                if cond_ty != Ty::Bool {
+                    return Err(TyckErr::NonBoolCond {
+                        span: cond.span.clone(),
+                        actual_ty: cond_ty,
+                    });
+                }
+
+                tcx.enter_scope();
+                for stmt in true_branch {
+                    stmt.infer_ty(tcx)?;
+                }
+                tcx.exit_scope();
+
+                tcx.enter_scope();
+                for stmt in opt_false_branch.iter_mut().flatten() {
+                    stmt.infer_ty(tcx)?;
+                }
+                tcx.exit_scope();
+
+                Ok(())
+            }
+            Stmt::While(cond, body) => {
+                let cond_ty = cond.infer_ty(tcx)?;
+                if cond_ty != Ty::Bool {
+                    return Err(TyckErr::NonBoolCond {
+                        span: cond.span.clone(),
+                        actual_ty: cond_ty,
+                    });
+                }
+
+                tcx.enter_scope();
+                for stmt in body {
+                    stmt.infer_ty(tcx)?;
+                }
+                tcx.exit_scope();
+
+                Ok(())
+            }
+            Stmt::Ret(None) => {
+                if tcx.get_subr_ret_ty().is_some() {
+                    return Err(TyckErr::RetVoidInNonVoidSubr { span: self.span });
+                }
+                Ok(())
+            }
+            Stmt::Ret(Some(rval)) => {
+                if let Some(expected_ty) = tcx.get_subr_ret_ty().cloned() {
+                    let ty = rval.infer_ty(tcx)?;
+                    if ty != expected_ty {
+                        Err(TyckErr::WrongRetTy {
+                            span: self.span,
+                            expected_ty,
+                            actual_ty: ty,
+                        })
+                    } else {
+                        Ok(())
+                    }
+                } else {
+                    Err(TyckErr::RetValInVoidSubr { span: self.span })
+                }
+            }
+        }
+    }
+}
+
+impl Ann<SubrDecl> {
+    pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
+        tcx.enter_scope();
+        tcx.set_subr_ret_ty(self.value.ret_ty.clone());
+        // Define all parameters.
+        for param in &self.value.params {
+            tcx.insert(
+                param.value.name.clone(),
+                SymData {
+                    ty: param.value.ty.clone(),
+                },
+            );
+        }
+        tcx.exit_scope();
+        Ok(())
+    }
+}
+
+impl Module {
+    pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
+        // First read all subr decl types and put them in the tcx to allow for
+        // mutual recursion.
+        for subr in &mut self.decls {
+            let subr_ty = subr.value.subr_ty();
+            if let Some(_) = tcx.insert(subr.value.name.clone(), SymData { ty: subr_ty }) {
+                return Err(TyckErr::ShadowedVarName {
+                    span: subr.span.clone(),
+                    varname: subr.value.name.clone(),
+                });
+            }
+        }
+
+        // Then type check all decls.
+        for subr in &mut self.decls {
+            subr.check_ty(tcx)?;
+        }
+
+        Ok(())
     }
 }
