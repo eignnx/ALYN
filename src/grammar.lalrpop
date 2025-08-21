@@ -1,0 +1,42 @@
+use std::str::FromStr;
+use internment::Intern;
+use crate::ast::{RVal, LVal, Binop, Unop, Stmt, SubrDecl, Module, MakeAnn, Span, Ann};
+
+grammar;
+
+Spanned<T>: Ann<T> = <start: @L> <t: T> <end: @R> => t.with_span(start..end);
+
+pub RVal: RVal = {
+    #[precedence(level="0")]
+    <digits:r"[0-9]+b"> => RVal::Byte(u8::from_str(&digits[0..digits.len()-2]).unwrap()),
+    #[precedence(level="0")]
+    <digits:r"[0-9]+"> => RVal::Nat(u64::from_str(digits).unwrap()),
+    #[precedence(level="0")]
+    <digits:r"[-+][0-9]+"> => RVal::Int(i64::from_str(digits).unwrap()),
+
+    #[precedence(level="1")]
+    <start: @L> r"\*" <rval:Spanned<RVal>> <end: @R> => {
+        RVal::LVal(LVal::Deref(Box::new(rval)).with_span(start..end))
+    },
+
+    #[precedence(level="2")]
+    #[assoc(side="left")]
+    <lhs:Spanned<RVal>> <op:Binop> <rhs:Spanned<RVal>> => RVal::Binop(op, Box::new(lhs), Box::new(rhs)),
+
+    #[precedence(level="0")]
+    <ident: Spanned<r"[a-z_][a-z0-9_]*">> => {
+        RVal::LVal(LVal::Var(Intern::from_ref(ident.value), None).with_span(ident.span))
+    },
+};
+
+Binop: Binop = {
+    r"\+" => Binop::Add,
+    r"-" => Binop::Sub,
+    r"==" => Binop::Eq,
+    r"!=" => Binop::Ne,
+    r"<" => Binop::Lt,
+    r">" => Binop::Gt,
+    r"<=" => Binop::Lte,
+    r">=" => Binop::Gte,
+};
+

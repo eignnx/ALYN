@@ -1,4 +1,5 @@
 #![allow(unused)]
+use lalrpop_util::lalrpop_mod;
 
 mod ast;
 mod ast_to_ir;
@@ -9,7 +10,13 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+lalrpop_mod!(
+    #[allow(clippy::ptr_arg)]
+    #[rustfmt::skip]
+    grammar
+);
 
 fn main() {
     println!("Hello, world!");
+    dbg!(grammar::RValParser::new().parse("*1312 + 3 + qwerty34"));
 }

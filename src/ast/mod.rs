@@ -2,8 +2,10 @@ use crate::{sym::IdentKind, ty::Ty};
 use derive_more::From;
 use internment::Intern;
 
+mod impls;
+
 /// Annotated - A `T` annotated with extra data.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Ann<T> {
     pub value: T,
     pub span: Span,
@@ -18,10 +20,10 @@ impl<T> Ann<T> {
 }
 
 pub trait MakeAnn<T>: Sized {
-    fn with_span(self, span: Span) -> Ann<Self> {
+    fn with_span(self, span: impl Into<Span>) -> Ann<Self> {
         Ann {
             value: self,
-            span: span,
+            span: span.into(),
             ty: None,
         }
     }
@@ -31,18 +33,16 @@ impl<T> MakeAnn<T> for T {}
 
 #[derive(Clone, Copy)]
 pub struct Span {
-    pub byte_start: u32,
-    pub byte_len: u32,
+    start: usize,
+    end: usize,
 }
 
-impl std::fmt::Debug for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "src[{}..{}]",
-            self.byte_start,
-            self.byte_start + self.byte_len
-        )
+impl From<std::ops::Range<usize>> for Span {
+    fn from(value: std::ops::Range<usize>) -> Self {
+        Self {
+            start: value.start,
+            end: value.end,
+        }
     }
 }
 
@@ -89,7 +89,7 @@ pub enum Stmt {
     Ret(Option<Ann<RVal>>),
 }
 
-#[derive(Debug, Clone, From)]
+#[derive(Clone, From)]
 pub enum RVal {
     #[from]
     Byte(u8),
@@ -104,7 +104,7 @@ pub enum RVal {
     Call(Intern<String>, Vec<Ann<RVal>>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum LVal {
     Var(Intern<String>, Option<IdentKind>),
     Deref(Box<Ann<RVal>>),
@@ -130,10 +130,7 @@ pub enum Unop {
 
 #[test]
 fn asdf() {
-    let s = Span {
-        byte_start: 0,
-        byte_len: 0,
-    };
+    let s = 0..0;
     let _rval: RVal = RVal::LVal(
         LVal::Deref(Box::new(
             RVal::Call(
