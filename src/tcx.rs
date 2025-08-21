@@ -1,9 +1,15 @@
-use crate::ty::Ty;
+use crate::{sym::IdentKind, ty::Ty};
 use internment::Intern;
 use std::collections::HashMap;
 
 pub struct Tcx {
     maps: Vec<HashMap<Intern<String>, SymData>>,
+}
+
+#[derive(Debug)]
+pub struct SymData {
+    pub ty: Ty,
+    pub sym_kind: IdentKind,
 }
 
 impl Tcx {
@@ -16,7 +22,13 @@ impl Tcx {
     const SUBR_RET_TY: &str = "<subr_ret_ty>";
 
     pub fn set_subr_ret_ty(&mut self, ty: Ty) {
-        self.insert(Intern::from_ref(Self::SUBR_RET_TY), SymData { ty });
+        self.insert(
+            Intern::from_ref(Self::SUBR_RET_TY),
+            SymData {
+                ty,
+                sym_kind: IdentKind::SubrRet,
+            },
+        );
     }
 
     pub fn get_subr_ret_ty(&self) -> Option<&Ty> {
@@ -47,9 +59,4 @@ impl Tcx {
     pub fn exit_scope(&mut self) -> HashMap<Intern<String>, SymData> {
         self.maps.pop().unwrap()
     }
-}
-
-#[derive(Debug)]
-pub struct SymData {
-    pub ty: Ty,
 }

@@ -4,10 +4,7 @@
 use crate::names::{Lbl, Tmp};
 use derive_more::From;
 use internment::Intern;
-use std::{
-    rc::Rc,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Binop {
@@ -22,6 +19,10 @@ pub enum Binop {
 #[derive(Debug, Clone, From)]
 pub enum RVal {
     #[from]
+    Byte(u8),
+    #[from]
+    Nat(u64),
+    #[from]
     /// AKA: `Const`
     Int(i64),
     #[from]
@@ -30,10 +31,10 @@ pub enum RVal {
     #[from]
     /// AKA: `Temp, Mem`
     LVal(LVal),
-    Binop(Binop, Rc<RVal>, Rc<RVal>),
-    Call(Rc<RVal>, Vec<Rc<RVal>>),
+    Binop(Binop, Box<RVal>, Box<RVal>),
+    Call(Box<RVal>, Vec<Box<RVal>>),
     /// AKA: `ESeq`
-    Seq(Rc<Stmt>, Rc<RVal>),
+    Seq(Box<Stmt>, Box<RVal>),
 }
 
 impl From<Tmp> for RVal {
@@ -43,10 +44,10 @@ impl From<Tmp> for RVal {
 }
 
 impl RVal {
-    pub fn seq<const N: usize>(stmts: [Rc<Stmt>; N], result: RVal) -> Self {
+    pub fn seq<const N: usize>(stmts: [Box<Stmt>; N], result: RVal) -> Self {
         let mut acc = result;
         for stmt in stmts.into_iter().rev() {
-            acc = RVal::Seq(stmt, Rc::new(acc));
+            acc = RVal::Seq(stmt, Box::new(acc));
         }
         acc
     }
@@ -54,10 +55,12 @@ impl RVal {
 
 #[derive(Debug, Clone, From)]
 pub enum LVal {
-    #[from]
+    Param(u8),
     /// AKA: `Temp`
-    Tmp(Tmp),
-    Mem(Rc<RVal>),
+    #[from]
+    Tmp(Tmp), // <-- Local
+    Mem(Box<RVal>),         // <-- Deref
+    Global(Intern<String>), // <-- Global
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -66,8 +69,12 @@ pub enum Relop {
     Ne,
     Gt,
     Lt,
+    Gte,
+    Lte,
     GtU,
     LtU,
+    GteU,
+    LteU,
 }
 
 #[derive(Debug, Clone, From)]
@@ -85,15 +92,33 @@ pub enum Stmt {
         if_true: Lbl,
         if_false: Lbl,
     },
-    Seq(Rc<Stmt>, Rc<Stmt>),
+    Seq(Box<Stmt>, Box<Stmt>),
     #[from]
     /// AKA: `Label`
     Lbl(Lbl),
+    Nop,
 }
 
 impl Stmt {
     pub fn direct_jmp(lbl: Lbl) -> Self {
         Self::Jmp(lbl.into(), vec![lbl])
+    }
+
+    pub fn seq<I>(stmts: I) -> Self
+    where
+        I: IntoIterator<Item = Stmt>,
+        I::IntoIter: DoubleEndedIterator,
+    {
+        let mut iter = stmts.into_iter().rev();
+        if let Some(first) = iter.next() {
+            let mut acc = first;
+            for stmt in iter {
+                acc = Stmt::Seq(Box::new(stmt), Box::new(acc));
+            }
+            acc
+        } else {
+            Self::Nop
+        }
     }
 }
 
@@ -101,16 +126,16 @@ impl Stmt {
 fn asdf() {
     // if a > b || c < d { if_true; } else { if_false; }
     let _program: Stmt = Stmt::Seq(
-        Rc::new(Stmt::Br {
+        Box::new(Stmt::Br {
             op: Relop::Gt,
             e1: Tmp::from("a").into(),
             e2: Tmp::from("b").into(),
             if_true: Lbl::from("t"),
             if_false: Lbl::from("z"),
         }),
-        Rc::new(Stmt::Seq(
-            Rc::new(Lbl::from("z").into()),
-            Rc::new(Stmt::Br {
+        Box::new(Stmt::Seq(
+            Box::new(Lbl::from("z").into()),
+            Box::new(Stmt::Br {
                 op: Relop::Lt,
                 e1: Tmp::from("c").into(),
                 e2: Tmp::from("d").into(),

@@ -1,6 +1,9 @@
-use crate::ast::*;
-use crate::tcx::{SymData, Tcx};
-use crate::ty::Ty;
+use crate::{
+    ast::*,
+    sym::IdentKind,
+    tcx::{SymData, Tcx},
+    ty::Ty,
+};
 use internment::Intern;
 use std::collections::HashMap;
 
@@ -77,8 +80,9 @@ pub type TyckResult<T> = Result<T, TyckErr>;
 impl Ann<LVal> {
     fn infer_ty(&mut self, tcx: &mut Tcx) -> TyckResult<Ty> {
         match &mut self.value {
-            LVal::Var(name) => {
+            LVal::Var(name, ident_kind) => {
                 if let Some(sym_data) = tcx.get(&name) {
+                    *ident_kind = Some(sym_data.sym_kind);
                     Ok(self.set_ty(sym_data.ty.clone()))
                 } else {
                     Err(TyckErr::UnknownVariable {
@@ -227,7 +231,13 @@ impl Ann<Stmt> {
             Stmt::RVal(rval) => rval.infer_ty(tcx).map(|_| ()),
             Stmt::Let(varname, rhs) => {
                 let ty = rhs.infer_ty(tcx)?;
-                if let Some(_prev) = tcx.insert(varname.clone(), SymData { ty }) {
+                if let Some(_prev) = tcx.insert(
+                    varname.clone(),
+                    SymData {
+                        ty,
+                        sym_kind: IdentKind::Local,
+                    },
+                ) {
                     return Err(TyckErr::ShadowedVarName {
                         span: self.span,
                         varname: varname.clone(),
@@ -318,11 +328,12 @@ impl Ann<SubrDecl> {
         tcx.enter_scope();
         tcx.set_subr_ret_ty(self.value.ret_ty.clone());
         // Define all parameters.
-        for param in &self.value.params {
+        for (i, param) in self.value.params.iter().enumerate() {
             tcx.insert(
                 param.value.name.clone(),
                 SymData {
                     ty: param.value.ty.clone(),
+                    sym_kind: IdentKind::Param(i as u8),
                 },
             );
         }
@@ -337,7 +348,13 @@ impl Module {
         // mutual recursion.
         for subr in &mut self.decls {
             let subr_ty = subr.value.subr_ty();
-            if let Some(_) = tcx.insert(subr.value.name.clone(), SymData { ty: subr_ty }) {
+            if let Some(_) = tcx.insert(
+                subr.value.name.clone(),
+                SymData {
+                    ty: subr_ty,
+                    sym_kind: IdentKind::Subr,
+                },
+            ) {
                 return Err(TyckErr::ShadowedVarName {
                     span: subr.span.clone(),
                     varname: subr.value.name.clone(),

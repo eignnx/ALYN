@@ -1,4 +1,4 @@
-use crate::ty::Ty;
+use crate::{sym::IdentKind, ty::Ty};
 use derive_more::From;
 use internment::Intern;
 
@@ -106,7 +106,7 @@ pub enum RVal {
 
 #[derive(Debug, Clone)]
 pub enum LVal {
-    Var(Intern<String>),
+    Var(Intern<String>, Option<IdentKind>),
     Deref(Box<Ann<RVal>>),
 }
 

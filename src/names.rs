@@ -4,12 +4,10 @@ use derive_more::From;
 use internment::Intern;
 
 #[derive(Debug, Clone, Copy)]
-pub struct Lbl(Intern<String>);
-
-impl From<&str> for Lbl {
-    fn from(name: &str) -> Self {
-        Self(Intern::new(name.into()))
-    }
+pub enum Lbl {
+    SubrStart(Intern<String>),
+    Global(Intern<String>),
+    ControlFlow(Intern<String>),
 }
 
 pub static LBL_ID: AtomicUsize = AtomicUsize::new(0);
@@ -17,12 +15,12 @@ pub static LBL_ID: AtomicUsize = AtomicUsize::new(0);
 impl Lbl {
     pub fn fresh(base_name: &str) -> Self {
         let id = LBL_ID.fetch_add(1, Ordering::SeqCst);
-        Self(Intern::new(format!("{base_name}#{id}")))
+        Self::ControlFlow(Intern::new(format!("{base_name}#{id}")))
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Tmp(Intern<String>);
+pub struct Tmp(pub Intern<String>);
 
 impl From<&str> for Tmp {
     fn from(name: &str) -> Self {
