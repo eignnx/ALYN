@@ -78,7 +78,7 @@ pub struct Param {
 
 /// `X` type parameter is for x-tra data (like type of the expression, source
 /// code span)
-#[derive(Debug, Clone, From)]
+#[derive(Clone, From)]
 pub enum Stmt {
     #[from]
     RVal(Ann<RVal>),

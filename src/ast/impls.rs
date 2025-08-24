@@ -75,3 +75,31 @@ impl Display for Unop {
         })
     }
 }
+
+impl Debug for Stmt {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            Self::RVal(x) => write!(f, "{x:?};"),
+            Self::Let(lhs, rhs) => write!(f, "let {lhs:?} = {rhs:?};"),
+            Self::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?};"),
+            Self::If(cond, if_true, if_false) => {
+                write!(f, "if {cond:?} {{\n")?;
+                for stmt in if_true {
+                    write!(f, "    {stmt:?}\n")?;
+                }
+                write!(f, "}}")?;
+                if let Some(if_false) = if_false {
+                    write!(f, " else {{\n")?;
+                    for stmt in if_false {
+                        write!(f, "    {stmt:?}\n")?;
+                    }
+                    write!(f, "}}")?;
+                }
+                Ok(())
+            }
+            Self::While(arg0, arg1) => f.debug_tuple("While").field(arg0).field(arg1).finish(),
+            Self::Ret(Some(val)) => write!(f, "ret {val:?};"),
+            Self::Ret(None) => write!(f, "ret;"),
+        }
+    }
+}

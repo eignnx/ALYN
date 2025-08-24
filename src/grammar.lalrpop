@@ -16,7 +16,6 @@ AtomicRVal: RVal = {
 
     #[precedence(level="1")]
     Spanned<LVal> => RVal::LVal(<>),
-    Spanned<AtomicLVal> => RVal::LVal(<>),
 
 
     <subr_name: r"[a-z][a-z0-9_]*\("> ")" => RVal::Call(Intern::from_ref(&subr_name[0..subr_name.len()-1]), vec![]),
@@ -50,14 +49,9 @@ pub RVal: RVal = {
     },
 };
 
-AtomicLVal: LVal = {
-    <ident: r"[a-z_][a-z0-9_]*"> => {
-        LVal::Var(Intern::from_ref(ident), None)
-    },
-};
-
 LVal: LVal = {
     r"\*" <rval: Spanned<AtomicRVal>> => LVal::Deref(Box::new(rval)),
+    <ident: Name> => LVal::Var(ident, None),
 };
 
 Binop: Binop = {
@@ -75,3 +69,24 @@ Unop: Unop = {
     r"-" => Unop::Neg,
 };
 
+pub Stmt: Stmt = {
+    <rval: Spanned<RVal>> ";" => Stmt::RVal(rval),
+
+    "let" <var_name: Name> "=" <rhs: Spanned<RVal>> ";" => {
+        Stmt::Let(var_name, rhs)
+    },
+
+    <lhs: Spanned<LVal>> "=" <rhs: Spanned<RVal>> ";" => Stmt::Assign(lhs, rhs),
+
+    "ret" <rval_opt: Spanned<RVal>?> ";" => Stmt::Ret(rval_opt),
+
+    "while" <cond: Spanned<RVal>> "{" <body: Stmts> "}" => Stmt::While(cond, body),
+
+    "if" <cond: Spanned<RVal>> "{" <true_body: Stmts> "}" <false_body: ("else" "{" <Stmts> "}")?> => {
+        Stmt::If(cond, true_body, false_body)
+    },
+};
+
+Stmts: Vec<Ann<Stmt>> = <stmts: Spanned<Stmt>*> => stmts;
+
+Name: Intern<String> = <r"[a-z][a-z0-9_]*"> => Intern::from_ref(<>);

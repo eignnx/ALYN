@@ -19,5 +19,9 @@ lalrpop_mod!(
 
 fn main() {
     println!("Hello, world!");
+    dbg!(grammar::RValParser::new().parse("&*x()"));
     dbg!(grammar::RValParser::new().parse("*x + (127b - +324) - -4 == **qwerty123 + asdf() - zxcv(1, 2)"));
+    dbg!(grammar::StmtParser::new().parse("*lhs = 123 + *ptr;"));
+    dbg!(grammar::StmtParser::new().parse("let lhs = 123 + *ptr;"));
+    dbg!(grammar::StmtParser::new().parse("if 1 == 2 { lhs = 123; } else { ret asfd(); }"));
 }
