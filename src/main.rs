@@ -10,6 +10,7 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+
 lalrpop_mod!(
     #[allow(clippy::ptr_arg)]
     #[rustfmt::skip]
@@ -18,5 +19,5 @@ lalrpop_mod!(
 
 fn main() {
     println!("Hello, world!");
-    dbg!(grammar::RValParser::new().parse("*1312 + 3 + qwerty34"));
+    dbg!(grammar::RValParser::new().parse("*x + (127b - +324) - -4 == **qwerty123 + asdf() - zxcv(1, 2)"));
 }

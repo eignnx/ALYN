@@ -22,12 +22,22 @@ impl Debug for RVal {
         match self {
             Self::Byte(x) => write!(f, "{x}b"),
             Self::Nat(x) => write!(f, "{x}"),
-            Self::Int(x) if *x >= 0 => write!(f, "+{x}"),
-            Self::Int(x) => write!(f, "-{x}"),
+            Self::Int(x) => write!(f, "{x:+}"),
             Self::LVal(lval) => write!(f, "{lval:?}"),
             Self::Binop(op, x, y) => write!(f, "({x:?} {op} {y:?})"),
+            Self::AddrOf(x) => write!(f, "&{x:?}"),
             Self::Unop(op, x) => write!(f, "({op} {x:?})"),
-            Self::Call(arg0, arg1) => f.debug_tuple("Call").field(arg0).field(arg1).finish(),
+            Self::Call(subr_name, args) => {
+                write!(f, "{subr_name}(")?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{arg:?}")?;
+                }
+                write!(f, ")")?;
+                Ok(())
+            }
         }
     }
 }
@@ -37,7 +47,7 @@ impl Debug for LVal {
         match self {
             Self::Var(ident, Some(kind)) => write!(f, "{ident}${kind:?}"),
             Self::Var(ident, None) => write!(f, "{ident}"),
-            Self::Deref(rval) => write!(f, "{rval:?}"),
+            Self::Deref(rval) => write!(f, "*{rval:?}"),
         }
     }
 }
@@ -59,8 +69,8 @@ impl Display for Binop {
 
 impl Display for Unop {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let _ = vec![123].into_iter().fold(0, |x,y| x+y);
         write!(f, "{}", match self {
-            Unop::AddrOf => "&",
             Unop::Neg => "-",
         })
     }

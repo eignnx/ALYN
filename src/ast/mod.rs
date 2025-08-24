@@ -100,7 +100,8 @@ pub enum RVal {
     #[from]
     LVal(Ann<LVal>),
     Binop(Binop, Box<Ann<RVal>>, Box<Ann<RVal>>),
-    Unop(Unop, Box<Ann<LVal>>),
+    Unop(Unop, Box<Ann<RVal>>),
+    AddrOf(Box<Ann<LVal>>),
     Call(Intern<String>, Vec<Ann<RVal>>),
 }
 
@@ -124,7 +125,6 @@ pub enum Binop {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Unop {
-    AddrOf,
     Neg,
 }
 
@@ -135,9 +135,9 @@ fn asdf() {
         LVal::Deref(Box::new(
             RVal::Call(
                 Intern::from_ref("f"),
-                vec![RVal::Int(123).with_span(s), RVal::Byte(b'$').with_span(s)],
+                vec![RVal::Int(123).with_span(s.clone()), RVal::Byte(b'$').with_span(s.clone())],
             )
-            .with_span(s),
+            .with_span(s.clone()),
         ))
         .with_span(s),
     );

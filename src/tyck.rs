@@ -120,6 +120,10 @@ impl Ann<RVal> {
                     let _ = self.set_ty(ty.clone());
                 })
             }
+            RVal::AddrOf(x) => {
+                let ty = x.infer_ty(tcx)?;
+                Ok(self.set_ty(Ty::Ptr(Box::new(ty))))
+            },
             RVal::Unop(unop, x) => {
                 x.infer_ty(tcx)?;
                 unop.check_ty(&self.span, x).inspect(|ty| {
@@ -208,10 +212,9 @@ impl Binop {
 }
 
 impl Unop {
-    fn check_ty(&self, unop_span: &Span, x: &Ann<LVal>) -> TyckResult<Ty> {
+    fn check_ty(&self, unop_span: &Span, x: &Ann<RVal>) -> TyckResult<Ty> {
         let x_ty = x.ty.as_ref().unwrap();
         match self {
-            Unop::AddrOf => Ok(Ty::Ptr(Box::new(x_ty.clone()))),
             Unop::Neg => match x_ty {
                 Ty::Int => Ok(Ty::Int),
                 _ => Err(TyckErr::BadUnop {

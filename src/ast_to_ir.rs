@@ -14,6 +14,10 @@ impl Ann<ast::RVal> {
             ast::RVal::Int(x) => IrWrap::RVal(ir::RVal::Int(x)),
             ast::RVal::LVal(lval) => lval.to_ir(),
             ast::RVal::Binop(binop, x, y) => binop.to_ir(*x, *y),
+            ast::RVal::AddrOf(x) => {
+                let ir = x.to_ir();
+                todo!()
+            },
             ast::RVal::Unop(unop, ann) => todo!(),
             ast::RVal::Call(subr_name, args) => {
                 let mut ir_args = vec![];

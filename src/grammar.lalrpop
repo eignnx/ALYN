@@ -6,27 +6,58 @@ grammar;
 
 Spanned<T>: Ann<T> = <start: @L> <t: T> <end: @R> => t.with_span(start..end);
 
-pub RVal: RVal = {
+AtomicRVal: RVal = {
     #[precedence(level="0")]
-    <digits:r"[0-9]+b"> => RVal::Byte(u8::from_str(&digits[0..digits.len()-2]).unwrap()),
+    <digits:r"[0-9]+b"> => RVal::Byte(u8::from_str(&digits[0..digits.len()-1]).unwrap()),
     #[precedence(level="0")]
     <digits:r"[0-9]+"> => RVal::Nat(u64::from_str(digits).unwrap()),
     #[precedence(level="0")]
     <digits:r"[-+][0-9]+"> => RVal::Int(i64::from_str(digits).unwrap()),
 
     #[precedence(level="1")]
-    <start: @L> r"\*" <rval:Spanned<RVal>> <end: @R> => {
-        RVal::LVal(LVal::Deref(Box::new(rval)).with_span(start..end))
+    Spanned<LVal> => RVal::LVal(<>),
+    Spanned<AtomicLVal> => RVal::LVal(<>),
+
+
+    <subr_name: r"[a-z][a-z0-9_]*\("> ")" => RVal::Call(Intern::from_ref(&subr_name[0..subr_name.len()-1]), vec![]),
+    <subr_name: r"[a-z][a-z0-9_]*\("> <first: Spanned<RVal>> <rest: ("," <Spanned<RVal>>)*> ","? ")" => {
+        let args = std::iter::once(first)
+            .chain(rest.into_iter())
+            .collect();
+        RVal::Call(Intern::from_ref(&subr_name[0..subr_name.len()-1]), args)
+    },
+
+    "(" <RVal> ")" => <>,
+};
+
+pub RVal: RVal = {
+    #[precedence(level="0")]
+    AtomicRVal => <>,
+
+    #[precedence(level="1")]
+    "&" <lval:Spanned<LVal>> => {
+        RVal::AddrOf(Box::new(lval))
     },
 
     #[precedence(level="2")]
     #[assoc(side="left")]
-    <lhs:Spanned<RVal>> <op:Binop> <rhs:Spanned<RVal>> => RVal::Binop(op, Box::new(lhs), Box::new(rhs)),
-
-    #[precedence(level="0")]
-    <ident: Spanned<r"[a-z_][a-z0-9_]*">> => {
-        RVal::LVal(LVal::Var(Intern::from_ref(ident.value), None).with_span(ident.span))
+    <start: @L> <lhs:Spanned<AtomicRVal>> <follows: (Binop Spanned<AtomicRVal> @R)+> => {
+        let mut acc: Ann<RVal> = lhs;
+        for (op, rhs, end) in follows {
+            acc = RVal::Binop(op, Box::new(acc), Box::new(rhs)).with_span(start..end);
+        }
+        acc.value
     },
+};
+
+AtomicLVal: LVal = {
+    <ident: r"[a-z_][a-z0-9_]*"> => {
+        LVal::Var(Intern::from_ref(ident), None)
+    },
+};
+
+LVal: LVal = {
+    r"\*" <rval: Spanned<AtomicRVal>> => LVal::Deref(Box::new(rval)),
 };
 
 Binop: Binop = {
@@ -38,5 +69,9 @@ Binop: Binop = {
     r">" => Binop::Gt,
     r"<=" => Binop::Lte,
     r">=" => Binop::Gte,
+};
+
+Unop: Unop = {
+    r"-" => Unop::Neg,
 };
 
