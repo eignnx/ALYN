@@ -1,8 +1,11 @@
 use std::str::FromStr;
 use internment::Intern;
-use crate::ast::{RVal, LVal, Binop, Unop, Stmt, SubrDecl, Module, MakeAnn, Span, Ann};
+use crate::{
+    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDecl, Module, MakeAnn, Span, Ann, Param},
+    ty::Ty,
+};
 
-grammar;
+grammar(filename: &str);
 
 Spanned<T>: Ann<T> = <start: @L> <t: T> <end: @R> => t.with_span(start..end);
 
@@ -90,3 +93,51 @@ pub Stmt: Stmt = {
 Stmts: Vec<Ann<Stmt>> = <stmts: Spanned<Stmt>*> => stmts;
 
 Name: Intern<String> = <r"[a-z][a-z0-9_]*"> => Intern::from_ref(<>);
+NameOParen: Intern<String> = <name: r"[a-z][a-z0-9_]*\("> => Intern::from_ref(
+    &name[0..name.len()-1]
+);
+
+pub SubrDecl: SubrDecl = {
+    "subr" <name: NameOParen> ")" <ret_ty: Ty?> "{" <body: Stmts> "}" => SubrDecl {
+        name,
+        params: vec![],
+        ret_ty: ret_ty.unwrap_or(Ty::Void),
+        body,
+    },
+    "subr" <name: NameOParen>
+        <param_first: Spanned<Param>> <param_rest: ("," <Spanned<Param>>)*> ","?
+    ")" <ret_ty: Ty?> "{" <body: Stmts> "}" => {
+        SubrDecl {
+            name,
+            params: std::iter::once(param_first).chain(param_rest.into_iter()).collect(),
+            ret_ty: ret_ty.unwrap_or(Ty::Void),
+            body,
+        }
+    },
+};
+
+Ty: Ty = {
+    "void" => Ty::Void,
+    "bool" => Ty::Bool,
+    "byte" => Ty::Byte,
+    "int" => Ty::Int,
+    "nat" => Ty::Nat,
+    r"\*" <inner: Ty> => Ty::Ptr(Box::new(inner)),
+    "subr" "(" ")" <ret: ("->" <Ty>)?> => {
+        Ty::Subr(vec![], Box::new(ret.unwrap_or(Ty::Void)))
+    },
+    "subr" "(" <first: Ty> <rest: ("," <Ty>)*> ")" <ret: ("->" <Ty>)?> => {
+        Ty::Subr(vec![], Box::new(ret.unwrap_or(Ty::Void)))
+    },
+};
+
+Param: Param = {
+    <name: Name> ":" <ty: Ty> => Param { name, ty },
+};
+
+pub Module: Module = <items: Spanned<Item>*> => Module {
+    filename: filename.to_string(),
+    decls: items,
+};
+
+Item: SubrDecl = { SubrDecl };

@@ -1,0 +1,16 @@
+---
+source: src/main.rs
+expression: "grammar::SubrDeclParser::new().parse(\"subr main(args: **byte) { ret; }\")"
+---
+Ok(
+    SubrDecl {
+        name: "main",
+        params: [
+            Param { name: "args", ty: Ptr(Ptr(Byte)) },
+        ],
+        ret_ty: Void,
+        body: [
+            ret;,
+        ],
+    },
+)

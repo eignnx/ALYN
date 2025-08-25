@@ -1,0 +1,21 @@
+---
+source: src/main.rs
+expression: "grammar::ModuleParser::new().parse(\"mathy.alyn\",\n\"\n        subr min(a: int, b: int) int {\n            if a > b {\n                ret b;\n            } else {\n                ret a;\n            }\n        }\n\n        subr fib(n: nat) nat {\n            if n < 2 {\n                ret 1;\n            } else {\n                ret fib(n - 1) + fib(n - 2);\n            }\n        }\n        \")"
+---
+Ok(
+    Module {
+        filename: "mathy.alyn",
+        decls: [
+            SubrDecl { name: "min", params: [Param { name: "a", ty: Int }, Param { name: "b", ty: Int }], ret_ty: Int, body: [if (a > b) {
+                ret b;
+            } else {
+                ret a;
+            }] },
+            SubrDecl { name: "fib", params: [Param { name: "n", ty: Nat }], ret_ty: Nat, body: [if (n < 2) {
+                ret 1;
+            } else {
+                ret (fib((n - 1)) + fib((n - 2)));
+            }] },
+        ],
+    },
+)

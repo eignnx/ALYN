@@ -1,0 +1,14 @@
+---
+source: src/main.rs
+expression: "grammar::SubrDeclParser::new().parse(\"subr blah() { ret; }\")"
+---
+Ok(
+    SubrDecl {
+        name: "blah",
+        params: [],
+        ret_ty: Void,
+        body: [
+            ret;,
+        ],
+    },
+)

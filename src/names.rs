@@ -13,9 +13,9 @@ pub enum Lbl {
 pub static LBL_ID: AtomicUsize = AtomicUsize::new(0);
 
 impl Lbl {
-    pub fn fresh(base_name: &str) -> Self {
+    pub fn fresh(base_name: impl AsRef<str>) -> Self {
         let id = LBL_ID.fetch_add(1, Ordering::SeqCst);
-        Self::ControlFlow(Intern::new(format!("{base_name}#{id}")))
+        Self::ControlFlow(Intern::new(format!("{}#{id}", base_name.as_ref())))
     }
 }
 

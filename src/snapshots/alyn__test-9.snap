@@ -1,0 +1,21 @@
+---
+source: src/main.rs
+expression: "grammar::SubrDeclParser::new().parse(\"subr min(a: int, b: int) int { if a > b { ret b; } else { ret a; } }\")"
+---
+Ok(
+    SubrDecl {
+        name: "min",
+        params: [
+            Param { name: "a", ty: Int },
+            Param { name: "b", ty: Int },
+        ],
+        ret_ty: Int,
+        body: [
+            if (a > b) {
+                ret b;
+            } else {
+                ret a;
+            },
+        ],
+    },
+)

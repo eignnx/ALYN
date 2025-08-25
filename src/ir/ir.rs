@@ -130,17 +130,17 @@ fn asdf() {
             op: Relop::Gt,
             e1: Tmp::from("a").into(),
             e2: Tmp::from("b").into(),
-            if_true: Lbl::from("t"),
-            if_false: Lbl::from("z"),
+            if_true: Lbl::fresh("t"),
+            if_false: Lbl::fresh("z"),
         }),
         Box::new(Stmt::Seq(
-            Box::new(Lbl::from("z").into()),
+            Box::new(Lbl::fresh("z").into()),
             Box::new(Stmt::Br {
                 op: Relop::Lt,
                 e1: Tmp::from("c").into(),
                 e2: Tmp::from("d").into(),
-                if_true: Lbl::from("t"),
-                if_false: Lbl::from("f"),
+                if_true: Lbl::fresh("t"),
+                if_false: Lbl::fresh("f"),
             }),
         )),
     );

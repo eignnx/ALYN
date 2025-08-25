@@ -19,9 +19,37 @@ lalrpop_mod!(
 
 fn main() {
     println!("Hello, world!");
-    dbg!(grammar::RValParser::new().parse("&*x()"));
-    dbg!(grammar::RValParser::new().parse("*x + (127b - +324) - -4 == **qwerty123 + asdf() - zxcv(1, 2)"));
-    dbg!(grammar::StmtParser::new().parse("*lhs = 123 + *ptr;"));
-    dbg!(grammar::StmtParser::new().parse("let lhs = 123 + *ptr;"));
-    dbg!(grammar::StmtParser::new().parse("if 1 == 2 { lhs = 123; } else { ret asfd(); }"));
+}
+
+#[test]
+fn test() {
+    use insta::assert_debug_snapshot;
+    assert_debug_snapshot!(grammar::RValParser::new().parse("<fname>", "&*x()"));
+    assert_debug_snapshot!(grammar::RValParser::new().parse("<fname>", "*x + (127b - +324) - -4 == **qwerty123 + asdf() - zxcv(1, 2)"));
+    assert_debug_snapshot!(grammar::StmtParser::new().parse("<fname>", "*lhs = 123 + *ptr;"));
+    assert_debug_snapshot!(grammar::StmtParser::new().parse("<fname>", "let lhs = 123 + *ptr;"));
+    assert_debug_snapshot!(grammar::StmtParser::new().parse("<fname>", "if 1 == 2 { lhs = 123; } else { ret asfd(); }"));
+    assert_debug_snapshot!(grammar::SubrDeclParser::new().parse("<fname>", "subr blah() { ret; }"));
+    assert_debug_snapshot!(grammar::SubrDeclParser::new().parse("<fname>", "subr sumfib(n: nat) nat { ret n + sumfib(n - 1); }"));
+    assert_debug_snapshot!(grammar::SubrDeclParser::new().parse("<fname>", "subr main(args: **byte) { ret; }"));
+    assert_debug_snapshot!(grammar::SubrDeclParser::new().parse("<fname>", "subr min(a: int, b: int) int { if a > b { ret b; } else { ret a; } }"));
+    assert_debug_snapshot!(grammar::ModuleParser::new().parse("mathy.alyn",
+        "
+        subr min(a: int, b: int) int {
+            if a > b {
+                ret b;
+            } else {
+                ret a;
+            }
+        }
+
+        subr fib(n: nat) nat {
+            if n < 2 {
+                ret 1;
+            } else {
+                ret fib(n - 1) + fib(n - 2);
+            }
+        }
+        "
+    ));
 }
