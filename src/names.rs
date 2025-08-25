@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use derive_more::From;
 use internment::Intern;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Lbl {
     SubrStart(Intern<String>),
     Global(Intern<String>),
@@ -16,6 +16,16 @@ impl Lbl {
     pub fn fresh(base_name: impl AsRef<str>) -> Self {
         let id = LBL_ID.fetch_add(1, Ordering::SeqCst);
         Self::ControlFlow(Intern::new(format!("{}#{id}", base_name.as_ref())))
+    }
+}
+
+impl std::fmt::Debug for Lbl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SubrStart(name) => write!(f, "subr<{name}>"),
+            Self::Global(name) => write!(f, "glbl<{name}>"),
+            Self::ControlFlow(name) => write!(f, "local<{name}>"),
+        }
     }
 }
 

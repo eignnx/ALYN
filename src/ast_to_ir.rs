@@ -51,7 +51,9 @@ impl Ann<ast::LVal> {
 
 impl ast::Binop {
     fn to_ir(self, e1: Ann<ast::RVal>, e2: Ann<ast::RVal>) -> IrWrap {
-        let arg_ty = e1.ty.as_ref().unwrap().clone();
+        let Some(arg_ty) = e1.ty.clone() else {
+            panic!("Type is None on node: {e1:?}");
+        };
         let e1 = e1.to_ir().as_expr();
         let e2 = e2.to_ir().as_expr();
 
@@ -59,7 +61,7 @@ impl ast::Binop {
             IrWrap::Cond(Box::new(move |t, f| ir::Stmt::Br {
                 op,
                 e1: e1.clone(),
-                e2: e1.clone(),
+                e2: e2.clone(),
                 if_true: t,
                 if_false: f,
             }))
@@ -159,13 +161,78 @@ impl Ann<ast::Stmt> {
                 IrWrap::Stmt(ir::Stmt::seq(stmts))
             }
             ast::Stmt::Ret(None) => todo!(),
-            ast::Stmt::Ret(Some(rval)) => todo!(),
+            ast::Stmt::Ret(Some(rval)) => IrWrap::Stmt(ir::Stmt::Ret(Some(rval.to_ir().as_expr())))
         }
     }
 }
 
 impl ast::SubrDecl {
-    fn to_ir(self) -> IrWrap {
-        todo!()
+    fn to_ir(self) -> Vec<IrWrap> {
+        let mut ir = vec![];
+        for stmt in self.body {
+            ir.push(stmt.to_ir());
+        }
+        ir
+    }
+}
+
+#[cfg(test)]
+mod test_ast_to_ir {
+    use insta::assert_debug_snapshot;
+    use crate::grammar;
+    use crate::ast::MakeAnn;
+    use crate::tcx::Tcx;
+    use crate::ty::Ty;
+    use crate::ir;
+
+    fn dyn_debug<'a, T>(x: T) -> Box<dyn std::fmt::Debug + 'a>
+        where T: std::fmt::Debug + 'a
+    {
+        Box::new(x)
+    }
+
+    fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
+        let decl = grammar::SubrDeclParser::new().parse("<test>", src).map_err(dyn_debug)?;
+        dbg!(&decl);
+        let mut decl = decl.with_span(0..100);
+        let mut tcx = Tcx::new(Ty::Void);
+        decl.check_ty(&mut tcx).map_err(dyn_debug)?;
+        dbg!(&decl.value);
+        Ok(decl.value
+            .to_ir()
+            .into_iter()
+            .map(|w| w.as_stmt())
+            .collect::<Vec<_>>()
+        ).map_err(dyn_debug::<()>)
+    }
+
+    #[test]
+    fn test_simple_if() {
+        assert_debug_snapshot!(
+            parse_and_convert("
+                subr main() {
+                    if 1 < 2 {
+                        123;
+                    } else {
+                        456;
+                    }
+                }
+            ")
+        );
+    }
+
+    #[test]
+    fn test_params() {
+        assert_debug_snapshot!(
+            parse_and_convert("
+                subr min(a: int, b: int) int {
+                    if a < b {
+                        ret a;
+                    } else {
+                        ret b;
+                    }
+                }
+            ")
+        );
     }
 }

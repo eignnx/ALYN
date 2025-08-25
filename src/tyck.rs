@@ -7,6 +7,7 @@ use crate::{
 use internment::Intern;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub enum TyckErr {
     UnknownVariable {
         var_span: Span,
@@ -112,7 +113,9 @@ impl Ann<RVal> {
             RVal::Byte(_) => Ok(self.set_ty(Ty::Byte)),
             RVal::Nat(_) => Ok(self.set_ty(Ty::Nat)),
             RVal::Int(_) => Ok(self.set_ty(Ty::Int)),
-            RVal::LVal(lval) => lval.infer_ty(tcx),
+            RVal::LVal(lval) => lval.infer_ty(tcx).inspect(|ty| {
+                let _ = self.set_ty(ty.clone());
+            }),
             RVal::Binop(binop, x, y) => {
                 x.infer_ty(tcx)?;
                 y.infer_ty(tcx)?;
@@ -173,7 +176,9 @@ impl Ann<RVal> {
 
 impl Binop {
     fn check_ty(&self, binop_span: &Span, x: &Ann<RVal>, y: &Ann<RVal>) -> TyckResult<Ty> {
-        let x_ty = x.ty.as_ref().unwrap();
+        let Some(x_ty) = &x.ty else {
+            panic!("x == {x:?}, x.ty == {:?}", x.ty);
+        };
         let y_ty = y.ty.as_ref().unwrap();
         match self {
             Binop::Add | Binop::Sub => match (x_ty, y_ty) {
@@ -340,6 +345,11 @@ impl Ann<SubrDecl> {
                 },
             );
         }
+
+        for stmt in &mut self.value.body {
+            stmt.infer_ty(tcx)?;
+        }
+
         tcx.exit_scope();
         Ok(())
     }

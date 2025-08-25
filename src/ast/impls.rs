@@ -79,8 +79,8 @@ impl Display for Unop {
 impl Debug for Stmt {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            Self::RVal(x) => write!(f, "{x:?};"),
-            Self::Let(lhs, rhs) => write!(f, "let {lhs:?} = {rhs:?};"),
+            Self::RVal(x) => write!(f, "_ = {x:?};"),
+            Self::Let(lhs, rhs) => write!(f, "let {lhs} = {rhs:?};"),
             Self::Assign(lhs, rhs) => write!(f, "{lhs:?} = {rhs:?};"),
             Self::If(cond, if_true, if_false) => {
                 write!(f, "if {cond:?} {{\n")?;

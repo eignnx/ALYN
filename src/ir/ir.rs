@@ -1,5 +1,4 @@
 //! Intermediate Representation
-#![allow(unused)]
 
 use crate::names::{Lbl, Tmp};
 use derive_more::From;
@@ -16,7 +15,7 @@ pub enum Binop {
     Xor,
 }
 
-#[derive(Debug, Clone, From)]
+#[derive(Clone, From)]
 pub enum RVal {
     #[from]
     Byte(u8),
@@ -53,7 +52,7 @@ impl RVal {
     }
 }
 
-#[derive(Debug, Clone, From)]
+#[derive(Clone, From)]
 pub enum LVal {
     Param(u8),
     /// AKA: `Temp`
@@ -77,7 +76,7 @@ pub enum Relop {
     LteU,
 }
 
-#[derive(Debug, Clone, From)]
+#[derive(Clone, From)]
 pub enum Stmt {
     Move(LVal, RVal),
     /// AKA: `Exp`
@@ -97,6 +96,7 @@ pub enum Stmt {
     /// AKA: `Label`
     Lbl(Lbl),
     Nop,
+    Ret(Option<RVal>),
 }
 
 impl Stmt {
