@@ -1,0 +1,23 @@
+---
+source: src/ast_to_ir.rs
+assertion_line: 257
+expression: "parse_and_convert(\"\n                subr matsum(n: nat, a: **int, b: **int, c: **int) {\n                    let col = 0;\n                    while col < n {\n                        let row = 0;\n                        while row < n {\n                            let ax = *(*(a + col) + row);\n                            let bx = *(*(b + col) + row);\n                            *(*(c + col) + row) = ax + bx;\n                            j = j + 1;\n                        }\n                        i = i + 1;\n                    }\n                }\n            \")"
+---
+Err(
+    BadBinop {
+        binop_span: 255..264,
+        binop: Add,
+        operand_tys: (
+            Ptr(
+                Ptr(
+                    Int,
+                ),
+            ),
+            Nat,
+        ),
+        expected_tys: (
+            "{numeric}",
+            "{numeric}",
+        ),
+    },
+)

@@ -192,6 +192,7 @@ mod test_ast_to_ir {
     }
 
     fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
+        crate::names::reset_name_ids();
         let decl = grammar::SubrDeclParser::new().parse("<test>", src).map_err(dyn_debug)?;
         dbg!(&decl);
         let mut decl = decl.with_span(0..100);
@@ -230,6 +231,42 @@ mod test_ast_to_ir {
                         ret a;
                     } else {
                         ret b;
+                    }
+                }
+            ")
+        );
+    }
+
+    #[test]
+    fn test_fib() {
+        assert_debug_snapshot!(
+            parse_and_convert("
+                subr fib(n: nat) nat {
+                    if n < 2 {
+                        ret n;
+                    } else {
+                        ret fib(n - 1) + fib(n - 2);
+                    }
+                }
+            ")
+        );
+    }
+
+    #[test]
+    fn test_matsum() {
+        assert_debug_snapshot!(
+            parse_and_convert("
+                subr matsum(n: nat, a: **int, b: **int, c: **int) {
+                    let col = 0;
+                    while col < n {
+                        let row = 0;
+                        while row < n {
+                            let ax = *(*(a + col) + row);
+                            let bx = *(*(b + col) + row);
+                            *(*(c + col) + row) = ax + bx;
+                            j = j + 1;
+                        }
+                        i = i + 1;
                     }
                 }
             ")

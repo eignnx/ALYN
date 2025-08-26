@@ -10,7 +10,11 @@ pub enum Lbl {
     ControlFlow(Intern<String>),
 }
 
-pub static LBL_ID: AtomicUsize = AtomicUsize::new(0);
+static LBL_ID: AtomicUsize = AtomicUsize::new(0);
+
+pub fn reset_lbl_id() {
+    LBL_ID.store(0, Ordering::SeqCst);
+}
 
 impl Lbl {
     pub fn fresh(base_name: impl AsRef<str>) -> Self {
@@ -38,11 +42,20 @@ impl From<&str> for Tmp {
     }
 }
 
-pub static TMP_ID: AtomicUsize = AtomicUsize::new(0);
+static TMP_ID: AtomicUsize = AtomicUsize::new(0);
+
+pub fn reset_tmp_id() {
+    TMP_ID.store(0, Ordering::SeqCst);
+}
 
 impl Tmp {
     pub fn fresh(base_name: &str) -> Self {
         let id = TMP_ID.fetch_add(1, Ordering::SeqCst);
         Self(Intern::new(format!("{base_name}#{id}")))
     }
+}
+
+pub fn reset_name_ids() {
+    reset_lbl_id();
+    reset_tmp_id();
 }
