@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: RValParser ::\nnew().parse(\"<test>\",\n\"\n            *x + (127b - (+324)) - (-4) == **qwerty123 + asdf() - zxcv(1, 2)\n        \")"
+---
+Ok(
+    ((*x + ((127b - +324) - -4)) == (**qwerty123 + (asdf() - zxcv(1, 2)))),
+)

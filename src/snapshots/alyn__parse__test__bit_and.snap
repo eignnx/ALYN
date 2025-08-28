@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: RValParser :: new().parse(\"<test>\", \"x & y\")"
+---
+Ok(
+    (x & y),
+)

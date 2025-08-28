@@ -1,6 +1,6 @@
 ---
-source: src/main.rs
-expression: "grammar::SubrDeclParser::new().parse(\"subr min(a: int, b: int) int { if a > b { ret b; } else { ret a; } }\")"
+source: src/parse.rs
+expression: "grammar :: SubrDeclParser ::\nnew().parse(\"<test>\",\n\"\n            subr min(a: int, b: int) int {\n                if a > b {\n                    ret b;\n                } else {\n                    ret a;\n                }\n            }\n        \")"
 ---
 Ok(
     SubrDecl {

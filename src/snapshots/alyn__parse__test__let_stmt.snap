@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: StmtParser :: new().parse(\"<test>\", \"let lhs = 123 + *ptr;\")"
+---
+Ok(
+    let lhs = (123 + *ptr);,
+)

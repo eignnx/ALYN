@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub enum Binop {
     Add,
     Sub,
-    Mul,
     And,
     Or,
+    Shr,
     Xor,
 }
 
@@ -31,6 +31,7 @@ pub enum RVal {
     /// AKA: `Temp, Mem`
     LVal(LVal),
     Binop(Binop, Box<RVal>, Box<RVal>),
+    Unop(Unop, Box<RVal>),
     Call(Box<RVal>, Vec<Box<RVal>>),
     /// AKA: `ESeq`
     Seq(Box<Stmt>, Box<RVal>),
@@ -74,6 +75,11 @@ pub enum Relop {
     LtU,
     GteU,
     LteU,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Unop {
+    Neg,
 }
 
 #[derive(Clone, From)]

@@ -1,6 +1,6 @@
 ---
-source: src/main.rs
-expression: "grammar::SubrDeclParser::new().parse(\"subr main(args: **byte) { ret; }\")"
+source: src/parse.rs
+expression: "grammar :: SubrDeclParser ::\nnew().parse(\"<test>\", \"subr main(args: **byte) { ret; }\")"
 ---
 Ok(
     SubrDecl {

@@ -1,5 +1,5 @@
-use std::fmt::{Display, Debug, Result, Formatter};
 use super::*;
+use std::fmt::{Debug, Display, Formatter, Result};
 
 impl<T: Debug> Debug for Ann<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
@@ -54,25 +54,36 @@ impl Debug for LVal {
 
 impl Display for Binop {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", match self {
-            Binop::Add => "+",
-            Binop::Sub => "-",
-            Binop::Eq => "==",
-            Binop::Ne => "==",
-            Binop::Lt => "<",
-            Binop::Gt => ">",
-            Binop::Lte => "<=",
-            Binop::Gte => ">=",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Binop::Add => "+",
+                Binop::Sub => "-",
+                Binop::And => "&",
+                Binop::Or => "|",
+                Binop::Shr => ">>",
+                Binop::Eq => "==",
+                Binop::Ne => "==",
+                Binop::Lt => "<",
+                Binop::Gt => ">",
+                Binop::Lte => "<=",
+                Binop::Gte => ">=",
+            }
+        )
     }
 }
 
 impl Display for Unop {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let _ = vec![123].into_iter().fold(0, |x,y| x+y);
-        write!(f, "{}", match self {
-            Unop::Neg => "-",
-        })
+        let _ = vec![123].into_iter().fold(0, |x, y| x + y);
+        write!(
+            f,
+            "{}",
+            match self {
+                Unop::Neg => "-",
+            }
+        )
     }
 }
 

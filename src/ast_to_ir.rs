@@ -14,11 +14,11 @@ impl Ann<ast::RVal> {
             ast::RVal::Int(x) => IrWrap::RVal(ir::RVal::Int(x)),
             ast::RVal::LVal(lval) => lval.to_ir(),
             ast::RVal::Binop(binop, x, y) => binop.to_ir(*x, *y),
+            ast::RVal::Unop(op, rval) => op.to_ir(*rval),
             ast::RVal::AddrOf(x) => {
                 let ir = x.to_ir();
                 todo!()
-            },
-            ast::RVal::Unop(unop, ann) => todo!(),
+            }
             ast::RVal::Call(subr_name, args) => {
                 let mut ir_args = vec![];
                 for arg in args {
@@ -67,16 +67,18 @@ impl ast::Binop {
             }))
         }
 
+        fn make_binop(op: ir::Binop, e1: ir::RVal, e2: ir::RVal) -> IrWrap {
+            IrWrap::RVal(ir::RVal::Binop(op, Box::new(e1), Box::new(e2)))
+        }
+
         match arg_ty {
             // Treat like unsigned word:
             Ty::Bool | Ty::Byte | Ty::Nat | Ty::Ptr(..) | Ty::Subr(..) => match self {
-                ast::Binop::Add => {
-                    IrWrap::RVal(ir::RVal::Binop(ir::Binop::Add, Box::new(e1), Box::new(e2)))
-                }
-                ast::Binop::Sub => {
-                    IrWrap::RVal(ir::RVal::Binop(ir::Binop::Sub, Box::new(e1), Box::new(e2)))
-                }
-
+                ast::Binop::Add => make_binop(ir::Binop::Add, e1, e2),
+                ast::Binop::Sub => make_binop(ir::Binop::Sub, e1, e2),
+                ast::Binop::And => make_binop(ir::Binop::And, e1, e2),
+                ast::Binop::Or => make_binop(ir::Binop::Or, e1, e2),
+                ast::Binop::Shr => make_binop(ir::Binop::Shr, e1, e2),
                 ast::Binop::Eq => make_cond(Relop::Eq, e1, e2),
                 ast::Binop::Ne => make_cond(Relop::Ne, e1, e2),
                 ast::Binop::Lt => make_cond(Relop::LtU, e1, e2),
@@ -86,13 +88,11 @@ impl ast::Binop {
             },
             // Treat as signed word:
             Ty::Int => match self {
-                ast::Binop::Add => {
-                    IrWrap::RVal(ir::RVal::Binop(ir::Binop::Add, Box::new(e1), Box::new(e2)))
-                }
-                ast::Binop::Sub => {
-                    IrWrap::RVal(ir::RVal::Binop(ir::Binop::Sub, Box::new(e1), Box::new(e2)))
-                }
-
+                ast::Binop::Add => make_binop(ir::Binop::Add, e1, e2),
+                ast::Binop::Sub => make_binop(ir::Binop::Sub, e1, e2),
+                ast::Binop::And => make_binop(ir::Binop::And, e1, e2),
+                ast::Binop::Or => make_binop(ir::Binop::Or, e1, e2),
+                ast::Binop::Shr => make_binop(ir::Binop::Shr, e1, e2),
                 ast::Binop::Eq => make_cond(Relop::Eq, e1, e2),
                 ast::Binop::Ne => make_cond(Relop::Ne, e1, e2),
                 ast::Binop::Lt => make_cond(Relop::Lt, e1, e2),
@@ -101,6 +101,17 @@ impl ast::Binop {
                 ast::Binop::Gte => make_cond(Relop::Gte, e1, e2),
             },
             Ty::Void => unreachable!(),
+        }
+    }
+}
+
+impl ast::Unop {
+    fn to_ir(self, rval: Ann<ast::RVal>) -> IrWrap {
+        match self {
+            ast::Unop::Neg => IrWrap::RVal(ir::RVal::Unop(
+                ir::Unop::Neg,
+                Box::new(rval.to_ir().as_expr()),
+            )),
         }
     }
 }
@@ -161,7 +172,7 @@ impl Ann<ast::Stmt> {
                 IrWrap::Stmt(ir::Stmt::seq(stmts))
             }
             ast::Stmt::Ret(None) => todo!(),
-            ast::Stmt::Ret(Some(rval)) => IrWrap::Stmt(ir::Stmt::Ret(Some(rval.to_ir().as_expr())))
+            ast::Stmt::Ret(Some(rval)) => IrWrap::Stmt(ir::Stmt::Ret(Some(rval.to_ir().as_expr()))),
         }
     }
 }
@@ -177,99 +188,134 @@ impl ast::SubrDecl {
 }
 
 #[cfg(test)]
-mod test_ast_to_ir {
+mod test {
+    use crate::{ast::MakeAnn, ir, parse, tcx::Tcx, ty::Ty};
     use insta::assert_debug_snapshot;
-    use crate::grammar;
-    use crate::ast::MakeAnn;
-    use crate::tcx::Tcx;
-    use crate::ty::Ty;
-    use crate::ir;
 
     fn dyn_debug<'a, T>(x: T) -> Box<dyn std::fmt::Debug + 'a>
-        where T: std::fmt::Debug + 'a
+    where
+        T: std::fmt::Debug + 'a,
     {
         Box::new(x)
     }
 
     fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
-        crate::names::reset_name_ids();
-        let decl = grammar::SubrDeclParser::new().parse("<test>", src).map_err(dyn_debug)?;
-        dbg!(&decl);
+        let decl = parse::SubrDeclParser::new()
+            .parse("<test>", src)
+            .map_err(dyn_debug)?;
         let mut decl = decl.with_span(0..100);
         let mut tcx = Tcx::new(Ty::Void);
         decl.check_ty(&mut tcx).map_err(dyn_debug)?;
-        dbg!(&decl.value);
-        Ok(decl.value
+        crate::names::reset_name_ids();
+        Ok(decl
+            .value
             .to_ir()
             .into_iter()
             .map(|w| w.as_stmt())
-            .collect::<Vec<_>>()
-        ).map_err(dyn_debug::<()>)
+            .collect::<Vec<_>>())
+        .map_err(dyn_debug::<()>)
+    }
+
+    macro_rules! do_test {
+        ($src:expr) => {
+            insta::with_settings!({
+                filters => vec![
+                    (r"([a-zA-Z0-9_])#\d+", r"$1#(..)"),
+                ]
+            }, {
+                assert_debug_snapshot!(parse_and_convert($src))
+            });
+        };
     }
 
     #[test]
-    fn test_simple_if() {
-        assert_debug_snapshot!(
-            parse_and_convert("
-                subr main() {
-                    if 1 < 2 {
-                        123;
-                    } else {
-                        456;
-                    }
+    fn simple_if() {
+        do_test!(
+            "
+            subr main() {
+                if 1 < 2 {
+                    123;
+                } else {
+                    456;
                 }
-            ")
+            }
+        "
         );
     }
 
     #[test]
-    fn test_params() {
-        assert_debug_snapshot!(
-            parse_and_convert("
-                subr min(a: int, b: int) int {
-                    if a < b {
-                        ret a;
-                    } else {
-                        ret b;
-                    }
+    fn subr_params() {
+        do_test!(
+            "
+            subr min(a: int, b: int) int {
+                if a < b {
+                    ret a;
+                } else {
+                    ret b;
                 }
-            ")
+            }
+        "
         );
     }
 
     #[test]
-    fn test_fib() {
-        assert_debug_snapshot!(
-            parse_and_convert("
-                subr fib(n: nat) nat {
-                    if n < 2 {
-                        ret n;
-                    } else {
-                        ret fib(n - 1) + fib(n - 2);
-                    }
+    fn fib() {
+        do_test!(
+            "
+            subr fib(n: nat) nat {
+                if n < 2 {
+                    ret n;
+                } else {
+                    ret fib(n - 1) + fib(n - 2);
                 }
-            ")
+            }
+        "
         );
     }
 
     #[test]
-    fn test_matsum() {
-        assert_debug_snapshot!(
-            parse_and_convert("
-                subr matsum(n: nat, a: **int, b: **int, c: **int) {
-                    let col = 0;
-                    while col < n {
-                        let row = 0;
-                        while row < n {
-                            let ax = *(*(a + col) + row);
-                            let bx = *(*(b + col) + row);
-                            *(*(c + col) + row) = ax + bx;
-                            j = j + 1;
-                        }
-                        i = i + 1;
+    fn matsum() {
+        do_test!(
+            "
+            subr matsum(n: nat, a: **int, b: **int, c: **int) {
+                let col = 0;
+                while col < n {
+                    let row = 0;
+                    while row < n {
+                        let ax = *(*(a + col) + row);
+                        let bx = *(*(b + col) + row);
+                        *(*(c + col) + row) = ax + bx;
+                        row = row + 1;
                     }
+                    col = col + 1;
                 }
-            ")
+            }
+        "
+        );
+    }
+
+    #[test]
+    fn shiftmul() {
+        do_test!(
+            "
+            subr shiftmul(x: int, n: int) int {
+                if n < +0 {
+                    x = - x;
+                    n = - n;
+                }
+                if n == +0 { ret +0; }
+                let acc = +0;
+                while n > +1 {
+                    if n & +1 == +1 {
+                        acc = acc + x;
+                        n = n - +1;
+                    }
+                    x = x + x;
+                    n = n >> +1;
+                }
+                ret x + acc;
+            }
+        "
         );
     }
 }

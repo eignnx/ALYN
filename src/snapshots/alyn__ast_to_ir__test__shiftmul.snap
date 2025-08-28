@@ -1,0 +1,37 @@
+---
+source: src/ast_to_ir.rs
+expression: "parse_and_convert(\"\n            subr shiftmul(x: int, n: int) int {\n                if n < +0 {\n                    x = - x;\n                    n = - n;\n                }\n                if n == +0 { ret +0; }\n                let acc = +0;\n                while n > +1 {\n                    if n & +1 == +1 {\n                        acc = acc + x;\n                        n = n - +1;\n                    }\n                    x = x + x;\n                    n = n >> +1;\n                }\n                ret x + acc;\n            }\n        \")"
+---
+Ok(
+    [
+        if #1 < +0 then local<if_true#(..)> else local<if_false#(..)>;
+        :local<if_true#(..)>;
+        #0 <- (- #0);
+        #1 <- (- #1);
+        jmp local<end_if#(..)>;
+        :local<if_false#(..)>;
+        :local<end_if#(..)>,
+        if #1 == +0 then local<if_true#(..)> else local<if_false#(..)>;
+        :local<if_true#(..)>;
+        ret +0;
+        jmp local<end_if#(..)>;
+        :local<if_false#(..)>;
+        :local<end_if#(..)>,
+        $Tmp("acc") <- +0,
+        :local<while_cond#(..)>;
+        if #1 > +1 then local<while_body#(..)> else local<end_while#(..)>;
+        :local<while_body#(..)>;
+        if (#1 & +1) == +1 then local<if_true#(..)> else local<if_false#(..)>;
+        :local<if_true#(..)>;
+        $Tmp("acc") <- ($Tmp("acc") + #0);
+        #1 <- (#1 - +1);
+        jmp local<end_if#(..)>;
+        :local<if_false#(..)>;
+        :local<end_if#(..)>;
+        #0 <- (#0 + #0);
+        #1 <- (#1 >> +1);
+        jmp local<while_cond#(..)>;
+        :local<end_while#(..)>,
+        ret (#0 + $Tmp("acc")),
+    ],
+)

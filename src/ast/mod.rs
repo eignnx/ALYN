@@ -64,7 +64,7 @@ impl SubrDecl {
     pub fn subr_ty(&self) -> Ty {
         let mut param_tys = vec![];
         for param in &self.params {
-            param_tys.push(param.ty.as_ref().cloned().unwrap());
+            param_tys.push(param.value.ty.clone());
         }
         Ty::Subr(param_tys, Box::new(self.ret_ty.clone()))
     }
@@ -115,6 +115,9 @@ pub enum LVal {
 pub enum Binop {
     Add,
     Sub,
+    And,
+    Or,
+    Shr,
     Eq,
     Ne,
     Lt,
@@ -135,7 +138,10 @@ fn asdf() {
         LVal::Deref(Box::new(
             RVal::Call(
                 Intern::from_ref("f"),
-                vec![RVal::Int(123).with_span(s.clone()), RVal::Byte(b'$').with_span(s.clone())],
+                vec![
+                    RVal::Int(123).with_span(s.clone()),
+                    RVal::Byte(b'$').with_span(s.clone()),
+                ],
             )
             .with_span(s.clone()),
         ))

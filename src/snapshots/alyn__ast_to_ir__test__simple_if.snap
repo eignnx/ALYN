@@ -4,12 +4,12 @@ expression: "parse_and_convert(\"\n            subr main() {\n                if
 ---
 Ok(
     [
-        if 1 u(<) 2 then local<if_true#5> else local<if_false#6>;
-        :local<if_true#5>;
+        if 1 u(<) 2 then local<if_true#(..)> else local<if_false#(..)>;
+        :local<if_true#(..)>;
         _ <- 123;
-        jmp local<end_if#7>;
-        :local<if_false#6>;
+        jmp local<end_if#(..)>;
+        :local<if_false#(..)>;
         _ <- 456;
-        :local<end_if#7>,
+        :local<end_if#(..)>,
     ],
 )

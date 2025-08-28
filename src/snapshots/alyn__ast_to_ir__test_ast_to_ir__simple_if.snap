@@ -1,15 +1,15 @@
 ---
 source: src/ast_to_ir.rs
-expression: "parse_and_convert(\"\n                subr main() {\n                    if 1 < 2 {\n                        123;\n                    } else {\n                        456;\n                    }\n                }\n            \")"
+expression: "parse_and_convert(\"\n            subr main() {\n                if 1 < 2 {\n                    123;\n                } else {\n                    456;\n                }\n            }\n        \")"
 ---
 Ok(
     [
-        if 1 u(<) 2 then local<if_true#0> else local<if_false#1>;
-        :local<if_true#0>;
+        if 1 u(<) 2 then local<if_true#(..)> else local<if_false#(..)>;
+        :local<if_true#(..)>;
         _ <- 123;
-        jmp local<end_if#2>;
-        :local<if_false#1>;
+        jmp local<end_if#(..)>;
+        :local<if_false#(..)>;
         _ <- 456;
-        :local<end_if#2>,
+        :local<end_if#(..)>,
     ],
 )

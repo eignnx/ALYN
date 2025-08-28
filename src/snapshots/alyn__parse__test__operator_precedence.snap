@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: RValParser ::\nnew().parse(\"<test>\", \"\n            x & -y + -z == 1 - 2 | 3\n        \")"
+---
+Ok(
+    (((x & (- y)) + (- z)) == (1 - (2 | 3))),
+)

@@ -1,0 +1,25 @@
+---
+source: src/ast_to_ir.rs
+expression: "parse_and_convert(\"\n            subr matsum(n: nat, a: **int, b: **int, c: **int) {\n                let col = 0;\n                while col < n {\n                    let row = 0;\n                    while row < n {\n                        let ax = *(*(a + col) + row);\n                        let bx = *(*(b + col) + row);\n                        *(*(c + col) + row) = ax + bx;\n                        row = row + 1;\n                    }\n                    col = col + 1;\n                }\n            }\n        \")"
+---
+Ok(
+    [
+        $Tmp("col") <- 0,
+        :local<while_cond#(..)>;
+        if $Tmp("col") u(<) #0 then local<while_body#(..)> else local<end_while#(..)>;
+        :local<while_body#(..)>;
+        $Tmp("row") <- 0;
+        :local<while_cond#(..)>;
+        if $Tmp("row") u(<) #0 then local<while_body#(..)> else local<end_while#(..)>;
+        :local<while_body#(..)>;
+        $Tmp("ax") <- M[(M[(#1 + $Tmp("col"))] + $Tmp("row"))];
+        $Tmp("bx") <- M[(M[(#2 + $Tmp("col"))] + $Tmp("row"))];
+        M[(M[(#3 + $Tmp("col"))] + $Tmp("row"))] <- ($Tmp("ax") + $Tmp("bx"));
+        $Tmp("row") <- ($Tmp("row") + 1);
+        jmp local<while_cond#(..)>;
+        :local<end_while#(..)>;
+        $Tmp("col") <- ($Tmp("col") + 1);
+        jmp local<while_cond#(..)>;
+        :local<end_while#(..)>,
+    ],
+)

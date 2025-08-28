@@ -1,6 +1,6 @@
 ---
-source: src/main.rs
-expression: "grammar::ModuleParser::new().parse(\"mathy.alyn\",\n\"\n        subr min(a: int, b: int) int {\n            if a > b {\n                ret b;\n            } else {\n                ret a;\n            }\n        }\n\n        subr fib(n: nat) nat {\n            if n < 2 {\n                ret 1;\n            } else {\n                ret fib(n - 1) + fib(n - 2);\n            }\n        }\n        \")"
+source: src/parse.rs
+expression: "grammar :: ModuleParser ::\nnew().parse(\"mathy.alyn\",\n\"\n            subr min(a: int, b: int) int {\n                if a > b {\n                    ret b;\n                } else {\n                    ret a;\n                }\n            }\n\n            subr fib(n: nat) nat {\n                if n < 2 {\n                    ret 1;\n                } else {\n                    ret fib(n - 1) + fib(n - 2);\n                }\n            }\n        \")"
 ---
 Ok(
     Module {

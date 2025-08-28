@@ -1,7 +1,0 @@
----
-source: src/main.rs
-expression: "grammar::RValParser::new().parse(\"&*x()\")"
----
-Ok(
-    &*x(),
-)

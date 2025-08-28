@@ -100,7 +100,7 @@ impl Ann<LVal> {
                         ty: inner.ty.clone().unwrap(),
                     });
                 };
-                let ty = Ty::Ptr(Box::new(inner.ty.clone().unwrap()));
+                let ty = (**inner_ty).clone();
                 Ok(self.set_ty(ty))
             }
         }
@@ -126,7 +126,7 @@ impl Ann<RVal> {
             RVal::AddrOf(x) => {
                 let ty = x.infer_ty(tcx)?;
                 Ok(self.set_ty(Ty::Ptr(Box::new(ty))))
-            },
+            }
             RVal::Unop(unop, x) => {
                 x.infer_ty(tcx)?;
                 unop.check_ty(&self.span, x).inspect(|ty| {
@@ -181,15 +181,9 @@ impl Binop {
         };
         let y_ty = y.ty.as_ref().unwrap();
         match self {
-            Binop::Add | Binop::Sub => match (x_ty, y_ty) {
-                (Ty::Byte, Ty::Byte) | (Ty::Nat, Ty::Nat) | (Ty::Int, Ty::Int) => Ok(x_ty.clone()),
-                _ => Err(TyckErr::BadBinop {
-                    binop_span: binop_span.clone(),
-                    binop: *self,
-                    operand_tys: (x_ty.clone(), y_ty.clone()),
-                    expected_tys: ("{numeric}".into(), "{numeric}".into()),
-                }),
-            },
+            Binop::Add | Binop::Sub => self.check_ty_arith(binop_span, x_ty, y_ty),
+
+            Binop::And | Binop::Or | Binop::Shr => self.check_ty_bitwise(binop_span, x_ty, y_ty),
 
             Binop::Eq | Binop::Ne | Binop::Lt | Binop::Gt | Binop::Lte | Binop::Gte => {
                 match (x_ty, y_ty) {
@@ -212,6 +206,40 @@ impl Binop {
                     }),
                 }
             }
+        }
+    }
+
+    fn check_ty_arith(&self, binop_span: &Span, x_ty: &Ty, y_ty: &Ty) -> TyckResult<Ty> {
+        match (x_ty, y_ty) {
+            (Ty::Byte, Ty::Byte) | (Ty::Nat, Ty::Nat) | (Ty::Int, Ty::Int) => Ok(x_ty.clone()),
+            // Nat or Int +/- Ptr
+            (ptr_ty @ Ty::Ptr(_), Ty::Int | Ty::Nat) | (Ty::Int | Ty::Nat, ptr_ty @ Ty::Ptr(_)) => {
+                Ok(ptr_ty.clone())
+            }
+            // Ptr difference
+            (Ty::Ptr(x_inner), Ty::Ptr(y_inner))
+                if matches!(self, Self::Sub) && x_inner == y_inner =>
+            {
+                Ok(x_ty.clone())
+            }
+            _ => Err(TyckErr::BadBinop {
+                binop_span: binop_span.clone(),
+                binop: *self,
+                operand_tys: (x_ty.clone(), y_ty.clone()),
+                expected_tys: ("{numeric}".into(), "{numeric}".into()),
+            }),
+        }
+    }
+
+    fn check_ty_bitwise(&self, binop_span: &Span, x_ty: &Ty, y_ty: &Ty) -> TyckResult<Ty> {
+        match (x_ty, y_ty) {
+            (Ty::Byte, Ty::Byte) | (Ty::Nat, Ty::Nat) | (Ty::Int, Ty::Int) => Ok(x_ty.clone()),
+            _ => Err(TyckErr::BadBinop {
+                binop_span: binop_span.clone(),
+                binop: *self,
+                operand_tys: (x_ty.clone(), y_ty.clone()),
+                expected_tys: ("{numeric}".into(), "{numeric}".into()),
+            }),
         }
     }
 }
@@ -332,7 +360,20 @@ impl Ann<Stmt> {
 }
 
 impl Ann<SubrDecl> {
+    fn register_in_tcx(&self, tcx: &mut Tcx) -> Option<SymData> {
+        tcx.insert(
+            self.value.name.clone(),
+            SymData {
+                ty: self.value.subr_ty(),
+                sym_kind: IdentKind::Subr,
+            },
+        )
+    }
+
     pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
+        // Ensure self is defined so recursive calls type check.
+        self.register_in_tcx(tcx);
+
         tcx.enter_scope();
         tcx.set_subr_ret_ty(self.value.ret_ty.clone());
         // Define all parameters.
@@ -361,13 +402,7 @@ impl Module {
         // mutual recursion.
         for subr in &mut self.decls {
             let subr_ty = subr.value.subr_ty();
-            if let Some(_) = tcx.insert(
-                subr.value.name.clone(),
-                SymData {
-                    ty: subr_ty,
-                    sym_kind: IdentKind::Subr,
-                },
-            ) {
+            if let Some(_) = subr.register_in_tcx(tcx) {
                 return Err(TyckErr::ShadowedVarName {
                     span: subr.span.clone(),
                     varname: subr.value.name.clone(),

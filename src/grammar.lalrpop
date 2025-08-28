@@ -9,67 +9,74 @@ grammar(filename: &str);
 
 Spanned<T>: Ann<T> = <start: @L> <t: T> <end: @R> => t.with_span(start..end);
 
-AtomicRVal: RVal = {
-    #[precedence(level="0")]
+BinopExpr<Lhs, Op, Rhs>: RVal = {
+    <lhs: Spanned<Lhs>> <op: Op> <rhs: Spanned<Rhs>> => {
+        RVal::Binop(op, Box::new(lhs), Box::new(rhs))
+    },
+};
+
+RAssocBinopClass<Op, Lower>: RVal = {
+    BinopExpr<Lower, Op, RAssocBinopClass<Op, Lower>>,
+    Lower,
+};
+
+pub RVal:  RVal = RAssocBinopClass<      Relop,  RelopRVal>;
+RelopRVal: RVal = RAssocBinopClass<  TermBinop,   TermRVal>;
+TermRVal:  RVal = RAssocBinopClass<FactorBinop, FactorRVal>;
+
+FactorRVal: RVal = {
+    "&" <lval:Spanned<LVal>> => {
+        RVal::AddrOf(Box::new(lval))
+    },
+
+    <unop: Unop> <rval:Spanned<RValAtom>> => {
+        RVal::Unop(unop, Box::new(rval))
+    },
+
+    RValAtom,
+};
+
+RValAtom: RVal = {
     <digits:r"[0-9]+b"> => RVal::Byte(u8::from_str(&digits[0..digits.len()-1]).unwrap()),
-    #[precedence(level="0")]
     <digits:r"[0-9]+"> => RVal::Nat(u64::from_str(digits).unwrap()),
-    #[precedence(level="0")]
     <digits:r"[-+][0-9]+"> => RVal::Int(i64::from_str(digits).unwrap()),
 
-    #[precedence(level="1")]
     Spanned<LVal> => RVal::LVal(<>),
 
-
-    <subr_name: r"[a-z][a-z0-9_]*\("> ")" => RVal::Call(Intern::from_ref(&subr_name[0..subr_name.len()-1]), vec![]),
-    <subr_name: r"[a-z][a-z0-9_]*\("> <first: Spanned<RVal>> <rest: ("," <Spanned<RVal>>)*> ","? ")" => {
-        let args = std::iter::once(first)
-            .chain(rest.into_iter())
-            .collect();
-        RVal::Call(Intern::from_ref(&subr_name[0..subr_name.len()-1]), args)
+    <subr_name: NameOParen> <args: CommaListCParen<Spanned<RVal>>> => {
+        RVal::Call(subr_name, args)
     },
 
     "(" <RVal> ")" => <>,
 };
 
-pub RVal: RVal = {
-    #[precedence(level="0")]
-    AtomicRVal => <>,
-
-    #[precedence(level="1")]
-    "&" <lval:Spanned<LVal>> => {
-        RVal::AddrOf(Box::new(lval))
-    },
-
-    #[precedence(level="2")]
-    #[assoc(side="left")]
-    <start: @L> <lhs:Spanned<AtomicRVal>> <follows: (Binop Spanned<AtomicRVal> @R)+> => {
-        let mut acc: Ann<RVal> = lhs;
-        for (op, rhs, end) in follows {
-            acc = RVal::Binop(op, Box::new(acc), Box::new(rhs)).with_span(start..end);
-        }
-        acc.value
-    },
-};
-
 LVal: LVal = {
-    r"\*" <rval: Spanned<AtomicRVal>> => LVal::Deref(Box::new(rval)),
+    "*" <rval: Spanned<RValAtom>> => LVal::Deref(Box::new(rval)),
     <ident: Name> => LVal::Var(ident, None),
 };
 
-Binop: Binop = {
-    r"\+" => Binop::Add,
-    r"-" => Binop::Sub,
-    r"==" => Binop::Eq,
-    r"!=" => Binop::Ne,
-    r"<" => Binop::Lt,
-    r">" => Binop::Gt,
-    r"<=" => Binop::Lte,
-    r">=" => Binop::Gte,
+Relop: Binop = {
+    "==" => Binop::Eq,
+    "!=" => Binop::Ne,
+    "<" => Binop::Lt,
+    ">" => Binop::Gt,
+    "<=" => Binop::Lte,
+    ">=" => Binop::Gte,
+};
+
+TermBinop: Binop = {
+    "+" => Binop::Add,
+    "-" => Binop::Sub,
+};
+
+FactorBinop: Binop = {
+    "&" => Binop::And,
+    "|" => Binop::Or,
+    ">>" => Binop::Shr,
 };
 
 Unop: Unop = {
-    r"-" => Unop::Neg,
+    "-" => Unop::Neg,
 };
 
 pub Stmt: Stmt = {
@@ -93,26 +100,31 @@ pub Stmt: Stmt = {
 Stmts: Vec<Ann<Stmt>> = <stmts: Spanned<Stmt>*> => stmts;
 
 Name: Intern<String> = <r"[a-z][a-z0-9_]*"> => Intern::from_ref(<>);
+
 NameOParen: Intern<String> = <name: r"[a-z][a-z0-9_]*\("> => Intern::from_ref(
     &name[0..name.len()-1]
 );
 
+CommaListCParen<P>: Vec<P> = {
+    ")" => Vec::new(),
+
+    <first: P> <rest: ("," <P>)*> ","? ")" => {
+        std::iter::once(first)
+            .chain(rest.into_iter())
+            .collect()
+    },
+};
+
 pub SubrDecl: SubrDecl = {
-    "subr" <name: NameOParen> ")" <ret_ty: Ty?> "{" <body: Stmts> "}" => SubrDecl {
+    "subr"
+    <name: NameOParen>
+    <params: CommaListCParen<Spanned<Param>>>
+    <ret_ty: Ty?>
+    "{" <body: Stmts> "}" => SubrDecl {
         name,
-        params: vec![],
+        params,
         ret_ty: ret_ty.unwrap_or(Ty::Void),
         body,
-    },
-    "subr" <name: NameOParen>
-        <param_first: Spanned<Param>> <param_rest: ("," <Spanned<Param>>)*> ","?
-    ")" <ret_ty: Ty?> "{" <body: Stmts> "}" => {
-        SubrDecl {
-            name,
-            params: std::iter::once(param_first).chain(param_rest.into_iter()).collect(),
-            ret_ty: ret_ty.unwrap_or(Ty::Void),
-            body,
-        }
     },
 };
 
@@ -122,12 +134,9 @@ Ty: Ty = {
     "byte" => Ty::Byte,
     "int" => Ty::Int,
     "nat" => Ty::Nat,
-    r"\*" <inner: Ty> => Ty::Ptr(Box::new(inner)),
-    "subr" "(" ")" <ret: ("->" <Ty>)?> => {
-        Ty::Subr(vec![], Box::new(ret.unwrap_or(Ty::Void)))
-    },
-    "subr" "(" <first: Ty> <rest: ("," <Ty>)*> ")" <ret: ("->" <Ty>)?> => {
-        Ty::Subr(vec![], Box::new(ret.unwrap_or(Ty::Void)))
+    "*" <inner: Ty> => Ty::Ptr(Box::new(inner)),
+    "subr" "(" <param_tys: CommaListCParen<Ty>> <ret: ("->" <Ty>)?> => {
+        Ty::Subr(param_tys, Box::new(ret.unwrap_or(Ty::Void)))
     },
 };
 

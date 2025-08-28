@@ -1,7 +1,0 @@
----
-source: src/main.rs
-expression: "grammar::StmtParser::new().parse(\"*lhs = 123 + *ptr;\")"
----
-Ok(
-    *lhs = (123 + *ptr);,
-)
