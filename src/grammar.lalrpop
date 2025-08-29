@@ -41,7 +41,7 @@ RValAtom: RVal = {
     <digits:r"[0-9]+"> => RVal::Nat(u64::from_str(digits).unwrap()),
     <digits:r"[-+][0-9]+"> => RVal::Int(i64::from_str(digits).unwrap()),
 
-     "bitcast" "{" <ty: Spanned<Ty>> "}" "(" <rval: Spanned<RValAtom>> ")" => {
+     "bitcast" "{" <ty: Spanned<Ty>> "}" "(" <rval: Spanned<RVal>> ")" => {
         RVal::BitCast(Box::new(ty), Box::new(rval))
     },
 

@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: RValParser :: new().parse(\"<test>\", \"bitcast{nat}(12b + 40b)\")"
+---
+Ok(
+    bitcast{nat}((12b + 40b)),
+)

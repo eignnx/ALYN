@@ -68,6 +68,11 @@ mod test {
     }
 
     #[test]
+    fn bitcast_with_nested_expr() {
+        test_parse!(RValParser, "bitcast{nat}(12b + 40b)");
+    }
+
+    #[test]
     fn assignment() {
         test_parse!(StmtParser, "*lhs = 123 + *ptr;");
     }
