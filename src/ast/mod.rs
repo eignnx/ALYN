@@ -102,6 +102,7 @@ pub enum RVal {
     Binop(Binop, Box<Ann<RVal>>, Box<Ann<RVal>>),
     Unop(Unop, Box<Ann<RVal>>),
     AddrOf(Box<Ann<LVal>>),
+    BitCast(Box<Ann<Ty>>, Box<Ann<RVal>>),
     Call(Intern<String>, Vec<Ann<RVal>>),
 }
 

@@ -22,6 +22,7 @@ impl Debug for RVal {
             Self::LVal(lval) => write!(f, "{lval:?}"),
             Self::Binop(op, x, y) => write!(f, "({x:?} {op} {y:?})"),
             Self::Unop(op, x) => write!(f, "({op} {x:?})"),
+            Self::BitCast(ty, x) => write!(f, "bitcast{{{ty}}}({x:?})"),
             Self::Call(subr, args) => {
                 write!(f, "{subr:?}(")?;
                 for (i, arg) in args.iter().enumerate() {

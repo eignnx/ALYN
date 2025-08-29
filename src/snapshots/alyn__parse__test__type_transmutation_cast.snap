@@ -1,0 +1,7 @@
+---
+source: src/parse.rs
+expression: "grammar :: RValParser ::\nnew().parse(\"<test>\", \"1 + 2 & bitcast{nat}(-3) & 4 + 5\")"
+---
+Ok(
+    (1 + ((2 & (bitcast{nat}(-3) & 4)) + 5)),
+)

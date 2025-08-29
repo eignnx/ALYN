@@ -15,6 +15,10 @@ impl Ann<ast::RVal> {
             ast::RVal::LVal(lval) => lval.to_ir(),
             ast::RVal::Binop(binop, x, y) => binop.to_ir(*x, *y),
             ast::RVal::Unop(op, rval) => op.to_ir(*rval),
+            ast::RVal::BitCast(ty, rval) => IrWrap::RVal(ir::RVal::BitCast(
+                ty.value,
+                Box::new(rval.to_ir().as_expr()),
+            )),
             ast::RVal::AddrOf(x) => {
                 let ir = x.to_ir();
                 todo!()

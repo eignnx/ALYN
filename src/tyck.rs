@@ -74,6 +74,13 @@ pub enum TyckErr {
     RetVoidInNonVoidSubr {
         span: Span,
     },
+    BadCast {
+        span: Span,
+        value_span: Span,
+        ty_span: Span,
+        inferred_ty: Ty,
+        requested_ty: Ty,
+    },
 }
 
 pub type TyckResult<T> = Result<T, TyckErr>;
@@ -131,6 +138,12 @@ impl Ann<RVal> {
                 x.infer_ty(tcx)?;
                 unop.check_ty(&self.span, x).inspect(|ty| {
                     let _ = self.set_ty(ty.clone());
+                })
+            }
+            RVal::BitCast(ty, x) => {
+                x.infer_ty(tcx)?;
+                check_cast(&self.span, x, ty).inspect(|inferred_ty| {
+                    let _ = self.set_ty(inferred_ty.clone());
                 })
             }
             RVal::Call(fname, args) => {
@@ -258,6 +271,34 @@ impl Unop {
                 }),
             },
         }
+    }
+}
+
+/// I think there should be a semantic cast (do-what-I-mean: +7 <--> 7 <--> 7b)
+/// and a transmutation cast (do-what-I-say: -1 <--> 0xFFFF <--> 255b).
+///
+/// # Examples
+///
+/// ```txt
+/// 65535 as int --> <error: out of bounds>
+/// +1 as nat --> 1
+///  1 as int --> +1
+/// -1 as nat --> <error: out of bounds>
+/// -1 as byte --> <error: out of bounds>
+/// ```
+fn check_cast(cast_span: &Span, x: &Ann<RVal>, ty: &Ann<Ty>) -> TyckResult<Ty> {
+    match (x.ty.as_ref().unwrap(), &ty.value) {
+        (ty1, ty2) if ty1 == ty2 => Ok(ty1.clone()),
+        // Anything should be convertible to int
+        (_, Ty::Int) => Ok(Ty::Int),
+        (Ty::Byte, Ty::Int) => Ok(Ty::Int),
+        (inferred, requested) => Err(TyckErr::BadCast {
+            span: *cast_span,
+            value_span: x.span,
+            ty_span: ty.span,
+            inferred_ty: inferred.clone(),
+            requested_ty: requested.clone(),
+        }),
     }
 }
 

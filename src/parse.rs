@@ -63,6 +63,11 @@ mod test {
     }
 
     #[test]
+    fn type_transmutation_cast() {
+        test_parse!(RValParser, "1 + 2 & bitcast{nat}(-3) & 4 + 5");
+    }
+
+    #[test]
     fn assignment() {
         test_parse!(StmtParser, "*lhs = 123 + *ptr;");
     }

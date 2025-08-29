@@ -27,6 +27,7 @@ impl Debug for RVal {
             Self::Binop(op, x, y) => write!(f, "({x:?} {op} {y:?})"),
             Self::AddrOf(x) => write!(f, "&{x:?}"),
             Self::Unop(op, x) => write!(f, "({op} {x:?})"),
+            Self::BitCast(ty, x) => write!(f, "bitcast{{{}}}({:?})", ty.value, x),
             Self::Call(subr_name, args) => {
                 write!(f, "{subr_name}(")?;
                 for (i, arg) in args.iter().enumerate() {

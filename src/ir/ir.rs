@@ -1,9 +1,14 @@
 //! Intermediate Representation
 
-use crate::names::{Lbl, Tmp};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use derive_more::From;
 use internment::Intern;
-use std::sync::atomic::{AtomicUsize, Ordering};
+
+use crate::{
+    names::{Lbl, Tmp},
+    ty::Ty,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Binop {
@@ -32,6 +37,7 @@ pub enum RVal {
     LVal(LVal),
     Binop(Binop, Box<RVal>, Box<RVal>),
     Unop(Unop, Box<RVal>),
+    BitCast(Ty, Box<RVal>),
     Call(Box<RVal>, Vec<Box<RVal>>),
     /// AKA: `ESeq`
     Seq(Box<Stmt>, Box<RVal>),
