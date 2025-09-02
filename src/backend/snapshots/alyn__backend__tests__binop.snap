@@ -1,0 +1,11 @@
+---
+source: src/backend/mod.rs
+expression: "compile_to_lark(\"\n            subr main() nat {\n                let a = 24;\n                ret 1 + a - 49;\n            }\n        \")"
+---
+[
+    li $T0, 24,
+    mv $T2, $T0,
+    subi $T1, $T2, 49,
+    addi $Rv, $T1, 1,
+    jr $Ra,
+]

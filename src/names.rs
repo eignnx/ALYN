@@ -10,6 +10,16 @@ pub enum Lbl {
     ControlFlow(Intern<String>),
 }
 
+impl Lbl {
+    pub fn render(&self) -> String {
+        match self {
+            Lbl::SubrStart(name) => format!("subr__{name}"),
+            Lbl::Global(name) => format!("glbl__{name}"),
+            Lbl::ControlFlow(name) => format!("local__{name}"),
+        }
+    }
+}
+
 static LBL_ID: AtomicUsize = AtomicUsize::new(0);
 
 pub fn reset_lbl_id() {
@@ -33,7 +43,7 @@ impl std::fmt::Debug for Lbl {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Tmp(pub Intern<String>);
 
 impl From<&str> for Tmp {

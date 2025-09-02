@@ -1,0 +1,8 @@
+---
+source: src/backend/mod.rs
+expression: "compile_to_lark(\"\n            subr main() nat {\n                ret 0;\n            }\n        \")"
+---
+[
+    li $Rv, 0,
+    jr $Ra,
+]

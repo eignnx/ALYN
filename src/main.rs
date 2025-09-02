@@ -10,6 +10,7 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+mod backend;
 
 fn main() {
     println!("Hello, world!");
