@@ -11,6 +11,7 @@ mod tcx;
 mod ty;
 mod tyck;
 mod backend;
+mod regalloc;
 
 fn main() {
     println!("Hello, world!");

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use derive_more::From;
 use internment::Intern;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Lbl {
     SubrStart(Intern<String>),
     Global(Intern<String>),
@@ -16,6 +16,12 @@ impl Lbl {
             Lbl::SubrStart(name) => format!("subr__{name}"),
             Lbl::Global(name) => format!("glbl__{name}"),
             Lbl::ControlFlow(name) => format!("local__{name}"),
+        }
+    }
+
+    pub fn inner_ident(&self) -> Intern<String> {
+        match self {
+            Lbl::SubrStart(name) | Lbl::Global(name) | Lbl::ControlFlow(name) => name.clone(),
         }
     }
 }
@@ -43,7 +49,7 @@ impl std::fmt::Debug for Lbl {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tmp(pub Intern<String>);
 
 impl From<&str> for Tmp {

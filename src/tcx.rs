@@ -38,7 +38,6 @@ impl Tcx {
     }
 
     pub fn get(&self, sym: &Intern<String>) -> Option<&SymData> {
-        dbg!(self);
         for map in self.maps.iter().rev() {
             if let Some(data) = map.get(sym) {
                 return Some(data);
