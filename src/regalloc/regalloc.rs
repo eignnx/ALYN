@@ -119,11 +119,6 @@ impl ColorGraph {
     }
 }
 
-enum CtxStackEntry {
-    Selectable(NodeEntry),
-    MaybeSpill(NodeEntry),
-}
-
 /// Register Allocator
 pub struct RegAlloc<const N_GPRS: usize> {
 }
@@ -145,20 +140,20 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         ColorGraph::from_interferences(interferences)
     }
 
-    fn simplify_phase(&mut self, color_graph: &mut ColorGraph) -> Vec<CtxStackEntry> {
+    fn simplify_phase(&mut self, color_graph: &mut ColorGraph) -> Vec<NodeEntry> {
         let mut stack = Vec::new();
 
         loop {
             // First remove all easy nodes and save them to the stack.
             while let Some(entry) = color_graph.take_some_insig_node::<N_GPRS>() {
-                stack.push(CtxStackEntry::Selectable(entry));
+                stack.push(entry);
             }
 
             // Then if we're not done, we'll have to (potentially) spill a node.
             // Choose a node to remove and mark for spillage, then loop again
             // to see if that freed up more easy nodes.
             if let Some(entry) = color_graph.try_take_some_node() {
-                stack.push(CtxStackEntry::MaybeSpill(entry));
+                stack.push(entry);
             } else {
                 // Graph must be empty, so return the stack.
                 return stack;
@@ -167,31 +162,17 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
     }
 
 
-    fn select_phase(&mut self, color_graph: &mut ColorGraph, stack: &mut Vec<CtxStackEntry>) -> BTreeMap<Tmp, usize> {
+    fn select_phase(&mut self, color_graph: &mut ColorGraph, stack: &mut Vec<NodeEntry>) -> BTreeMap<Tmp, usize> {
         let mut assignments = BTreeMap::new();
 
-        while let Some(ctx_stack_entry) = stack.pop() {
-            match ctx_stack_entry {
-                CtxStackEntry::Selectable((ng, neighbors)) => {
-                    color_graph.insert(ng.clone(), neighbors.clone());
-                    if let Some((ng, reg_id)) = self.select_once(color_graph, &assignments, ng, neighbors) {
-                        for tmp in ng.iter() {
-                            assignments.insert(tmp, reg_id);
-                        }
-                    } else {
-                        unreachable!()
-                    }
+        while let Some((ng, neighbors)) = stack.pop() {
+            color_graph.insert(ng.clone(), neighbors.clone());
+            if let Some((ng, reg_id)) = self.select_once(color_graph, &assignments, ng.clone(), neighbors) {
+                for tmp in ng.iter() {
+                    assignments.insert(tmp, reg_id);
                 }
-                CtxStackEntry::MaybeSpill((ng, neighbors)) => {
-                    color_graph.insert(ng.clone(), neighbors.clone());
-                    if let Some((ng, reg_id)) = self.select_once(color_graph, &assignments, ng.clone(), neighbors) {
-                        for tmp in ng.iter() {
-                            assignments.insert(tmp, reg_id);
-                        }
-                    } else {
-                        todo!("Handle spill of NodeGroup: {ng:?}");
-                    }
-                }
+            } else {
+                todo!("Handle spill of NodeGroup: {ng:?}");
             }
         }
 
