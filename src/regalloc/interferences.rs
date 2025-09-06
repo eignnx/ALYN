@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use crate::names::Tmp;
+use crate::{names::Tmp, regalloc::Expr};
 use super::{
     Stmt,
     cfg::{Cfg, NodeId},
@@ -18,17 +18,25 @@ impl Interferences {
         Self::default()
     }
 
+    pub fn all_tmps(&self) -> impl Iterator<Item = Tmp> {
+        self.graph.keys().copied()
+    }
+
+    pub fn take_graph(self) -> HashMap<Tmp, BTreeSet<Tmp>> {
+        self.graph
+    }
+
     pub fn compute_interferences(&mut self, cfg: &Cfg, live_sets: &LiveSets) {
         let mut defs = BTreeSet::new();
         let mut uses = BTreeSet::new();
 
         for (id, stmt) in cfg.stmts.iter().enumerate() {
-            if let Stmt::Mov(lhs, _) = stmt {
-                // > At a move instruction `a <- c`, whre variables `b1, ..., bj` are *live-out*,
+            if let Stmt::Mov(lhs, rhs) = stmt {
+                // > At a move instruction `a <- c`, where variables `b1, ..., bj` are *live-out*,
                 // > add interference edges `(a, b1), ..., (a, bj)` for any `bi` that is *not* the
                 // > same as `c`.
                 for live_out in live_sets.get_live_outs(id) {
-                    if live_out != *lhs {
+                    if &Expr::Tmp(live_out) != rhs {
                         self.record_interference(*lhs, live_out);
                     }
                 }

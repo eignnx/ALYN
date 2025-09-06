@@ -8,6 +8,7 @@ use crate::names::Tmp;
 mod cfg;
 mod live_sets;
 mod interferences;
+mod regalloc;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 struct Lbl(Intern<String>);
@@ -20,7 +21,7 @@ impl From<&str> for Lbl {
 
 /// Only expressions not involving memory can be represented.
 /// Loads/stores must be explicit statements.
-#[derive(Debug, From)]
+#[derive(Debug, From, PartialEq)]
 enum Expr {
     #[from]
     Int(i32),
