@@ -8,7 +8,7 @@ use super::{
 };
 
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Interferences {
     graph: HashMap<Tmp, BTreeSet<Tmp>>,
 }
@@ -63,8 +63,38 @@ impl Interferences {
     }
 
     pub fn record_interference(&mut self, a: Tmp, b: Tmp) {
+        if a == b { return; }
         self.graph.entry(a).or_default().insert(b);
         self.graph.entry(b).or_default().insert(a);
+    }
+}
+
+impl std::fmt::Debug for Interferences {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{{")?;
+        for (tmp, neighbors) in &self.graph {
+            writeln!(f, "    {tmp:?} interferes with:")?;
+            for n in neighbors {
+                writeln!(f, " {n:?}")?;
+            }
+        }
+        writeln!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for Interferences {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "strict graph {{")?;
+        for (tmp, neighbors) in &self.graph {
+            write!(f, "{tmp:?} -- {{")?;
+            for n in neighbors {
+                write!(f, " {n:?}")?;
+            }
+            write!(f, "}}")?;
+        }
+        writeln!(f, "}}")?;
+        Ok(())
     }
 }
 

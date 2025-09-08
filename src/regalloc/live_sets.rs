@@ -18,6 +18,11 @@ impl LiveSets {
         Self::default()
     }
 
+    pub fn add_live_ins_to_entry(&mut self, entry_point: NodeId, live_ins: impl IntoIterator<Item = Tmp>) {
+        let set = self.live_ins.entry(entry_point).or_default();
+        set.extend(live_ins);
+    }
+
     pub fn compute_live_ins_live_outs(&mut self, cfg: &Cfg) {
         let mut defs_buf = BTreeSet::new();
         let mut uses_buf = BTreeSet::new();
@@ -36,11 +41,11 @@ impl LiveSets {
         }
     }
 
-    /// `LiveOuts[I] = union(LiveIn[p] for p in Pred[I])`
+    /// `LiveOuts[I] = union(LiveIn[p] for p in Succ[I])`
     fn compute_live_outs(&mut self, id: NodeId, cfg: &Cfg, recompute: &mut bool) {
         let live_outs = self.live_outs.entry(id).or_default();
         let old_len = live_outs.len();
-        for pred in cfg.predecessors(id) {
+        for pred in cfg.successors(id) {
             let pred_live_ins = self.live_ins.entry(pred).or_default();
             live_outs.extend(pred_live_ins.iter().copied());
         }
@@ -71,19 +76,72 @@ impl LiveSets {
     }
 
     pub fn get_live_ins(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
-            self.live_ins.get(&id)
-                .map(|set| set.iter())
-                .into_iter()
-                .flatten()
-                .copied()
+        self.live_ins.get(&id)
+            .map(|set| set.iter())
+            .into_iter()
+            .flatten()
+            .copied()
     }
 
     pub fn get_live_outs(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
-            self.live_outs.get(&id)
-                .map(|set| set.iter())
-                .into_iter()
-                .flatten()
-                .copied()
+        self.live_outs.get(&id)
+            .map(|set| set.iter())
+            .into_iter()
+            .flatten()
+            .copied()
+    }
+
+    pub fn display<'a>(&'a self, stmts: &'a [Stmt]) -> impl std::fmt::Display + 'a {
+        DisplayLiveSets {
+            live_sets: self,
+            stmts,
+        }
     }
 }
 
+struct DisplayLiveSets<'a> {
+    live_sets: &'a LiveSets,
+    stmts: &'a [Stmt],
+}
+
+impl<'a> std::fmt::Display for DisplayLiveSets<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, stmt) in self.stmts.iter().enumerate() {
+            // Write stmt
+            write!(f, "{:<30} ", format!("{stmt:?}"))?;
+            // Write live-ins
+            write!(f, "{{")?;
+            for live_in in self.live_sets.get_live_ins(i) {
+                write!(f, " {live_in:?}")?;
+            }
+            write!(f, " }} -> ")?;
+            // Write live-outs
+            write!(f, "{{")?;
+            for live_out in self.live_sets.get_live_outs(i) {
+                write!(f, " {live_out:?}")?;
+            }
+            writeln!(f, " }}")?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::Expr;
+    use insta::assert_snapshot;
+
+    #[test]
+    fn simple_with_live_ins_on_entry() {
+        let cfg = Cfg::new(0, [
+            Stmt::mov("x", 123),
+            Stmt::mov("y", Expr::binop("x", "arg")),
+        ]);
+        let mut live_sets = LiveSets::new();
+        live_sets.add_live_ins_to_entry(0, ["arg".into()]);
+        live_sets.compute_live_ins_live_outs(&cfg);
+
+        assert_snapshot!(live_sets.display(&cfg.stmts));
+    }
+}

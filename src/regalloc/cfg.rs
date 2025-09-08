@@ -51,7 +51,9 @@ impl Cfg {
     fn discover_edges(&mut self) {
         for (id, stmt) in self.stmts.iter().enumerate() {
             match stmt {
-                Stmt::Mov(..) | Stmt::Store { .. } | Stmt::Load { .. } | Stmt::Lbl(..) => self.edges.push((id, id + 1)),
+                Stmt::Mov(..) | Stmt::Store { .. } | Stmt::StackStore { .. } |
+                    Stmt::Load { .. } | Stmt::StackLoad { .. } | Stmt::Lbl(..)
+                    => self.edges.push((id, id + 1)),
                 Stmt::Ret(..) => self.exits.push(id),
                 Stmt::Jmp(lbl) => {
                     self.edges.push((id, self.label_to_node_id(*lbl)));

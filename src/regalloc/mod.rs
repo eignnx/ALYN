@@ -3,25 +3,16 @@ use std::collections::{BTreeSet, HashMap, LinkedList};
 use internment::Intern;
 use derive_more::From;
 
-use crate::names::Tmp;
+use crate::names::{Lbl, Tmp};
 
 mod cfg;
 mod live_sets;
 mod interferences;
 mod regalloc;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Lbl(Intern<String>);
-
-impl From<&str> for Lbl {
-    fn from(value: &str) -> Self {
-        Lbl(Intern::from_ref(value))
-    }
-}
-
 /// Only expressions not involving memory can be represented.
 /// Loads/stores must be explicit statements.
-#[derive(Debug, From, PartialEq)]
+#[derive(Clone, From, PartialEq)]
 enum Expr {
     #[from]
     Int(i32),
@@ -45,13 +36,38 @@ impl Expr {
             }
         }
     }
+
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
+        match self {
+            Expr::Int(_) => {}
+            Expr::Tmp(tmp) => if *tmp == old {
+                *tmp = new;
+            }
+            Expr::Binop(expr1, expr2) => {
+                expr1.replace_use_occurrances(old, new);
+                expr2.replace_use_occurrances(old, new);
+            }
+        }
+    }
 }
 
-#[derive(Debug, From)]
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(x) => write!(f, "{x}"),
+            Self::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Self::Binop(lhs, rhs) => write!(f, "({lhs:?} op {rhs:?})"),
+        }
+    }
+}
+
+#[derive(Clone, From)]
 enum Stmt {
     Mov(Tmp, Expr),
     Store { addr: Expr, src: Expr },
+    StackStore { addr: i32, src: Tmp },
     Load { dst: Tmp, addr: Expr },
+    StackLoad { dst: Tmp, addr: i32 },
     Br(Expr, Lbl),
     Jmp(Lbl),
     #[from(Lbl, &str)]
@@ -70,15 +86,52 @@ impl Stmt {
                 addr.defs_uses(defs, uses);
                 src.defs_uses(defs, uses);
             }
+            Stmt::StackStore { addr, src } => { uses.insert(*src); }
             Stmt::Load { dst, addr } => {
                 defs.insert(*dst);
                 addr.defs_uses(defs, uses);
             }
+            Stmt::StackLoad { dst, addr } => { defs.insert(*dst); }
             Stmt::Br(expr, _lbl) => expr.defs_uses(defs, uses),
-            Stmt::Jmp(lbl) => {}
-            Stmt::Lbl(lbl) => {}
-            Stmt::Ret(None) => {}
+            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
             Stmt::Ret(Some(expr)) => expr.defs_uses(defs, uses),
+        }
+    }
+
+    fn replace_def_occurrances(&mut self, old: Tmp, new: Tmp) {
+        match self {
+            Stmt::Mov(tmp, expr) => {
+                if *tmp == old {
+                    *tmp = new;
+                }
+            }
+            Stmt::Store { addr, src } => { }
+            Stmt::StackStore { addr, src } => { }
+            Stmt::Load { dst, .. } | Stmt::StackLoad { dst, .. } => {
+                if *dst == old {
+                    *dst = new;
+                }
+            }
+            Stmt::Br(expr, _lbl) => {}
+            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
+            Stmt::Ret(Some(expr)) => {}
+        }
+    }
+
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
+        match self {
+            Stmt::Mov(tmp, expr) => expr.replace_use_occurrances(old, new),
+            Stmt::Store { addr, src } => {
+                addr.replace_use_occurrances(old, new);
+                src.replace_use_occurrances(old, new);
+            }
+            Stmt::StackStore { addr, src } => if *src == old {
+                *src = new;
+            }
+            Stmt::Load { dst, addr } => addr.replace_use_occurrances(old, new),
+            Stmt::StackLoad { dst, addr } => { }
+            Stmt::Ret(Some(expr)) | Stmt::Br(expr, ..) => expr.replace_use_occurrances(old, new),
+            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
         }
     }
 }
@@ -95,6 +148,27 @@ impl Stmt {
 
     fn ret(maybe_value: impl Into<Expr>) -> Self {
         Self::Ret(Some(maybe_value.into()))
+    }
+
+    fn jmp(lbl: impl Into<Lbl>) -> Self {
+        Self::Jmp(lbl.into())
+    }
+}
+
+impl std::fmt::Debug for Stmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Mov(lhs, rhs) => write!(f, "move {lhs:?} <- {rhs:?}"),
+            Self::Store { addr, src } => write!(f, "store MEM[{addr:?}] <- {src:?}"),
+            Self::StackStore { addr, src } => write!(f, "stack_store STACK[{addr}] <- {src:?}"),
+            Self::Load { dst, addr } => write!(f, "load {dst:?} <- MEM[{addr:?}]"),
+            Self::StackLoad { dst, addr } => write!(f, "stack_load {dst:?} <- STACK[{addr:?}]"),
+            Self::Br(expr, lbl) => write!(f, "branch if {expr:?} to {lbl:?}"),
+            Self::Jmp(lbl) => write!(f, "jump to {lbl:?}"),
+            Self::Lbl(lbl) => write!(f, "label {lbl:?}:"),
+            Self::Ret(None) => write!(f, "ret"),
+            Self::Ret(Some(expr)) => write!(f, "ret {expr:?}"),
+        }
     }
 }
 

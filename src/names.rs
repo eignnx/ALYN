@@ -10,12 +10,26 @@ pub enum Lbl {
     ControlFlow(Intern<String>),
 }
 
+impl From<&str> for Lbl {
+    fn from(value: &str) -> Self {
+        Self::ControlFlow(Intern::from_ref(value))
+    }
+}
+
 impl Lbl {
     pub fn render(&self) -> String {
         match self {
             Lbl::SubrStart(name) => format!("subr__{name}"),
             Lbl::Global(name) => format!("glbl__{name}"),
             Lbl::ControlFlow(name) => format!("local__{name}"),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Lbl::SubrStart(name) |
+            Lbl::Global(name) |
+            Lbl::ControlFlow(name) => name.as_str(),
         }
     }
 
@@ -49,7 +63,7 @@ impl std::fmt::Debug for Lbl {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tmp(pub Intern<String>);
 
 impl From<&str> for Tmp {
@@ -65,9 +79,19 @@ pub fn reset_tmp_id() {
 }
 
 impl Tmp {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
     pub fn fresh(base_name: &str) -> Self {
         let id = TMP_ID.fetch_add(1, Ordering::SeqCst);
-        Self(Intern::new(format!("{base_name}#{id}")))
+        Self(Intern::new(format!("{base_name}.{id}")))
+    }
+}
+
+impl std::fmt::Debug for Tmp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "%{}", self.0)
     }
 }
 
