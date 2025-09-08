@@ -98,6 +98,17 @@ impl LiveSets {
             .copied()
     }
 
+    pub fn all_tmps(&self) -> impl Iterator<Item = Tmp> {
+        let mut tmps = BTreeSet::new();
+        for live_set in self.live_ins.values() {
+            tmps.extend(live_set.iter().cloned());
+        }
+        for live_set in self.live_outs.values() {
+            tmps.extend(live_set.iter().cloned());
+        }
+        tmps.into_iter()
+    }
+
     pub fn display<'a>(&'a self, stmts: &'a [Stmt]) -> impl std::fmt::Display + 'a {
         DisplayLiveSets {
             live_sets: self,

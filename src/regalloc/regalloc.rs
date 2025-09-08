@@ -162,6 +162,11 @@ impl ColorGraph {
     }
 }
 
+pub struct RegAllocation {
+    cfg: Cfg,
+    assignments: BTreeMap<Tmp, usize>
+}
+
 /// Register Allocator
 pub struct RegAlloc<const N_GPRS: usize> {
     /// Maps temporaries to an offset from the frame pointer.
@@ -175,23 +180,23 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         }
     }
 
-    const MAX_ITERS: usize = 3;
+    const MAX_ITERS: usize = 16;
 
-    fn allocate_registers(&mut self, mut cfg: Cfg) -> BTreeMap<Tmp, usize> {
+    fn allocate_registers(&mut self, mut cfg: Cfg) -> RegAllocation {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
             eprintln!("COLOR GRAPH:\n{color_graph:?}");
             let mut stack = self.simplify_phase(&mut color_graph);
             match self.select_phase(&mut color_graph, &mut stack) {
-                Ok(assignments) => return assignments,
                 Err(ng_to_spill) => {
                     eprintln!("Perform Spill");
                     cfg = self.spill_and_rewrite(cfg, ng_to_spill);
                 }
+                Ok(assignments) => return RegAllocation { cfg, assignments },
             }
         }
-        panic!("max iterations exceeded");
+        panic!("Register allocation failed: iteration limit exceeded");
     }
 
     fn build_phase(&mut self, cfg: &Cfg) -> (LiveSets, ColorGraph) {
@@ -350,13 +355,24 @@ mod tests {
     use crate::regalloc::{Expr as E, Stmt as S};
 
     fn compute_assignments<const N: usize>(params: Vec<Tmp>, program: Vec<Stmt>) {
+        crate::names::reset_name_ids();
         eprintln!("<<<<<<<<<<<<< N_GPRS = {N} >>>>>>>>>>>>>");
         let cfg = Cfg::new(0, params, program);
         let mut ra = RegAlloc::<N>::new();
-        let assignments = ra.allocate_registers(cfg);
+        let alloc = ra.allocate_registers(cfg);
         eprintln!("ASSIGNMENTS:");
-        for (tmp, reg_id) in assignments {
+        for (tmp, reg_id) in &alloc.assignments {
             eprintln!("  {tmp:?} -> ${reg_id}");
+        }
+        eprintln!("FINAL CODE:");
+        for stmt in &alloc.cfg.stmts {
+            let mut rendered = format!("{stmt:?}");
+            for (tmp, reg_id) in &alloc.assignments {
+                let tmp_rendered = format!("{tmp:?}");
+                let reg_rendered = format!("${reg_id}");
+                rendered = rendered.replace(&tmp_rendered, &reg_rendered);
+            }
+            eprintln!("{rendered}");
         }
     }
 
@@ -460,6 +476,10 @@ mod tests {
                  S::Br(E::binop("low", "high"), "loop_top".into()),
             S::ret(-1),
         ];
-        compute_assignments::<3>(vec!["x".into(), "v".into(), "n".into()], program);
+        compute_assignments::<3>(vec!["x".into(), "v".into(), "n".into()], program.clone());
+        eprintln!("=======================================");
+        eprintln!("=======================================");
+        eprintln!("=======================================");
+        compute_assignments::<4>(vec!["x".into(), "v".into(), "n".into()], program.clone());
     }
 }

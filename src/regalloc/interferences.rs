@@ -25,7 +25,28 @@ impl Interferences {
         self.graph
     }
 
+    /// We don't want to forget about orphan nodes. For example:
+    /// ```text
+    /// label my_func:
+    ///    move %x <- 123;
+    ///    move %y <- %x + 456;
+    ///    store MEM[%y] <- 999;
+    ///
+    ///    stack_load %orphan <- STACK[2];
+    ///    move %orphan <- %orphan + 1;
+    ///    stack_store STACK[2] <- %orphan;
+    ///    ret;
+    /// ```
+    /// In the above, `%orphan` will have an empty set of neighbors in the interference graph.
+    fn ensure_all_tmps_registered(&mut self, live_sets: &LiveSets) {
+        for tmp in live_sets.all_tmps() {
+            self.graph.insert(tmp, Default::default());
+        }
+    }
+
     pub fn compute_interferences(&mut self, cfg: &Cfg, live_sets: &LiveSets) {
+        self.ensure_all_tmps_registered(live_sets);
+
         let mut defs = BTreeSet::new();
         let mut uses = BTreeSet::new();
 
