@@ -7,6 +7,7 @@ pub type NodeId = usize;
 
 /// Control Flow Graph
 pub struct Cfg {
+    pub params: Vec<Tmp>,
     pub stmts: Vec<Stmt>,
     pub edges: Vec<(NodeId, NodeId)>,
     pub entry: NodeId,
@@ -16,8 +17,13 @@ pub struct Cfg {
 }
 
 impl Cfg {
-    pub fn new(entry: NodeId, stmts: impl IntoIterator<Item = Stmt>) -> Self {
+    pub fn new(
+        entry: NodeId,
+        params: impl IntoIterator<Item = Tmp>,
+        stmts: impl IntoIterator<Item = Stmt>,
+    ) -> Self {
         let mut this = Self {
+            params: params.into_iter().collect(),
             stmts: stmts.into_iter().collect(),
             edges: Default::default(),
             entry,

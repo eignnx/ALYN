@@ -17,16 +17,11 @@ impl LiveSets {
         Self::default()
     }
 
-    pub fn add_live_ins_to_entry(
-        &mut self,
-        entry_point: NodeId,
-        live_ins: impl IntoIterator<Item = Tmp>,
-    ) {
-        let set = self.live_ins.entry(entry_point).or_default();
-        set.extend(live_ins);
-    }
-
     pub fn compute_live_ins_live_outs(&mut self, cfg: &Cfg) {
+        // All function parameters need to be marked as live-in in the entry.
+        let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
+        entry_live_ins.extend(cfg.params.iter().cloned());
+
         let mut defs_buf = BTreeSet::new();
         let mut uses_buf = BTreeSet::new();
         let mut recompute = false;
@@ -146,12 +141,16 @@ mod tests {
 
     #[test]
     fn simple_with_live_ins_on_entry() {
+        #[rustfmt::skip]
         let cfg = Cfg::new(
             0,
-            [Stmt::mov("x", 123), Stmt::mov("y", Expr::binop("x", "arg"))],
+            ["arg".into()],
+            [
+                Stmt::mov("x", 123),
+                Stmt::mov("y", Expr::binop("x", "arg"))
+            ],
         );
         let mut live_sets = LiveSets::new();
-        live_sets.add_live_ins_to_entry(0, ["arg".into()]);
         live_sets.compute_live_ins_live_outs(&cfg);
 
         assert_snapshot!(live_sets.display(&cfg.stmts));

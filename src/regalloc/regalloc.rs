@@ -177,10 +177,10 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 
     const MAX_ITERS: usize = 3;
 
-    fn allocate_registers(&mut self, mut cfg: Cfg, params: &[Tmp]) -> BTreeMap<Tmp, usize> {
+    fn allocate_registers(&mut self, mut cfg: Cfg) -> BTreeMap<Tmp, usize> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
-            let (live_sets, mut color_graph) = self.build_phase(&mut cfg, params);
+            let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
             eprintln!("COLOR GRAPH:\n{color_graph:?}");
             let mut stack = self.simplify_phase(&mut color_graph);
             match self.select_phase(&mut color_graph, &mut stack) {
@@ -194,9 +194,8 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         panic!("max iterations exceeded");
     }
 
-    fn build_phase(&mut self, cfg: &Cfg, params: &[Tmp]) -> (LiveSets, ColorGraph) {
+    fn build_phase(&mut self, cfg: &Cfg) -> (LiveSets, ColorGraph) {
         let mut live_sets = LiveSets::new();
-        live_sets.add_live_ins_to_entry(cfg.entry, params.to_vec());
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
         eprintln!("LIVE SETS:\n{}", live_sets.display(&cfg.stmts[..]));
@@ -335,7 +334,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
             }
             new_stmts.extend(insert_after);
         }
-        Cfg::new(cfg.entry, new_stmts)
+        Cfg::new(cfg.entry, cfg.params, new_stmts)
     }
 
     fn get_or_insert_stack_slot(&mut self, ng: NodeGroup) -> i32 {
@@ -350,11 +349,11 @@ mod tests {
     use super::*;
     use crate::regalloc::{Expr as E, Stmt as S};
 
-    fn compute_assignments<const N: usize>(program: Vec<Stmt>, params: &[Tmp]) {
+    fn compute_assignments<const N: usize>(params: Vec<Tmp>, program: Vec<Stmt>) {
         eprintln!("<<<<<<<<<<<<< N_GPRS = {N} >>>>>>>>>>>>>");
-        let cfg = Cfg::new(0, program);
+        let cfg = Cfg::new(0, params, program);
         let mut ra = RegAlloc::<N>::new();
-        let assignments = ra.allocate_registers(cfg, params);
+        let assignments = ra.allocate_registers(cfg);
         eprintln!("ASSIGNMENTS:");
         for (tmp, reg_id) in assignments {
             eprintln!("  {tmp:?} -> ${reg_id}");
@@ -392,11 +391,11 @@ mod tests {
             S::ret("p"),
         ];
 
-        compute_assignments::<3>(program.clone(), &["base".into(), "n".into()]);
+        compute_assignments::<3>(vec!["base".into(), "n".into()], program.clone());
         eprintln!("==============================");
         eprintln!("==============================");
         eprintln!("==============================");
-        compute_assignments::<2>(program.clone(), &["base".into(), "n".into()]);
+        compute_assignments::<2>(vec!["base".into(), "n".into()], program.clone());
     }
 
     #[test]
@@ -438,27 +437,6 @@ mod tests {
         //      branch if %low <= %high to loop_top;
         //  ret -1;
         //
-        // // After spillling `high`:
-        // int binsearch(int x, int v[], int n) {
-        //     int low = 0;
-        //     int high_0 = high;
-        //     int high = n - 1;
-        //     int high_1 = high;
-        //     while (low <= high_1) {
-        //          int high_2 = high;
-        //          int mid = (low + high_2) / 2;
-        //          int elem = v[mid];
-        //          if (x < elem)
-        //              high_3 = mid - 1;
-        //              high = high_3;
-        //          else if (x > elem)
-        //              low = mid + 1;
-        //          else
-        //              return mid;
-        //     }
-        //     return -1;
-        // }
-        //
         #[rustfmt::skip]
         let program = vec![
             "binsearch".into(),
@@ -482,6 +460,6 @@ mod tests {
                  S::Br(E::binop("low", "high"), "loop_top".into()),
             S::ret(-1),
         ];
-        compute_assignments::<3>(program, &["x".into(), "v".into(), "n".into()]);
+        compute_assignments::<3>(vec!["x".into(), "v".into(), "n".into()], program);
     }
 }
