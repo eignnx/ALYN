@@ -1,14 +1,17 @@
-use crate::{names::Tmp, regalloc::Lbl};
+use crate::{
+    names::Tmp,
+    regalloc::{CtrlTx, Lbl},
+};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use super::{Expr, Stmt};
+use super::{Expr, Instr, Stmt};
 
 pub type NodeId = usize;
 
 /// Control Flow Graph
-pub struct Cfg {
+pub struct Cfg<I: Instr> {
     pub params: Vec<Tmp>,
-    pub stmts: Vec<Stmt>,
+    pub stmts: Vec<I>,
     pub edges: Vec<(NodeId, NodeId)>,
     pub entry: NodeId,
     pub exits: Vec<NodeId>,
@@ -16,11 +19,11 @@ pub struct Cfg {
     live_ins_on_entry: BTreeSet<Tmp>,
 }
 
-impl Cfg {
+impl<I: Instr> Cfg<I> {
     pub fn new(
         entry: NodeId,
         params: impl IntoIterator<Item = Tmp>,
-        stmts: impl IntoIterator<Item = Stmt>,
+        stmts: impl IntoIterator<Item = I>,
     ) -> Self {
         let mut this = Self {
             params: params.into_iter().collect(),
@@ -48,28 +51,27 @@ impl Cfg {
 
     fn discover_labels(&mut self) {
         for (id, stmt) in self.stmts.iter().enumerate() {
-            if let Stmt::Lbl(lbl) = stmt {
-                self.labels.insert(*lbl, id);
+            if let Some(lbl) = stmt.get_label() {
+                self.labels.insert(lbl, id);
             }
         }
     }
 
     fn discover_edges(&mut self) {
         for (id, stmt) in self.stmts.iter().enumerate() {
-            match stmt {
-                Stmt::Mov(..)
-                | Stmt::Store { .. }
-                | Stmt::StackStore { .. }
-                | Stmt::Load { .. }
-                | Stmt::StackLoad { .. }
-                | Stmt::Lbl(..) => self.edges.push((id, id + 1)),
-                Stmt::Ret(..) => self.exits.push(id),
-                Stmt::Jmp(lbl) => {
-                    self.edges.push((id, self.label_to_node_id(*lbl)));
-                }
-                Stmt::Br(expr, lbl) => {
-                    self.edges.push((id, id + 1)); // For fallthrough
-                    self.edges.push((id, self.label_to_node_id(*lbl)));
+            if let Some(tx) = stmt.ctrl_tx() {
+                match tx {
+                    CtrlTx::Advance => self.edges.push((id, id + 1)),
+                    CtrlTx::Jump(lbl) => self.edges.push((id, self.label_to_node_id(lbl))),
+                    CtrlTx::Branch(lbl) => {
+                        self.edges.push((id, id + 1)); // For fallthrough
+                        self.edges.push((id, self.label_to_node_id(lbl)));
+                    }
+                    CtrlTx::Switch(lbls) => {
+                        for lbl in lbls {
+                            self.edges.push((id, self.label_to_node_id(lbl)));
+                        }
+                    }
                 }
             }
         }

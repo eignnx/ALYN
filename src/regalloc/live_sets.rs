@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Stmt,
+    Instr, Stmt,
     cfg::{Cfg, NodeId},
 };
 use crate::names::Tmp;
@@ -17,7 +17,7 @@ impl LiveSets {
         Self::default()
     }
 
-    pub fn compute_live_ins_live_outs(&mut self, cfg: &Cfg) {
+    pub fn compute_live_ins_live_outs<I: Instr>(&mut self, cfg: &Cfg<I>) {
         // All function parameters need to be marked as live-in in the entry.
         let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
         entry_live_ins.extend(cfg.params.iter().cloned());
@@ -40,7 +40,7 @@ impl LiveSets {
     }
 
     /// `LiveOuts[I] = union(LiveIn[p] for p in Succ[I])`
-    fn compute_live_outs(&mut self, id: NodeId, cfg: &Cfg, recompute: &mut bool) {
+    fn compute_live_outs<I: Instr>(&mut self, id: NodeId, cfg: &Cfg<I>, recompute: &mut bool) {
         let live_outs = self.live_outs.entry(id).or_default();
         let old_len = live_outs.len();
         for pred in cfg.successors(id) {
@@ -54,17 +54,17 @@ impl LiveSets {
     }
 
     /// `LiveIns[I] = Uses[I]  U  (LiveOuts[I] - Defs[I])`
-    fn compute_live_ins(
+    fn compute_live_ins<I: Instr>(
         &mut self,
         id: NodeId,
-        stmt: &Stmt,
+        stmt: &I,
         defs: &mut BTreeSet<Tmp>,
         uses: &mut BTreeSet<Tmp>,
         recompute: &mut bool,
     ) {
         defs.clear();
         uses.clear();
-        stmt.defs_uses(defs, uses);
+        stmt.add_defs_uses(defs, uses);
 
         let live_ins = self.live_ins.entry(id).or_default();
         let old_len = live_ins.len();
@@ -109,7 +109,10 @@ impl LiveSets {
         tmps.into_iter()
     }
 
-    pub fn display<'a>(&'a self, stmts: &'a [Stmt]) -> impl std::fmt::Display + 'a {
+    pub fn display<'a, I: std::fmt::Debug>(
+        &'a self,
+        stmts: &'a [I],
+    ) -> impl std::fmt::Display + 'a {
         DisplayLiveSets {
             live_sets: self,
             stmts,
@@ -117,12 +120,12 @@ impl LiveSets {
     }
 }
 
-struct DisplayLiveSets<'a> {
+struct DisplayLiveSets<'a, I> {
     live_sets: &'a LiveSets,
-    stmts: &'a [Stmt],
+    stmts: &'a [I],
 }
 
-impl<'a> std::fmt::Display for DisplayLiveSets<'a> {
+impl<'a, I: std::fmt::Debug> std::fmt::Display for DisplayLiveSets<'a, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, stmt) in self.stmts.iter().enumerate() {
             // Write stmt

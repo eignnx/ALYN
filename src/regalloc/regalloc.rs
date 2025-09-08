@@ -9,14 +9,7 @@ use crate::{
     regalloc::{Stmt, live_sets::LiveSets},
 };
 
-use super::{cfg::Cfg, interferences::Interferences};
-
-trait MachineEnv {
-    type Reg: 'static;
-    const REGS: &'static [Self::Reg];
-    const N_GPRS: usize = Self::REGS.len();
-    type Instr;
-}
+use super::{Instr, cfg::Cfg, interferences::Interferences};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NodeGroup(SmallVec<[Tmp; 2]>);
@@ -65,7 +58,7 @@ impl std::fmt::Debug for ColorGraph {
         writeln!(f, "strict graph {{")?;
         for (tmp, neighbors) in &self.graph {
             let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
-            write!(f, "{tmp} -- {{")?;
+            write!(f, "    {tmp} -- {{")?;
             for n in neighbors {
                 let n = format!("{n:?}").replace('%', "").replace('.', "_");
                 write!(f, " {n}")?;
@@ -162,9 +155,9 @@ impl ColorGraph {
     }
 }
 
-pub struct RegAllocation {
-    cfg: Cfg,
-    assignments: BTreeMap<Tmp, usize>
+pub struct RegAllocation<I: Instr> {
+    cfg: Cfg<I>,
+    assignments: BTreeMap<Tmp, usize>,
 }
 
 /// Register Allocator
@@ -182,7 +175,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 
     const MAX_ITERS: usize = 16;
 
-    fn allocate_registers(&mut self, mut cfg: Cfg) -> RegAllocation {
+    fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
@@ -199,7 +192,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         panic!("Register allocation failed: iteration limit exceeded");
     }
 
-    fn build_phase(&mut self, cfg: &Cfg) -> (LiveSets, ColorGraph) {
+    fn build_phase<I: Instr>(&mut self, cfg: &Cfg<I>) -> (LiveSets, ColorGraph) {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
@@ -283,7 +276,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         None
     }
 
-    fn spill_and_rewrite(&mut self, mut cfg: Cfg, to_spill: NodeGroup) -> Cfg {
+    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: NodeGroup) -> Cfg<I> {
         // To spill X we need to find all mentions of X. If it's a Use of X,
         // insert Stmt::StackLoad(new_tmp, X_address) before and edit the using
         // instruction.
@@ -298,7 +291,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         for (id, mut stmt) in cfg.stmts.into_iter().enumerate() {
             defs.clear();
             uses.clear();
-            stmt.defs_uses(&mut defs, &mut uses);
+            stmt.add_defs_uses(&mut defs, &mut uses);
             let slot_addr = self.get_or_insert_stack_slot(to_spill.clone());
             let stmt_ref = &mut stmt;
 
@@ -309,10 +302,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                 let mut new_tmp = None;
                 if uses.contains(&tmp) {
                     let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
-                    let new_stmt = Stmt::StackLoad {
-                        dst,
-                        addr: slot_addr,
-                    };
+                    let new_stmt = I::mk_load_from_stack(dst, slot_addr);
                     eprintln!("++ inserting stmt:\t{new_stmt:?}");
                     new_stmts.push(new_stmt);
                     stmt_ref.replace_use_occurrances(tmp, dst);
@@ -321,10 +311,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                 if defs.contains(&tmp) {
                     let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
                     stmt_ref.replace_def_occurrances(tmp, src);
-                    insert_after.push(Stmt::StackStore {
-                        addr: slot_addr,
-                        src,
-                    });
+                    insert_after.push(I::mk_store_to_stack(slot_addr, src));
                     changed = true;
                 }
             }

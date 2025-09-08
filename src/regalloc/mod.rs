@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap, LinkedList};
 
 use derive_more::From;
 use internment::Intern;
+use smallvec::SmallVec;
 
 use crate::names::{Lbl, Tmp};
 
@@ -10,59 +11,41 @@ mod interferences;
 mod live_sets;
 mod regalloc;
 
-/// Only expressions not involving memory can be represented.
-/// Loads/stores must be explicit statements.
-#[derive(Clone, From, PartialEq)]
-enum Expr {
-    #[from]
-    Int(i32),
-    #[from(&str)]
-    Tmp(Tmp),
-    Binop(Box<Expr>, Box<Expr>),
+/// Control Transfer - how the program counter may be updated by an instruction.
+pub enum CtrlTx {
+    /// Just advance to the next instruction: `$PC <- $PC + 1`
+    Advance,
+
+    /// Unconditional jump to given label.
+    Jump(Lbl),
+
+    /// Jump to one of the given labels, like in a switch statement.
+    Switch(SmallVec<[Lbl; 2]>),
+
+    /// Either fallthrough (same as `Advance`) or branch to the given label.
+    Branch(Lbl),
 }
 
-impl Expr {
-    fn binop(x: impl Into<Expr>, y: impl Into<Expr>) -> Self {
-        Self::Binop(Box::new(x.into()), Box::new(y.into()))
-    }
+pub trait Instr: std::fmt::Debug {
+    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>);
 
-    fn defs_uses(&self, defs: &mut BTreeSet<Tmp>, uses: &mut BTreeSet<Tmp>) {
-        match self {
-            Expr::Int(_) => {}
-            Expr::Tmp(tmp) => {
-                uses.insert(*tmp);
-            }
-            Expr::Binop(expr1, expr2) => {
-                expr1.defs_uses(defs, uses);
-                expr2.defs_uses(defs, uses);
-            }
-        }
-    }
+    /// `%a <- %b` is a pure move instruction from one register/temporary to another.
+    /// Returns the lefthand side (`%a`) and the righthand side (`%b`) respectively.
+    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)>;
 
-    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
-        match self {
-            Expr::Int(_) => {}
-            Expr::Tmp(tmp) => {
-                if *tmp == old {
-                    *tmp = new;
-                }
-            }
-            Expr::Binop(expr1, expr2) => {
-                expr1.replace_use_occurrances(old, new);
-                expr2.replace_use_occurrances(old, new);
-            }
-        }
-    }
-}
+    fn replace_def_occurrances(&mut self, old: Tmp, new: Tmp);
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp);
 
-impl std::fmt::Debug for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Int(x) => write!(f, "{x}"),
-            Self::Tmp(tmp) => write!(f, "{tmp:?}"),
-            Self::Binop(lhs, rhs) => write!(f, "({lhs:?} op {rhs:?})"),
-        }
-    }
+    /// If this instruction has a label associated with it, return it.
+    fn get_label(&self) -> Option<Lbl>;
+
+    /// A `return` statement would produce `None`, a `nop` statement would produce `Some(Advance)`.
+    /// Subroutine call statements should produce `Some(Advance)` since within the subroutine it
+    /// wouldn't seem like any jump has happened.
+    fn ctrl_tx(&self) -> Option<CtrlTx>;
+
+    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self;
+    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self;
 }
 
 #[derive(Clone, From)]
@@ -91,11 +74,11 @@ enum Stmt {
     Ret(Option<Expr>),
 }
 
-impl Stmt {
-    fn defs_uses(&self, defs: &mut BTreeSet<Tmp>, uses: &mut BTreeSet<Tmp>) {
+impl Instr for Stmt {
+    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
         match self {
             Stmt::Mov(tmp, expr) => {
-                defs.insert(*tmp);
+                defs.extend([*tmp]);
                 expr.defs_uses(defs, uses);
             }
             Stmt::Store { addr, src } => {
@@ -103,18 +86,26 @@ impl Stmt {
                 src.defs_uses(defs, uses);
             }
             Stmt::StackStore { addr, src } => {
-                uses.insert(*src);
+                uses.extend([*src]);
             }
             Stmt::Load { dst, addr } => {
-                defs.insert(*dst);
+                defs.extend([*dst]);
                 addr.defs_uses(defs, uses);
             }
             Stmt::StackLoad { dst, addr } => {
-                defs.insert(*dst);
+                defs.extend([*dst]);
             }
             Stmt::Br(expr, _lbl) => expr.defs_uses(defs, uses),
             Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
             Stmt::Ret(Some(expr)) => expr.defs_uses(defs, uses),
+        }
+    }
+
+    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)> {
+        if let Self::Mov(lhs, Expr::Tmp(rhs)) = self {
+            Some((*lhs, *rhs))
+        } else {
+            None
         }
     }
 
@@ -156,6 +147,36 @@ impl Stmt {
             Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
         }
     }
+
+    fn get_label(&self) -> Option<Lbl> {
+        if let Self::Lbl(lbl) = self {
+            Some(*lbl)
+        } else {
+            None
+        }
+    }
+
+    fn ctrl_tx(&self) -> Option<CtrlTx> {
+        match self {
+            Stmt::Mov(..)
+            | Stmt::Store { .. }
+            | Stmt::StackStore { .. }
+            | Stmt::Load { .. }
+            | Stmt::StackLoad { .. }
+            | Stmt::Lbl(_) => Some(CtrlTx::Advance),
+            Stmt::Br(_, lbl) => Some(CtrlTx::Branch(*lbl)),
+            Stmt::Jmp(lbl) => Some(CtrlTx::Jump(*lbl)),
+            Stmt::Ret(_) => None,
+        }
+    }
+
+    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
+        Self::StackStore { addr, src }
+    }
+
+    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
+        Self::StackLoad { dst, addr }
+    }
 }
 
 impl Stmt {
@@ -189,6 +210,61 @@ impl std::fmt::Debug for Stmt {
             Self::Lbl(lbl) => write!(f, "label {lbl:?}:"),
             Self::Ret(None) => write!(f, "ret"),
             Self::Ret(Some(expr)) => write!(f, "ret {expr:?}"),
+        }
+    }
+}
+
+/// Only expressions not involving memory can be represented.
+/// Loads/stores must be explicit statements.
+#[derive(Clone, From, PartialEq)]
+enum Expr {
+    #[from]
+    Int(i32),
+    #[from(&str)]
+    Tmp(Tmp),
+    Binop(Box<Expr>, Box<Expr>),
+}
+
+impl Expr {
+    fn binop(x: impl Into<Expr>, y: impl Into<Expr>) -> Self {
+        Self::Binop(Box::new(x.into()), Box::new(y.into()))
+    }
+
+    fn defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
+        match self {
+            Expr::Int(_) => {}
+            Expr::Tmp(tmp) => {
+                uses.extend([*tmp]);
+            }
+            Expr::Binop(expr1, expr2) => {
+                expr1.defs_uses(defs, uses);
+                expr2.defs_uses(defs, uses);
+            }
+        }
+    }
+
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
+        match self {
+            Expr::Int(_) => {}
+            Expr::Tmp(tmp) => {
+                if *tmp == old {
+                    *tmp = new;
+                }
+            }
+            Expr::Binop(expr1, expr2) => {
+                expr1.replace_use_occurrances(old, new);
+                expr2.replace_use_occurrances(old, new);
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(x) => write!(f, "{x}"),
+            Self::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Self::Binop(lhs, rhs) => write!(f, "({lhs:?} op {rhs:?})"),
         }
     }
 }

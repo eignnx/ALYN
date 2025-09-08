@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use super::{
-    Stmt,
+    Instr, Stmt,
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
@@ -44,20 +44,20 @@ impl Interferences {
         }
     }
 
-    pub fn compute_interferences(&mut self, cfg: &Cfg, live_sets: &LiveSets) {
+    pub fn compute_interferences<I: Instr>(&mut self, cfg: &Cfg<I>, live_sets: &LiveSets) {
         self.ensure_all_tmps_registered(live_sets);
 
         let mut defs = BTreeSet::new();
         let mut uses = BTreeSet::new();
 
         for (id, stmt) in cfg.stmts.iter().enumerate() {
-            if let Stmt::Mov(lhs, rhs) = stmt {
+            if let Some((lhs, rhs)) = stmt.try_as_pure_move() {
                 // > At a move instruction `a <- c`, where variables `b1, ..., bj` are *live-out*,
                 // > add interference edges `(a, b1), ..., (a, bj)` for any `bi` that is *not* the
                 // > same as `c`.
                 for live_out in live_sets.get_live_outs(id) {
-                    if &Expr::Tmp(live_out) != rhs {
-                        self.record_interference(*lhs, live_out);
+                    if live_out != rhs {
+                        self.record_interference(lhs, live_out);
                     }
                 }
             } else {
@@ -65,7 +65,7 @@ impl Interferences {
                 // > variables are `b1, ..., bj`, add interference edges `(a, b1), ..., (a, bj)`.
                 defs.clear();
                 uses.clear();
-                stmt.defs_uses(&mut defs, &mut uses);
+                stmt.add_defs_uses(&mut defs, &mut uses);
                 for def in defs.iter().copied() {
                     for live_out in live_sets.get_live_outs(id) {
                         self.record_interference(def, live_out);
