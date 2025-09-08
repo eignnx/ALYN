@@ -1,12 +1,11 @@
 use std::collections::{BTreeSet, HashMap};
 
-use crate::{names::Tmp, regalloc::Expr};
 use super::{
     Stmt,
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-
+use crate::{names::Tmp, regalloc::Expr};
 
 #[derive(Default)]
 pub struct Interferences {
@@ -63,7 +62,9 @@ impl Interferences {
     }
 
     pub fn record_interference(&mut self, a: Tmp, b: Tmp) {
-        if a == b { return; }
+        if a == b {
+            return;
+        }
         self.graph.entry(a).or_default().insert(b);
         self.graph.entry(b).or_default().insert(a);
     }
@@ -97,4 +98,3 @@ impl std::fmt::Display for Interferences {
         Ok(())
     }
 }
-

@@ -1,12 +1,15 @@
-use std::{collections::{BTreeMap, BTreeSet}, io::Write};
 use smallvec::{SmallVec, smallvec};
-
-use crate::{names::Tmp, regalloc::{live_sets::LiveSets, Stmt}};
-
-use super::{
-    cfg::Cfg,
-    interferences::Interferences,
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Write,
 };
+
+use crate::{
+    names::Tmp,
+    regalloc::{Stmt, live_sets::LiveSets},
+};
+
+use super::{cfg::Cfg, interferences::Interferences};
 
 trait MachineEnv {
     type Reg: 'static;
@@ -54,7 +57,7 @@ impl std::fmt::Debug for NodeGroup {
 type NodeEntry = (NodeGroup, BTreeSet<NodeGroup>);
 
 struct ColorGraph {
-    graph: BTreeMap<NodeGroup, BTreeSet<NodeGroup>>
+    graph: BTreeMap<NodeGroup, BTreeSet<NodeGroup>>,
 }
 
 impl std::fmt::Debug for ColorGraph {
@@ -80,11 +83,10 @@ impl ColorGraph {
             .take_graph()
             .into_iter()
             .map(|(tmp, neighbors)| {
-                let neighbors = neighbors.into_iter()
-                    .map(NodeGroup::from)
-                    .collect();
+                let neighbors = neighbors.into_iter().map(NodeGroup::from).collect();
                 (NodeGroup::from(tmp), neighbors)
-            }).collect();
+            })
+            .collect();
         Self { graph }
     }
 
@@ -138,11 +140,15 @@ impl ColorGraph {
     }
 
     fn choose_node_to_spill(&mut self) -> Option<NodeEntry> {
-        let max_ng = self.graph
+        let max_ng = self
+            .graph
             .keys()
             .max_by_key(|ng| self.degree(ng))
             .cloned()?;
-        eprintln!("Max degree node: {:?} (degree {})", max_ng, self.degree(&max_ng));
+        eprintln!(
+            "Max degree node: {max_ng:?} (degree {})",
+            self.degree(&max_ng)
+        );
         Some(self.take(&max_ng))
     }
 
@@ -182,7 +188,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                 Err(ng_to_spill) => {
                     eprintln!("Perform Spill");
                     cfg = self.spill_and_rewrite(cfg, ng_to_spill);
-                },
+                }
             }
         }
         panic!("max iterations exceeded");
@@ -226,13 +232,18 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         }
     }
 
-
-    fn select_phase(&mut self, color_graph: &mut ColorGraph, stack: &mut Vec<NodeEntry>) -> Result<BTreeMap<Tmp, usize>, NodeGroup> {
+    fn select_phase(
+        &mut self,
+        color_graph: &mut ColorGraph,
+        stack: &mut Vec<NodeEntry>,
+    ) -> Result<BTreeMap<Tmp, usize>, NodeGroup> {
         let mut assignments = BTreeMap::new();
 
         while let Some((ng, neighbors)) = stack.pop() {
             color_graph.insert(ng.clone(), neighbors.clone());
-            if let Some((ng, reg_id)) = self.select_once(color_graph, &assignments, ng.clone(), neighbors) {
+            if let Some((ng, reg_id)) =
+                self.select_once(color_graph, &assignments, ng.clone(), neighbors)
+            {
                 for tmp in ng.iter() {
                     eprintln!("  * select `{tmp:?}` --> `${reg_id}`");
                     assignments.insert(tmp, reg_id);
@@ -252,9 +263,8 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         color_graph: &mut ColorGraph,
         assignments: &BTreeMap<Tmp, usize>,
         ng: NodeGroup,
-        neighbors: BTreeSet<NodeGroup>
-    ) -> Option<(NodeGroup, usize)>
-    {
+        neighbors: BTreeSet<NodeGroup>,
+    ) -> Option<(NodeGroup, usize)> {
         let mut reg_ids_in_use = BTreeSet::new();
         for neighbor in color_graph.active_neighbors_of(&ng) {
             let a_neighbor = neighbor.get_one();
@@ -273,7 +283,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         // To spill X we need to find all mentions of X. If it's a Use of X,
         // insert Stmt::StackLoad(new_tmp, X_address) before and edit the using
         // instruction.
-        // If it's a Def of X, edit the old stmt to Def `new_tmp`, and insert 
+        // If it's a Def of X, edit the old stmt to Def `new_tmp`, and insert
         // Stmt::StackStore(X_address, new_tmp) after.
 
         let mut new_stmts = Vec::new();
@@ -295,7 +305,10 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                 let mut new_tmp = None;
                 if uses.contains(&tmp) {
                     let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
-                    let new_stmt = Stmt::StackLoad { dst, addr: slot_addr };
+                    let new_stmt = Stmt::StackLoad {
+                        dst,
+                        addr: slot_addr,
+                    };
                     eprintln!("++ inserting stmt:\t{new_stmt:?}");
                     new_stmts.push(new_stmt);
                     stmt_ref.replace_use_occurrances(tmp, dst);
@@ -304,7 +317,10 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                 if defs.contains(&tmp) {
                     let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
                     stmt_ref.replace_def_occurrances(tmp, src);
-                    insert_after.push(Stmt::StackStore { addr: slot_addr, src });
+                    insert_after.push(Stmt::StackStore {
+                        addr: slot_addr,
+                        src,
+                    });
                     changed = true;
                 }
             }
@@ -332,7 +348,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::regalloc::{Stmt as S, Expr as E};
+    use crate::regalloc::{Expr as E, Stmt as S};
 
     fn compute_assignments<const N: usize>(program: Vec<Stmt>, params: &[Tmp]) {
         eprintln!("<<<<<<<<<<<<< N_GPRS = {N} >>>>>>>>>>>>>");

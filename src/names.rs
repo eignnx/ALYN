@@ -27,9 +27,7 @@ impl Lbl {
 
     pub fn as_str(&self) -> &str {
         match self {
-            Lbl::SubrStart(name) |
-            Lbl::Global(name) |
-            Lbl::ControlFlow(name) => name.as_str(),
+            Lbl::SubrStart(name) | Lbl::Global(name) | Lbl::ControlFlow(name) => name.as_str(),
         }
     }
 

@@ -1,13 +1,13 @@
 use std::collections::{BTreeSet, HashMap, LinkedList};
 
-use internment::Intern;
 use derive_more::From;
+use internment::Intern;
 
 use crate::names::{Lbl, Tmp};
 
 mod cfg;
-mod live_sets;
 mod interferences;
+mod live_sets;
 mod regalloc;
 
 /// Only expressions not involving memory can be represented.
@@ -28,8 +28,10 @@ impl Expr {
 
     fn defs_uses(&self, defs: &mut BTreeSet<Tmp>, uses: &mut BTreeSet<Tmp>) {
         match self {
-            Expr::Int(_) => {},
-            Expr::Tmp(tmp) => { uses.insert(*tmp); }
+            Expr::Int(_) => {}
+            Expr::Tmp(tmp) => {
+                uses.insert(*tmp);
+            }
             Expr::Binop(expr1, expr2) => {
                 expr1.defs_uses(defs, uses);
                 expr2.defs_uses(defs, uses);
@@ -40,8 +42,10 @@ impl Expr {
     fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
         match self {
             Expr::Int(_) => {}
-            Expr::Tmp(tmp) => if *tmp == old {
-                *tmp = new;
+            Expr::Tmp(tmp) => {
+                if *tmp == old {
+                    *tmp = new;
+                }
             }
             Expr::Binop(expr1, expr2) => {
                 expr1.replace_use_occurrances(old, new);
@@ -64,10 +68,22 @@ impl std::fmt::Debug for Expr {
 #[derive(Clone, From)]
 enum Stmt {
     Mov(Tmp, Expr),
-    Store { addr: Expr, src: Expr },
-    StackStore { addr: i32, src: Tmp },
-    Load { dst: Tmp, addr: Expr },
-    StackLoad { dst: Tmp, addr: i32 },
+    Store {
+        addr: Expr,
+        src: Expr,
+    },
+    StackStore {
+        addr: i32,
+        src: Tmp,
+    },
+    Load {
+        dst: Tmp,
+        addr: Expr,
+    },
+    StackLoad {
+        dst: Tmp,
+        addr: i32,
+    },
     Br(Expr, Lbl),
     Jmp(Lbl),
     #[from(Lbl, &str)]
@@ -86,12 +102,16 @@ impl Stmt {
                 addr.defs_uses(defs, uses);
                 src.defs_uses(defs, uses);
             }
-            Stmt::StackStore { addr, src } => { uses.insert(*src); }
+            Stmt::StackStore { addr, src } => {
+                uses.insert(*src);
+            }
             Stmt::Load { dst, addr } => {
                 defs.insert(*dst);
                 addr.defs_uses(defs, uses);
             }
-            Stmt::StackLoad { dst, addr } => { defs.insert(*dst); }
+            Stmt::StackLoad { dst, addr } => {
+                defs.insert(*dst);
+            }
             Stmt::Br(expr, _lbl) => expr.defs_uses(defs, uses),
             Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
             Stmt::Ret(Some(expr)) => expr.defs_uses(defs, uses),
@@ -105,8 +125,8 @@ impl Stmt {
                     *tmp = new;
                 }
             }
-            Stmt::Store { addr, src } => { }
-            Stmt::StackStore { addr, src } => { }
+            Stmt::Store { addr, src } => {}
+            Stmt::StackStore { addr, src } => {}
             Stmt::Load { dst, .. } | Stmt::StackLoad { dst, .. } => {
                 if *dst == old {
                     *dst = new;
@@ -125,17 +145,18 @@ impl Stmt {
                 addr.replace_use_occurrances(old, new);
                 src.replace_use_occurrances(old, new);
             }
-            Stmt::StackStore { addr, src } => if *src == old {
-                *src = new;
+            Stmt::StackStore { addr, src } => {
+                if *src == old {
+                    *src = new;
+                }
             }
             Stmt::Load { dst, addr } => addr.replace_use_occurrances(old, new),
-            Stmt::StackLoad { dst, addr } => { }
+            Stmt::StackLoad { dst, addr } => {}
             Stmt::Ret(Some(expr)) | Stmt::Br(expr, ..) => expr.replace_use_occurrances(old, new),
             Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
         }
     }
 }
-
 
 impl Stmt {
     fn mov(tmp: impl Into<Tmp>, expr: impl Into<Expr>) -> Self {
@@ -172,11 +193,10 @@ impl std::fmt::Debug for Stmt {
     }
 }
 
-
 #[test]
 fn test() {
-    use Stmt as S;
     use Expr as E;
+    use Stmt as S;
 
     let _program = vec![
         S::mov("a", 0),
@@ -188,4 +208,3 @@ fn test() {
         S::ret("c"),
     ];
 }
-

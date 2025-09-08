@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::{names::Tmp, regalloc::Lbl};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use super::{Stmt, Expr};
+use super::{Expr, Stmt};
 
 pub type NodeId = usize;
 
@@ -51,9 +51,12 @@ impl Cfg {
     fn discover_edges(&mut self) {
         for (id, stmt) in self.stmts.iter().enumerate() {
             match stmt {
-                Stmt::Mov(..) | Stmt::Store { .. } | Stmt::StackStore { .. } |
-                    Stmt::Load { .. } | Stmt::StackLoad { .. } | Stmt::Lbl(..)
-                    => self.edges.push((id, id + 1)),
+                Stmt::Mov(..)
+                | Stmt::Store { .. }
+                | Stmt::StackStore { .. }
+                | Stmt::Load { .. }
+                | Stmt::StackLoad { .. }
+                | Stmt::Lbl(..) => self.edges.push((id, id + 1)),
                 Stmt::Ret(..) => self.exits.push(id),
                 Stmt::Jmp(lbl) => {
                     self.edges.push((id, self.label_to_node_id(*lbl)));
@@ -67,16 +70,14 @@ impl Cfg {
     }
 
     pub fn successors(&self, node_id: NodeId) -> impl Iterator<Item = NodeId> {
-        self.edges.iter()
-            .filter_map(move |(from, to)| {
-                (*from == node_id).then_some(*to)
-            })
+        self.edges
+            .iter()
+            .filter_map(move |(from, to)| (*from == node_id).then_some(*to))
     }
 
     pub fn predecessors(&self, node_id: NodeId) -> impl Iterator<Item = NodeId> {
-        self.edges.iter()
-            .filter_map(move |(from, to)| {
-                (*to == node_id).then_some(*from)
-            })
+        self.edges
+            .iter()
+            .filter_map(move |(from, to)| (*to == node_id).then_some(*from))
     }
 }

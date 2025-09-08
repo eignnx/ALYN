@@ -4,13 +4,18 @@ pub mod lark;
 
 pub trait Backend<OutStream>: Default
 where
-    OutStream: Extend<Self::Instruction>
+    OutStream: Extend<Self::Instruction>,
 {
     type Temporary;
     type Instruction;
     fn stmt_to_asm(&mut self, out: &mut OutStream, stmt: ir::Stmt);
-    fn rval_to_asm(&mut self, out: &mut OutStream, dest: impl Into<Self::Temporary>, rval: ir::RVal);
-    fn fresh_temp( &mut self, out: &mut OutStream) -> Self::Temporary;
+    fn rval_to_asm(
+        &mut self,
+        out: &mut OutStream,
+        dest: impl Into<Self::Temporary>,
+        rval: ir::RVal,
+    );
+    fn fresh_temp(&mut self, out: &mut OutStream) -> Self::Temporary;
 }
 
 pub trait Capabilities {
@@ -23,10 +28,10 @@ pub trait Capabilities {
     const HW_MOD: bool;
 }
 
-
 pub fn run_backend<Tmp, Instr, Out, B>(backend: &mut B, out: &mut Out, stmt: ir::Stmt)
-where B: Backend<Out, Instruction = Instr, Temporary = Tmp>,
-      Out: Extend<<B as Backend<Out>>::Instruction>,
+where
+    B: Backend<Out, Instruction = Instr, Temporary = Tmp>,
+    Out: Extend<<B as Backend<Out>>::Instruction>,
 {
     backend.stmt_to_asm(out, stmt)
 }
@@ -56,20 +61,24 @@ mod tests {
 
     #[test]
     fn basic() {
-        assert_debug_snapshot!(compile_to_lark("
+        assert_debug_snapshot!(compile_to_lark(
+            "
             subr main() nat {
                 ret 0;
             }
-        "));
+        "
+        ));
     }
 
     #[test]
     fn binop() {
-        assert_debug_snapshot!(compile_to_lark("
+        assert_debug_snapshot!(compile_to_lark(
+            "
             subr main() nat {
                 let a = 24;
                 ret 1 + a - 49;
             }
-        "));
+        "
+        ));
     }
 }

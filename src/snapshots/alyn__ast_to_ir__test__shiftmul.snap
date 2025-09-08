@@ -17,13 +17,13 @@ Ok(
         jmp local<end_if#(..)>;
         :local<if_false#(..)>;
         :local<end_if#(..)>,
-        $Tmp("acc") <- +0,
+        %acc <- +0,
         :local<while_cond#(..)>;
         if #1 > +1 then local<while_body#(..)> else local<end_while#(..)>;
         :local<while_body#(..)>;
         if (#1 & +1) == +1 then local<if_true#(..)> else local<if_false#(..)>;
         :local<if_true#(..)>;
-        $Tmp("acc") <- ($Tmp("acc") + #0);
+        %acc <- (%acc + #0);
         #1 <- (#1 - +1);
         jmp local<end_if#(..)>;
         :local<if_false#(..)>;
@@ -32,6 +32,6 @@ Ok(
         #1 <- (#1 >> +1);
         jmp local<while_cond#(..)>;
         :local<end_while#(..)>,
-        ret (#0 + $Tmp("acc")),
+        ret (#0 + %acc),
     ],
 )

@@ -6,7 +6,6 @@ use super::{
 };
 use crate::names::Tmp;
 
-
 #[derive(Debug, Default)]
 pub struct LiveSets {
     live_ins: BTreeMap<NodeId, BTreeSet<Tmp>>,
@@ -18,7 +17,11 @@ impl LiveSets {
         Self::default()
     }
 
-    pub fn add_live_ins_to_entry(&mut self, entry_point: NodeId, live_ins: impl IntoIterator<Item = Tmp>) {
+    pub fn add_live_ins_to_entry(
+        &mut self,
+        entry_point: NodeId,
+        live_ins: impl IntoIterator<Item = Tmp>,
+    ) {
         let set = self.live_ins.entry(entry_point).or_default();
         set.extend(live_ins);
     }
@@ -56,7 +59,14 @@ impl LiveSets {
     }
 
     /// `LiveIns[I] = Uses[I]  U  (LiveOuts[I] - Defs[I])`
-    fn compute_live_ins(&mut self, id: NodeId, stmt: &Stmt, defs: &mut BTreeSet<Tmp>, uses: &mut BTreeSet<Tmp>, recompute: &mut bool) {
+    fn compute_live_ins(
+        &mut self,
+        id: NodeId,
+        stmt: &Stmt,
+        defs: &mut BTreeSet<Tmp>,
+        uses: &mut BTreeSet<Tmp>,
+        recompute: &mut bool,
+    ) {
         defs.clear();
         uses.clear();
         stmt.defs_uses(defs, uses);
@@ -76,7 +86,8 @@ impl LiveSets {
     }
 
     pub fn get_live_ins(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
-        self.live_ins.get(&id)
+        self.live_ins
+            .get(&id)
             .map(|set| set.iter())
             .into_iter()
             .flatten()
@@ -84,7 +95,8 @@ impl LiveSets {
     }
 
     pub fn get_live_outs(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
-        self.live_outs.get(&id)
+        self.live_outs
+            .get(&id)
             .map(|set| set.iter())
             .into_iter()
             .flatten()
@@ -128,16 +140,16 @@ impl<'a> std::fmt::Display for DisplayLiveSets<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::Expr;
+    use super::*;
     use insta::assert_snapshot;
 
     #[test]
     fn simple_with_live_ins_on_entry() {
-        let cfg = Cfg::new(0, [
-            Stmt::mov("x", 123),
-            Stmt::mov("y", Expr::binop("x", "arg")),
-        ]);
+        let cfg = Cfg::new(
+            0,
+            [Stmt::mov("x", 123), Stmt::mov("y", Expr::binop("x", "arg"))],
+        );
         let mut live_sets = LiveSets::new();
         live_sets.add_live_ins_to_entry(0, ["arg".into()]);
         live_sets.compute_live_ins_live_outs(&cfg);

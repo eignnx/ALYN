@@ -1,13 +1,14 @@
-use std::{collections::{BTreeSet, BTreeMap}, mem};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem,
+};
 
+use derive_more::{Debug, Display, From};
 use internment::Intern;
-use derive_more::{From, Debug, Display};
 
 use crate::{ir, names::Tmp};
 
-use super::{
-    Backend,
-};
+use super::Backend;
 
 pub struct LarkBackend {
     regs_in_use: BTreeSet<Reg>,
@@ -36,7 +37,7 @@ impl LarkBackend {
                 };
                 out.push(Lw(dest, Zero, Imm::Int(idx.cast_unsigned())));
                 dest
-            },
+            }
         }
     }
 
@@ -155,8 +156,8 @@ pub enum Instr {
     Sw(Reg, Imm, Reg),
 }
 
-use Reg::*;
 use Instr::*;
+use Reg::*;
 
 impl Backend<Vec<Instr>> for LarkBackend {
     type Temporary = RegOrSlot;
@@ -175,24 +176,30 @@ impl Backend<Vec<Instr>> for LarkBackend {
                             }
                             RegOrSlot::Slot(_) => todo!(),
                         }
-                    },
+                    }
                     ir::LVal::Param(_) => todo!(),
                     ir::LVal::Mem(rval) => todo!(),
                     ir::LVal::Global(intern) => todo!(),
                 }
 
-                    // let x_dest = self.fresh_temp(out);
-                    // self.rval_to_asm(out, x_dest, *x);
-                    // let y_dest = self.fresh_temp(out);
-                    // self.rval_to_asm(out, y_dest, *y);
-                    // let x_dest_reg = self.load_into_reg(out, x_dest);
-                    // let y_dest_reg = self.load_into_reg(out, y_dest);
-                    // let dest_reg = self.load_into_reg(out, dest);
-                    // out.extend([Add(dest_reg, x_dest_reg, y_dest_reg)]);
+                // let x_dest = self.fresh_temp(out);
+                // self.rval_to_asm(out, x_dest, *x);
+                // let y_dest = self.fresh_temp(out);
+                // self.rval_to_asm(out, y_dest, *y);
+                // let x_dest_reg = self.load_into_reg(out, x_dest);
+                // let y_dest_reg = self.load_into_reg(out, y_dest);
+                // let dest_reg = self.load_into_reg(out, dest);
+                // out.extend([Add(dest_reg, x_dest_reg, y_dest_reg)]);
             }
             Stmt::RVal(rval) => todo!(),
             Stmt::Jmp(rval, lbls) => todo!(),
-            Stmt::Br { op, e1, e2, if_true, if_false } => todo!(),
+            Stmt::Br {
+                op,
+                e1,
+                e2,
+                if_true,
+                if_false,
+            } => todo!(),
             Stmt::Seq(stmt, stmt1) => todo!(),
             Stmt::Lbl(lbl) => todo!(),
             Stmt::Nop => out.extend([Nop]),
@@ -204,14 +211,19 @@ impl Backend<Vec<Instr>> for LarkBackend {
         }
     }
 
-    fn rval_to_asm(&mut self, mut out: &mut Vec<Instr>, dest: impl Into<RegOrSlot>, rval: ir::RVal) {
-        use ir::{RVal, Binop};
+    fn rval_to_asm(
+        &mut self,
+        mut out: &mut Vec<Instr>,
+        dest: impl Into<RegOrSlot>,
+        rval: ir::RVal,
+    ) {
+        use ir::{Binop, RVal};
         let dest = dest.into();
         match rval {
-            RVal::Byte(x) =>  {
+            RVal::Byte(x) => {
                 let dest_reg = self.load_into_reg(out, dest);
                 out.extend([Li(dest_reg, Imm::Int(x as u16))])
-            },
+            }
             RVal::Nat(x) => {
                 let dest_reg = self.load_into_reg(out, dest);
                 out.extend([Li(dest_reg, Imm::Int(x as u16))])
@@ -224,19 +236,17 @@ impl Backend<Vec<Instr>> for LarkBackend {
                 let dest_reg = self.load_into_reg(out, dest);
                 out.extend([Li(dest_reg, Imm::Lbl(lbl.render().into()))])
             }
-            RVal::LVal(lval) => {
-                match lval {
-                    ir::LVal::Tmp(tmp) => {
-                        let dest_reg = self.load_into_reg(out, dest);
-                        let reg_or_slot = self.get_or_alloc_temp(out, tmp);
-                        let src_reg = self.load_into_reg(out, reg_or_slot);
-                        out.push(Mv(dest_reg, src_reg));
-                    }
-                    ir::LVal::Param(_) => todo!(),
-                    ir::LVal::Mem(rval) => todo!(),
-                    ir::LVal::Global(intern) => todo!(),
+            RVal::LVal(lval) => match lval {
+                ir::LVal::Tmp(tmp) => {
+                    let dest_reg = self.load_into_reg(out, dest);
+                    let reg_or_slot = self.get_or_alloc_temp(out, tmp);
+                    let src_reg = self.load_into_reg(out, reg_or_slot);
+                    out.push(Mv(dest_reg, src_reg));
                 }
-            }
+                ir::LVal::Param(_) => todo!(),
+                ir::LVal::Mem(rval) => todo!(),
+                ir::LVal::Global(intern) => todo!(),
+            },
             RVal::Binop(binop, x, y) => match binop {
                 Binop::Add => {
                     if let Ok(imm) = x.as_ref().try_into() {
@@ -284,7 +294,7 @@ impl Backend<Vec<Instr>> for LarkBackend {
                 Binop::Or => todo!(),
                 Binop::Shr => todo!(),
                 Binop::Xor => todo!(),
-            }
+            },
             RVal::Unop(unop, rval) => todo!(),
             RVal::BitCast(ty, rval) => todo!(),
             RVal::Call(rval, rvals) => todo!(),
