@@ -4,7 +4,7 @@ use crate::{
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use super::{Expr, Instr, Stmt};
+use super::Instr;
 
 pub type NodeId = usize;
 

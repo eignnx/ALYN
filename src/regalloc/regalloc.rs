@@ -4,10 +4,7 @@ use std::{
     io::Write,
 };
 
-use crate::{
-    names::Tmp,
-    regalloc::{Stmt, live_sets::LiveSets},
-};
+use crate::{names::Tmp, regalloc::live_sets::LiveSets};
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
@@ -338,8 +335,8 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::test_datastructures::{Expr as E, Expr, Stmt as S, Stmt};
     use super::*;
-    use crate::regalloc::{Expr as E, Stmt as S};
 
     fn compute_assignments<const N: usize>(params: Vec<Tmp>, program: Vec<Stmt>) {
         crate::names::reset_name_ids();

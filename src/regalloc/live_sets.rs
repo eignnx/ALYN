@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Instr, Stmt,
+    Instr,
     cfg::{Cfg, NodeId},
 };
 use crate::names::Tmp;
@@ -149,9 +149,10 @@ impl<'a, I: std::fmt::Debug> std::fmt::Display for DisplayLiveSets<'a, I> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::Expr;
-    use super::*;
     use insta::assert_snapshot;
+
+    use super::super::test_datastructures::{Expr, Stmt};
+    use super::*;
 
     #[test]
     fn simple_with_live_ins_on_entry() {

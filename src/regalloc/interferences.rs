@@ -1,11 +1,11 @@
 use std::collections::{BTreeSet, HashMap};
 
 use super::{
-    Instr, Stmt,
+    Instr,
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-use crate::{names::Tmp, regalloc::Expr};
+use crate::names::Tmp;
 
 #[derive(Default)]
 pub struct Interferences {
