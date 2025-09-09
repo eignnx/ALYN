@@ -423,7 +423,7 @@ impl Ann<SubrDecl> {
                 param.value.name.clone(),
                 SymData {
                     ty: param.value.ty.clone(),
-                    sym_kind: IdentKind::Param(i as u8),
+                    sym_kind: IdentKind::Local,
                 },
             );
         }

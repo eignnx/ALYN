@@ -43,7 +43,6 @@ impl Ann<ast::LVal> {
         match self.value {
             ast::LVal::Var(ident, ident_kind) => match ident_kind.unwrap() {
                 IdentKind::Subr => IrWrap::RVal(ir::RVal::Lbl(Lbl::SubrStart(ident))),
-                IdentKind::Param(idx) => make_lval(ir::LVal::Param(idx)),
                 IdentKind::Local => make_lval(ir::LVal::Tmp(names::Tmp(ident))),
                 IdentKind::Global => make_lval(ir::LVal::Global(ident)),
                 IdentKind::SubrRet => unreachable!(),
