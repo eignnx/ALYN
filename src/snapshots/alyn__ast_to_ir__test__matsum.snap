@@ -5,21 +5,21 @@ expression: "parse_and_convert(\"\n            subr matsum(n: nat, a: **int, b: 
 Ok(
     [
         %col <- 0,
-        :local<while_cond#(..)>;
-        if %col u(<) #0 then local<while_body#(..)> else local<end_while#(..)>;
-        :local<while_body#(..)>;
+        :local<while_cond#0>;
+        if %col u(<) %n then local<while_body#1> else local<end_while#2>;
+        :local<while_body#1>;
         %row <- 0;
-        :local<while_cond#(..)>;
-        if %row u(<) #0 then local<while_body#(..)> else local<end_while#(..)>;
-        :local<while_body#(..)>;
-        %ax <- M[(M[(#1 + %col)] + %row)];
-        %bx <- M[(M[(#2 + %col)] + %row)];
-        M[(M[(#3 + %col)] + %row)] <- (%ax + %bx);
+        :local<while_cond#3>;
+        if %row u(<) %n then local<while_body#4> else local<end_while#5>;
+        :local<while_body#4>;
+        %ax <- M[(M[(%a + %col)] + %row)];
+        %bx <- M[(M[(%b + %col)] + %row)];
+        M[(M[(%c + %col)] + %row)] <- (%ax + %bx);
         %row <- (%row + 1);
-        jmp local<while_cond#(..)>;
-        :local<end_while#(..)>;
+        jmp local<while_cond#3>;
+        :local<end_while#5>;
         %col <- (%col + 1);
-        jmp local<while_cond#(..)>;
-        :local<end_while#(..)>,
+        jmp local<while_cond#0>;
+        :local<end_while#2>,
     ],
 )

@@ -58,7 +58,13 @@ impl IrWrap {
     pub fn as_stmt(self) -> Stmt {
         match self {
             IrWrap::Stmt(stmt) => stmt.clone(),
-            IrWrap::RVal(rval) => Stmt::RVal(rval.clone()),
+            IrWrap::RVal(rval) => match rval {
+                RVal::Seq(stmt, rest_expr) => {
+                    let rest = IrWrap::RVal(*rest_expr).as_stmt();
+                    Stmt::Seq(stmt, Box::new(rest))
+                }
+                _ => Stmt::RVal(rval.clone()),
+            }
             IrWrap::Cond(mk_stmt) => {
                 let after = Lbl::fresh("after_cond");
                 Stmt::Seq(Box::new(mk_stmt(after, after)), Box::new(Stmt::Lbl(after)))
@@ -72,7 +78,7 @@ impl IrWrap {
             IrWrap::Cond(mk_stmt) => mk_stmt,
             IrWrap::Stmt(_) => unreachable!("Statement inside condition should never occur"),
             IrWrap::RVal(RVal::Int(0)) => Box::new(|_t, f| Stmt::direct_jmp(f)),
-            IrWrap::RVal(RVal::Int(0)) => Box::new(|t, _f| Stmt::direct_jmp(t)),
+            IrWrap::RVal(RVal::Int(_)) => Box::new(|t, _f| Stmt::direct_jmp(t)),
             IrWrap::RVal(rval) => Box::new(move |t, f| Stmt::Br {
                 op: Relop::Ne,
                 e1: rval.clone(),
@@ -80,6 +86,18 @@ impl IrWrap {
                 if_true: t,
                 if_false: f,
             }),
+        }
+    }
+
+    pub fn collect_stmts_into(self, stmts: &mut Vec<Stmt>) {
+        match self.as_stmt() {
+            Stmt::Seq(stmt1, stmt2) => {
+                IrWrap::Stmt(*stmt1).collect_stmts_into(stmts);
+                IrWrap::Stmt(*stmt2).collect_stmts_into(stmts);
+            }
+            // In case the RVal is a Seq of stmts.
+            Stmt::RVal(rval) => IrWrap::RVal(rval).collect_stmts_into(stmts),
+            other => stmts.push(other),
         }
     }
 }

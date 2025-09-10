@@ -4,12 +4,12 @@ expression: "parse_and_convert(\"\n            subr min(a: int, b: int) int {\n 
 ---
 Ok(
     [
-        if #0 < #1 then local<if_true#(..)> else local<if_false#(..)>;
-        :local<if_true#(..)>;
-        ret #0;
-        jmp local<end_if#(..)>;
-        :local<if_false#(..)>;
-        ret #1;
-        :local<end_if#(..)>,
+        if %a < %b then local<if_true#0> else local<if_false#1>;
+        :local<if_true#0>;
+        ret %a;
+        jmp local<end_if#2>;
+        :local<if_false#1>;
+        ret %b;
+        :local<end_if#2>,
     ],
 )

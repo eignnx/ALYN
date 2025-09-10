@@ -4,12 +4,12 @@ expression: "parse_and_convert(\"\n            subr fib(n: nat) nat {\n         
 ---
 Ok(
     [
-        if #0 u(<) 2 then local<if_true#(..)> else local<if_false#(..)>;
-        :local<if_true#(..)>;
-        ret #0;
-        jmp local<end_if#(..)>;
-        :local<if_false#(..)>;
-        ret (:subr<fib>((#0 - 1)) + :subr<fib>((#0 - 2)));
-        :local<end_if#(..)>,
+        if %n u(<) 2 then local<if_true#0> else local<if_false#1>;
+        :local<if_true#0>;
+        ret %n;
+        jmp local<end_if#2>;
+        :local<if_false#1>;
+        ret (:subr<fib>((%n - 1)) + :subr<fib>((%n - 2)));
+        :local<end_if#2>,
     ],
 )

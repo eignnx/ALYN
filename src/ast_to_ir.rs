@@ -203,13 +203,13 @@ mod test {
     }
 
     fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
+        crate::names::reset_name_ids();
         let decl = parse::SubrDeclParser::new()
             .parse("<test>", src)
             .map_err(dyn_debug)?;
         let mut decl = decl.with_span(0..100);
         let mut tcx = Tcx::new(Ty::Void);
         decl.check_ty(&mut tcx).map_err(dyn_debug)?;
-        crate::names::reset_name_ids();
         Ok(decl
             .value
             .to_ir()
@@ -221,13 +221,7 @@ mod test {
 
     macro_rules! do_test {
         ($src:expr) => {
-            insta::with_settings!({
-                filters => vec![
-                    (r"([a-zA-Z0-9_])#\d+", r"$1#(..)"),
-                ]
-            }, {
-                assert_debug_snapshot!(parse_and_convert($src))
-            });
+            assert_debug_snapshot!(parse_and_convert($src))
         };
     }
 

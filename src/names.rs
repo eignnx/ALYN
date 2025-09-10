@@ -38,15 +38,17 @@ impl Lbl {
     }
 }
 
-static LBL_ID: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static LBL_ID: AtomicUsize = AtomicUsize::new(0);
+}
 
 pub fn reset_lbl_id() {
-    LBL_ID.store(0, Ordering::SeqCst);
+    LBL_ID.with(|id| id.store(0, Ordering::SeqCst));
 }
 
 impl Lbl {
     pub fn fresh(base_name: impl AsRef<str>) -> Self {
-        let id = LBL_ID.fetch_add(1, Ordering::SeqCst);
+        let id = LBL_ID.with(|id| id.fetch_add(1, Ordering::SeqCst));
         Self::ControlFlow(Intern::new(format!("{}#{id}", base_name.as_ref())))
     }
 }
@@ -70,10 +72,12 @@ impl From<&str> for Tmp {
     }
 }
 
-static TMP_ID: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static TMP_ID: AtomicUsize = AtomicUsize::new(0);
+}
 
 pub fn reset_tmp_id() {
-    TMP_ID.store(0, Ordering::SeqCst);
+    TMP_ID.with(|id| id.store(0, Ordering::SeqCst));
 }
 
 impl Tmp {
@@ -82,7 +86,7 @@ impl Tmp {
     }
 
     pub fn fresh(base_name: &str) -> Self {
-        let id = TMP_ID.fetch_add(1, Ordering::SeqCst);
+        let id = TMP_ID.with(|id| id.fetch_add(1, Ordering::SeqCst));
         Self(Intern::new(format!("{base_name}.{id}")))
     }
 }
