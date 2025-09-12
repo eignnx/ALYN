@@ -4,7 +4,6 @@ use std::fmt::{Debug, Display, Formatter, Result};
 impl Debug for LVal {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            Self::Param(id) => write!(f, "#{id}"),
             Self::Tmp(tmp) => write!(f, "{tmp:?}"),
             Self::Mem(rval) => write!(f, "M[{rval:?}]"),
             Self::Global(name) => write!(f, "@{name}"),

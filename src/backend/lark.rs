@@ -6,86 +6,9 @@ use std::{
 use derive_more::{Debug, Display, From};
 use internment::Intern;
 
-use crate::{ir, names::Tmp};
+use crate::{ir, names::{self, Lbl, Tmp}};
 
 use super::Backend;
-
-pub struct LarkBackend {
-    regs_in_use: BTreeSet<Reg>,
-    locals: BTreeMap<Tmp, RegOrSlot>,
-    next_stack_local_slot: usize, // Index in bytes
-}
-
-impl Default for LarkBackend {
-    fn default() -> Self {
-        Self {
-            regs_in_use: Default::default(),
-            locals: Default::default(),
-            next_stack_local_slot: 0,
-        }
-    }
-}
-
-impl LarkBackend {
-    fn load_into_reg(&mut self, out: &mut Vec<Instr>, reg_or_slot: RegOrSlot) -> Reg {
-        match reg_or_slot {
-            RegOrSlot::Reg(reg) => reg,
-            RegOrSlot::Slot(idx) => {
-                // Emit instructions to load [SP+idx] into a register:
-                let Some(dest) = self.choose_available_reg(out) else {
-                    panic!("Out of registers!");
-                };
-                out.push(Lw(dest, Zero, Imm::Int(idx.cast_unsigned())));
-                dest
-            }
-        }
-    }
-
-    #[rustfmt::skip]
-    const GPR_TEMP_REGS: &'static [Reg] = &[
-        T0, T1, T2,
-        A0, A1, A2,
-    ];
-    #[rustfmt::skip]
-    const GPR_SAVED_REGS: &'static [Reg] = &[
-        S0, S1, S2,
-    ];
-
-    fn choose_available_reg(&mut self, out: &mut Vec<Instr>) -> Option<Reg> {
-        for reg in Self::GPR_TEMP_REGS {
-            if !self.regs_in_use.contains(reg) {
-                self.regs_in_use.insert(*reg);
-                return Some(*reg);
-            }
-        }
-        for reg in Self::GPR_SAVED_REGS {
-            if !self.regs_in_use.contains(reg) {
-                let slot_idx = self.alloc_stack_slot();
-                out.push(Sw(Sp, Imm::Int(slot_idx), *reg));
-                self.regs_in_use.insert(*reg);
-                return Some(*reg);
-            }
-        }
-        None
-    }
-
-    fn alloc_stack_slot(&mut self) -> u16 {
-        let idx = self.next_stack_local_slot;
-        self.next_stack_local_slot += 2;
-        idx as u16
-    }
-
-    fn get_or_alloc_temp(&mut self, out: &mut Vec<Instr>, tmp: Tmp) -> RegOrSlot {
-        use std::collections::btree_map::Entry;
-        if let Some(temp) = self.locals.get(&tmp) {
-            *temp
-        } else {
-            let temp = self.fresh_temp(out);
-            self.locals.insert(tmp, temp);
-            temp
-        }
-    }
-}
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -129,187 +52,256 @@ impl TryFrom<&ir::RVal> for Imm {
     }
 }
 
+#[derive(Debug, From, Clone, Copy)]
+pub enum Stg {
+    #[from]
+    Tmp(Tmp),
+    #[from]
+    Reg(Reg),
+}
+
+impl std::fmt::Display for Stg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Stg::Reg(reg) => write!(f, "{reg}"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Instr {
+    #[debug("{_0:?}:")]
+    Label(Lbl),
+
     #[debug("mv {_0}, {_1}")]
-    Mv(Reg, Reg),
+    Mv(Stg, Stg),
 
     #[debug("add {_0}, {_1}, {_2}")]
-    Add(Reg, Reg, Reg),
+    Add(Stg, Stg, Stg),
     #[debug("addi {_0}, {_1}, {_2}")]
-    AddI(Reg, Reg, Imm),
+    AddI(Stg, Stg, Imm),
 
     #[debug("sub {_0}, {_1}, {_2}")]
-    Sub(Reg, Reg, Reg),
+    Sub(Stg, Stg, Stg),
     #[debug("subi {_0}, {_1}, {_2}")]
-    SubI(Reg, Reg, Imm),
+    SubI(Stg, Stg, Imm),
 
     #[debug("jr {_0}")]
-    Jr(Reg),
+    Jr(Stg),
     #[debug("nop")]
     Nop,
     #[debug("li {_0}, {_1}")]
-    Li(Reg, Imm),
+    Li(Stg, Imm),
     #[debug("lw {_0}, [{_1} + {_2}]")]
-    Lw(Reg, Reg, Imm),
+    Lw(Stg, Stg, Imm),
     #[debug("sw [{_0} + {_1}], {_2}]")]
-    Sw(Reg, Imm, Reg),
+    Sw(Stg, Imm, Stg),
+
+    #[debug("j {_0:?}")]
+    J(Lbl),
+
+    #[debug("tlt {_0}, {_1}, {_2}")]
+    Tlt(Stg, Stg, Stg),
+    #[debug("tge {_0}, {_1}, {_2}")]
+    Tge(Stg, Stg, Stg),
+    #[debug("teq {_0}, {_1}, {_2}")]
+    Teq(Stg, Stg, Stg),
+    #[debug("tne {_0}, {_1}, {_2}")]
+    Tne(Stg, Stg, Stg),
+    #[debug("tltu {_0}, {_1}, {_2}")]
+    Tltu(Stg, Stg, Stg),
+    #[debug("tgeu {_0}, {_1}, {_2}")]
+    Tgeu(Stg, Stg, Stg),
+
+    #[debug("bf {_0}, {_1:?}")]
+    Bf(Stg, Lbl),
+    #[debug("bt {_0}, {_1:?}")]
+    Bt(Stg, Lbl),
 }
 
 use Instr::*;
 use Reg::*;
 
-impl Backend<Vec<Instr>> for LarkBackend {
-    type Temporary = RegOrSlot;
-    type Instruction = Instr;
+pub struct LarkBackend<'a> {
+    out: &'a mut Vec<Instr>,
+    current_subr_params: BTreeMap<u8, Tmp>,
+}
 
-    fn stmt_to_asm(&mut self, mut out: &mut Vec<Instr>, stmt: ir::Stmt) {
-        use ir::Stmt;
-        match stmt {
-            Stmt::Move(lval, rval) => {
-                match lval {
-                    ir::LVal::Tmp(tmp) => {
-                        let tmp = self.get_or_alloc_temp(out, tmp);
-                        match tmp {
-                            RegOrSlot::Reg(lhs_reg) => {
-                                self.rval_to_asm(out, lhs_reg, rval);
-                            }
-                            RegOrSlot::Slot(_) => todo!(),
-                        }
-                    }
-                    ir::LVal::Param(_) => todo!(),
-                    ir::LVal::Mem(rval) => todo!(),
-                    ir::LVal::Global(intern) => todo!(),
-                }
+impl<'a> LarkBackend<'a> {
+    #[rustfmt::skip]
+    const GPR_TEMP_REGS: &'static [Reg] = &[
+        T0, T1, T2,
+        A0, A1, A2,
+    ];
+    #[rustfmt::skip]
+    const GPR_SAVED_REGS: &'static [Reg] = &[
+        S0, S1, S2,
+    ];
 
-                // let x_dest = self.fresh_temp(out);
-                // self.rval_to_asm(out, x_dest, *x);
-                // let y_dest = self.fresh_temp(out);
-                // self.rval_to_asm(out, y_dest, *y);
-                // let x_dest_reg = self.load_into_reg(out, x_dest);
-                // let y_dest_reg = self.load_into_reg(out, y_dest);
-                // let dest_reg = self.load_into_reg(out, dest);
-                // out.extend([Add(dest_reg, x_dest_reg, y_dest_reg)]);
-            }
-            Stmt::RVal(rval) => todo!(),
-            Stmt::Jmp(rval, lbls) => todo!(),
-            Stmt::Br {
-                op,
-                e1,
-                e2,
-                if_true,
-                if_false,
-            } => todo!(),
-            Stmt::Seq(stmt, stmt1) => todo!(),
-            Stmt::Lbl(lbl) => todo!(),
-            Stmt::Nop => out.extend([Nop]),
-            Stmt::Ret(Some(rval)) => {
-                self.rval_to_asm(out, Rv, rval);
-                out.extend([Jr(Ra)]);
-            }
-            Stmt::Ret(None) => out.extend([Jr(Ra)]),
+    pub fn new(out: &'a mut Vec<Instr>) -> Self {
+        Self {
+            out,
+            current_subr_params: Default::default(),
         }
     }
 
-    fn rval_to_asm(
-        &mut self,
-        mut out: &mut Vec<Instr>,
-        dest: impl Into<RegOrSlot>,
-        rval: ir::RVal,
-    ) {
-        use ir::{Binop, RVal};
-        let dest = dest.into();
+    pub fn emit(&mut self, instr: Instr) {
+        self.out.push(instr);
+    }
+
+    pub fn stmt_to_asm(&mut self, stmt: ir::Stmt) {
+        use ir::{Stmt, RVal::*, LVal::*, Binop::*};
+        match stmt {
+            // M[base + n] = src
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Int(offset))), rhs) |
+            Stmt::Move(Mem(Binop(Add, Int(offset), LVal(Tmp(base)))), rhs) => {
+                let rhs_dst = self.expr_to_asm(rhs, None);
+                self.emit(Sw(base.into(), Imm::Int(offset as u16), rhs_dst));
+            }
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Nat(offset))), rhs) |
+            Stmt::Move(Mem(Binop(Add, Nat(offset), LVal(Tmp(base)))), rhs) => {
+                let rhs_dst = self.expr_to_asm(rhs, None);
+                self.emit(Sw(base.into(), Imm::Int(offset as u16), rhs_dst));
+            }
+            // M[base] = src
+            Stmt::Move(Mem(LVal(Tmp(base))), rhs) => {
+                let rhs_dst = self.expr_to_asm(rhs, None);
+                self.emit(Sw(base.into(), Imm::Int(0), rhs_dst));
+            }
+            Stmt::Move(Mem(lhs), rhs) => {
+                let rhs_tmp = self.expr_to_asm(rhs, None);
+                let lhs_tmp = self.expr_to_asm(*lhs, None);
+                self.emit(Sw(lhs_tmp, Imm::Int(0), rhs_tmp));
+            }
+
+            // tmp1 = tmp2
+            Stmt::Move(Tmp(lhs), LVal(Tmp(rhs))) => {
+                self.emit(Mv(lhs.into(), rhs.into()));
+            }
+
+            Stmt::Move(Tmp(lhs), Int(i)) => {
+                self.emit(Li(lhs.into(), Imm::Int(i as u16)));
+            }
+
+            Stmt::Move(Tmp(lhs), rhs) => {
+                let _ = self.expr_to_asm(rhs, Stg::Tmp(lhs));
+            }
+
+            Stmt::Move(Global(_), _) => todo!(),
+
+            Stmt::RVal(rval) => {
+                let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
+            }
+            Stmt::Jmp(Byte(_) | Int(_) | Nat(_) | Lbl(_), [lbl]) => self.emit(Instr::J(lbl)),
+            Stmt::Jmp(rval, lbls) => todo!(),
+
+            Stmt::Seq(Stmt::Br {e1, op, e2, if_true, if_false}, Stmt::Seq(Stmt::Lbl(lbl), rest)) if lbl == if_true => {
+                let e1_tmp = self.expr_to_asm(e1, None);
+                let e2_tmp = self.expr_to_asm(e2, None);
+                let bool_tmp = names::Tmp::fresh("bool");
+                match op {
+                    ir::Relop::Eq => self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::LtU => self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    _ => todo!("impl relop: {op:?}"),
+                }
+                self.emit(Bf(bool_tmp.into(), if_false.into()));
+                self.emit(Label(if_true));
+                self.stmt_to_asm(*rest);
+            }
+            Stmt::Br {e1, op, e2, if_true, if_false} => todo!(),
+
+            Stmt::Seq(stmt1, stmt2) => {
+                self.stmt_to_asm(*stmt1);
+                self.stmt_to_asm(*stmt2);
+            }
+
+            Stmt::Lbl(lbl) => self.emit(Label(lbl)),
+            Stmt::Nop => self.emit(Nop),
+            Stmt::Ret(Some(rval)) => {
+                self.expr_to_asm(rval, Stg::Reg(Rv));
+                self.emit(Jr(Ra.into()));
+            }
+            Stmt::Ret(None) => self.emit(Jr(Ra.into())),
+        }
+    }
+
+    fn expr_to_asm(&mut self, rval: ir::RVal, dst: impl Into<Option<Stg>>) -> Stg {
+        use ir::{Binop::*, RVal};
+        let mk_dst = |base_name: &str| -> Stg {
+            dst.into().unwrap_or_else(|| names::Tmp::fresh(base_name).into())
+        };
+
         match rval {
             RVal::Byte(x) => {
-                let dest_reg = self.load_into_reg(out, dest);
-                out.extend([Li(dest_reg, Imm::Int(x as u16))])
+                let dst = mk_dst("li_byte");
+                self.emit(Li(dst, Imm::Int(x as u16)));
+                dst
             }
             RVal::Nat(x) => {
-                let dest_reg = self.load_into_reg(out, dest);
-                out.extend([Li(dest_reg, Imm::Int(x as u16))])
+                let dst = mk_dst("li_nat");
+                self.emit(Li(dst, Imm::Int(x as u16)));
+                dst
             }
             RVal::Int(x) => {
-                let dest_reg = self.load_into_reg(out, dest);
-                out.extend([Li(dest_reg, Imm::Int(x as u16))])
+                let dst = mk_dst("li_int");
+                self.emit(Li(dst, Imm::Int(x as u16)));
+                dst
             }
             RVal::Lbl(lbl) => {
-                let dest_reg = self.load_into_reg(out, dest);
-                out.extend([Li(dest_reg, Imm::Lbl(lbl.render().into()))])
+                let dst = mk_dst("li_lbl");
+                self.emit(Li(dst, Imm::Lbl(lbl.render().into())));
+                dst
             }
             RVal::LVal(lval) => match lval {
-                ir::LVal::Tmp(tmp) => {
-                    let dest_reg = self.load_into_reg(out, dest);
-                    let reg_or_slot = self.get_or_alloc_temp(out, tmp);
-                    let src_reg = self.load_into_reg(out, reg_or_slot);
-                    out.push(Mv(dest_reg, src_reg));
+                ir::LVal::Tmp(tmp) => tmp.into(),
+                ir::LVal::Mem(rval) => {
+                    let addr = self.expr_to_asm(*rval, None);
+                    let dst = mk_dst("load");
+                    self.emit(Lw(dst, addr, Imm::Int(0)));
+                    dst
                 }
-                ir::LVal::Param(_) => todo!(),
-                ir::LVal::Mem(rval) => todo!(),
                 ir::LVal::Global(intern) => todo!(),
             },
-            RVal::Binop(binop, x, y) => match binop {
-                Binop::Add => {
-                    if let Ok(imm) = x.as_ref().try_into() {
-                        let y_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, y_dest, *y);
-                        let y_dest_reg = self.load_into_reg(out, y_dest);
-                        let dest_reg = self.load_into_reg(out, dest);
-                        out.extend([AddI(dest_reg, y_dest_reg, imm)]);
-                    } else if let Ok(imm) = y.as_ref().try_into() {
-                        let x_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, x_dest, *x);
-                        let x_dest_reg = self.load_into_reg(out, x_dest);
-                        let dest_reg = self.load_into_reg(out, dest);
-                        out.extend([AddI(dest_reg, x_dest_reg, imm)]);
-                    } else {
-                        let x_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, x_dest, *x);
-                        let y_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, y_dest, *y);
-                        let x_dest_reg = self.load_into_reg(out, x_dest);
-                        let y_dest_reg = self.load_into_reg(out, y_dest);
-                        let dest_reg = self.load_into_reg(out, dest);
-                        out.extend([Add(dest_reg, x_dest_reg, y_dest_reg)]);
-                    }
-                }
-                Binop::Sub => {
-                    if let Ok(imm) = y.as_ref().try_into() {
-                        let x_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, x_dest, *x);
-                        let x_dest_reg = self.load_into_reg(out, x_dest);
-                        let dest_reg = self.load_into_reg(out, dest);
-                        out.extend([SubI(dest_reg, x_dest_reg, imm)]);
-                    } else {
-                        let x_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, x_dest, *x);
-                        let y_dest = self.fresh_temp(out);
-                        self.rval_to_asm(out, y_dest, *y);
-                        let x_dest_reg = self.load_into_reg(out, x_dest);
-                        let y_dest_reg = self.load_into_reg(out, y_dest);
-                        let dest_reg = self.load_into_reg(out, dest);
-                        out.extend([Sub(dest_reg, x_dest_reg, y_dest_reg)]);
-                    }
-                }
-                Binop::And => todo!(),
-                Binop::Or => todo!(),
-                Binop::Shr => todo!(),
-                Binop::Xor => todo!(),
-            },
+
+            RVal::Binop(op, x, RVal::Nat(n)) => self.imm_binop_to_asm(op, *x, Imm::Int(n as u16), mk_dst("imm_binop_res")),
+            RVal::Binop(op, x, y) => self.binop_to_asm(op, *x, *y, mk_dst("binop_res")),
+
             RVal::Unop(unop, rval) => todo!(),
             RVal::BitCast(ty, rval) => todo!(),
             RVal::Call(rval, rvals) => todo!(),
             RVal::Seq(stmt, rval) => {
-                self.stmt_to_asm(out, *stmt);
-                self.rval_to_asm(out, dest, *rval);
+                self.stmt_to_asm(*stmt);
+                self.expr_to_asm(*rval, mk_dst("seq_res"))
             }
         }
     }
 
-    fn fresh_temp(&mut self, out: &mut Vec<Instr>) -> Self::Temporary {
-        if let Some(reg) = self.choose_available_reg(out) {
-            reg.into()
-        } else {
-            self.alloc_stack_slot().cast_signed().into()
+    fn imm_binop_to_asm(&mut self, op: ir::Binop, x: ir::RVal, imm: Imm, dst: Stg) -> Stg {
+        let x_dst = self.expr_to_asm(x, None);
+        match op {
+            ir::Binop::Add => self.emit(AddI(dst, x_dst, imm)),
+            ir::Binop::Sub => self.emit(SubI(dst, x_dst, imm)),
+            ir::Binop::And => todo!(),
+            ir::Binop::Or => todo!(),
+            ir::Binop::Shr => todo!(),
+            ir::Binop::Xor => todo!(),
         }
+        dst
+    }
+
+    fn binop_to_asm(&mut self, op: ir::Binop, x: ir::RVal, y: ir::RVal, dst: impl Into<Option<Stg>>) -> Stg {
+        let x_dst = self.expr_to_asm(x, None);
+        let y_dst = self.expr_to_asm(y, None);
+        let dst = names::Tmp::fresh("binop_res").into();
+        match op {
+            ir::Binop::Add => self.emit(Add(dst, x_dst, y_dst)),
+            ir::Binop::Sub => self.emit(Sub(dst, x_dst, y_dst)),
+            ir::Binop::And => todo!(),
+            ir::Binop::Or => todo!(),
+            ir::Binop::Shr => todo!(),
+            ir::Binop::Xor => todo!(),
+        }
+        dst
     }
 }

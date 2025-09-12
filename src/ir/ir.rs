@@ -61,7 +61,6 @@ impl RVal {
 
 #[derive(Clone, From)]
 pub enum LVal {
-    Param(u8),
     /// AKA: `Temp`
     #[from]
     Tmp(Tmp), // <-- Local

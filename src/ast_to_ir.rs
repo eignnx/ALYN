@@ -315,4 +315,42 @@ mod test {
         "
         );
     }
+
+    #[test]
+    fn knr_binsearch() {
+        // int binsearch(int x, int v[], int n) {
+        //     int low = 0;
+        //     int high = n - 1;
+        //     while (low <= high) {
+        //          int mid = (low + high) / 2;
+        //          int elem = v[mid];
+        //          if (x < elem)
+        //              high = mid - 1;
+        //          else if (x > elem)
+        //              low = mid + 1;
+        //          else
+        //              return mid;
+        //     }
+        //     return -1;
+        // }
+        do_test!("
+            subr binsearch(x: int, v: *int, n: nat) int {
+                let low = 0;
+                let high = n - 1;
+                while low <= high {
+                    let mid = (low + high) >> 1;
+                    let elem = *(v + mid);
+                    if x < elem {
+                        high = mid - 1;
+                    }
+                    if x > elem {
+                        low = mid + 1;
+                    } else {
+                        ret bitcast{int}(mid);
+                    }
+                }
+                ret -1;
+            }
+        ");
+    }
 }

@@ -1,3 +1,6 @@
+#![feature(deref_patterns)]
+#![allow(incomplete_features)]
+
 #![allow(unused)]
 
 mod ast;
