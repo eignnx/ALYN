@@ -1,0 +1,31 @@
+---
+source: src/canon.rs
+expression: bbs
+---
+Bbs {
+    entry: local<subr_entry#0>,
+    blocks: {
+        local<A>: Bb {
+            stmts: [
+                :local<A>,
+                nop,
+            ],
+            last: if +1 == +1 then local<B> else local<A>,
+        },
+        local<B>: Bb {
+            stmts: [
+                :local<B>,
+                nop,
+            ],
+            last: ret,
+        },
+        local<subr_entry#0>: Bb {
+            stmts: [
+                :local<subr_entry#0>,
+                nop,
+                nop,
+            ],
+            last: jmp local<A>,
+        },
+    },
+}

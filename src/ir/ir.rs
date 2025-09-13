@@ -10,7 +10,7 @@ use crate::{
     ty::Ty,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Binop {
     Add,
     Sub,
@@ -20,7 +20,7 @@ pub enum Binop {
     Xor,
 }
 
-#[derive(Clone, From)]
+#[derive(Clone, From, PartialEq)]
 pub enum RVal {
     #[from]
     Byte(u8),
@@ -59,7 +59,7 @@ impl RVal {
     }
 }
 
-#[derive(Clone, From)]
+#[derive(Clone, From, PartialEq)]
 pub enum LVal {
     /// AKA: `Temp`
     #[from]
@@ -68,7 +68,7 @@ pub enum LVal {
     Global(Intern<String>), // <-- Global
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Relop {
     Eq,
     Ne,
@@ -82,12 +82,12 @@ pub enum Relop {
     LteU,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Unop {
     Neg,
 }
 
-#[derive(Clone, From)]
+#[derive(Clone, From, PartialEq)]
 pub enum Stmt {
     Move(LVal, RVal),
     /// AKA: `Exp`
@@ -111,8 +111,9 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    pub fn direct_jmp(lbl: Lbl) -> Self {
-        Self::Jmp(lbl.into(), vec![lbl])
+    pub fn direct_jmp(lbl: impl Into<Lbl>) -> Self {
+        let lbl = lbl.into();
+        Self::Jmp(RVal::Lbl(lbl), vec![lbl])
     }
 
     pub fn seq<I>(stmts: I) -> Self

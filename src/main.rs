@@ -15,6 +15,7 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+mod canon;
 
 fn main() {
     println!("Hello, world!");
