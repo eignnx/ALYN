@@ -1,0 +1,36 @@
+---
+source: src/canon.rs
+expression: schedule_traces(bbs)
+---
+[
+    Bb {
+        stmts: [
+            :local<entry>,
+            nop,
+            nop,
+        ],
+        last: jmp local<A>,
+    },
+    Bb {
+        stmts: [
+            :local<A>,
+            nop,
+        ],
+        last: if +1 == +1 then local<B> else local<C>,
+    },
+    Bb {
+        stmts: [
+            :local<C>,
+            nop,
+            nop,
+        ],
+        last: if +1 == +1 then local<C> else local<A>,
+    },
+    Bb {
+        stmts: [
+            :local<B>,
+            nop,
+        ],
+        last: ret,
+    },
+]

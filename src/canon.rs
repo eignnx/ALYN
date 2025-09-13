@@ -87,14 +87,51 @@ pub mod basic_blocks {
     // Basic Block
     #[derive(Debug, PartialEq)]
     pub struct Bb {
-        stmts: Vec<Stmt>,
-        last: Stmt,
+        pub stmts: Vec<Stmt>,
+        pub last: Stmt,
+    }
+
+    impl Bb {
+        pub fn successors(&self) -> impl DoubleEndedIterator<Item = Lbl> {
+            let mut succs = Vec::new();
+            match &self.last {
+                Stmt::Br { if_false, if_true, .. } => {
+                    succs.push(*if_false); // We want these visited first
+                    succs.push(*if_true);
+                }
+                Stmt::Jmp(_, lbls) => {
+                    succs.extend(lbls.iter().copied());
+                }
+                _ => {}
+            }
+            succs.into_iter()
+        }
     }
 
     #[derive(Debug, PartialEq)]
     pub struct Bbs {
-        entry: Lbl,
-        blocks: BTreeMap<Lbl, Bb>,
+        pub(super) entry: Lbl,
+        pub(super) blocks: BTreeMap<Lbl, Bb>,
+    }
+
+    impl Bbs {
+        pub fn labels(&self) -> impl Iterator<Item = Lbl> {
+            self.blocks.keys().cloned()
+        }
+
+        pub fn entry(&self) -> Lbl {
+            self.entry
+        }
+
+        #[track_caller]
+        pub fn pop_bb(&mut self, block_lbl: Lbl) -> Bb {
+            self.blocks.remove(&block_lbl).unwrap()
+        }
+
+        #[track_caller]
+        pub fn get_any_bb_lbl(&mut self) -> Lbl {
+            *self.blocks.keys().next().unwrap()
+        }
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -214,12 +251,65 @@ pub mod basic_blocks {
 }
 
 mod trace {
+    use std::collections::BTreeSet;
+    use crate::{ir::Stmt, names::Lbl};
     use super::basic_blocks::{Bb, Bbs};
 
-    pub struct Trace {
+    pub fn schedule_traces(mut bbs: Bbs) -> Vec<Bb> {
+        let mut all_blocks = Vec::new();
+        let mut to_visit = vec![bbs.entry()];
+        let mut visited = BTreeSet::new();
+
+        while let Some(mut block_lbl) = to_visit.pop() {
+            'inner: loop {
+                let bb = bbs.pop_bb(block_lbl);
+                visited.insert(block_lbl);
+                let mut unvisited_successors = bb
+                    .successors()
+                    .filter(|lbl| !visited.contains(lbl));
+                if let Some(next_lbl) = unvisited_successors.next() {
+                    block_lbl = next_lbl;
+                    to_visit.extend(unvisited_successors);
+                    all_blocks.push(bb);
+                } else {
+                    drop(unvisited_successors);
+                    all_blocks.push(bb);
+                    break 'inner;
+                }
+            }
+        }
+
+        all_blocks
     }
 
-    pub fn select_trace(bbs: Bbs) -> Trace {
-        todo!()
+    #[test]
+    fn build_trace() {
+        use Stmt::*;
+        use crate::{ir::{LVal, RVal, Relop, Stmt}, names::{Lbl, Tmp}};
+        use super::basic_blocks::group_into_bbs;
+
+        let bbs = Bbs {
+            entry: "entry".into(),
+            blocks: [
+                ("entry".into(), Bb {
+                    stmts: vec![Stmt::Lbl("entry".into()), Nop, Nop],
+                    last: Stmt::direct_jmp("A"),
+                }),
+                ("A".into(), Bb {
+                    stmts: vec![Lbl("A".into()), Nop],
+                    last: Br { op: Relop::Eq, e1: RVal::Int(1), e2: RVal::Int(1), if_true: "B".into(), if_false: "C".into() },
+                }),
+                ("B".into(), Bb {
+                    stmts: vec![Lbl("B".into()), Nop],
+                    last: Ret(None),
+                }),
+                ("C".into(), Bb {
+                    stmts: vec![Lbl("C".into()), Nop, Nop],
+                    last: Br { op: Relop::Eq, e1: RVal::Int(1), e2: RVal::Int(1), if_true: "C".into(), if_false: "A".into() },
+                }),
+            ].into_iter().collect()
+        };
+
+        insta::assert_debug_snapshot!(schedule_traces(bbs));
     }
 }
