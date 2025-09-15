@@ -1,0 +1,22 @@
+---
+source: src/canon.rs
+expression: post_process(bbs)
+---
+[
+    :local<entry>,
+    nop,
+    :local<x_lt_10>,
+    nop,
+    if %y >= +0 then local<entry> else local<y_negative>,
+    :local<y_negative>,
+    nop,
+    if %x u(<) 10 then local<x_lt_10> else local<springboard#0>,
+    :local<springboard#0>,
+    jmp local<x_is_big>,
+    :local<get_outta_here>,
+    nop,
+    ret,
+    :local<x_is_big>,
+    nop,
+    jmp local<get_outta_here>,
+]

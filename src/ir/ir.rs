@@ -57,6 +57,10 @@ impl RVal {
         }
         acc
     }
+
+    pub fn tmp(name: impl AsRef<str>) -> Self {
+        Self::LVal(LVal::Tmp(name.as_ref().into()))
+    }
 }
 
 #[derive(Clone, From, PartialEq)]

@@ -124,8 +124,8 @@ pub mod basic_blocks {
         }
 
         #[track_caller]
-        pub fn pop_bb(&mut self, block_lbl: Lbl) -> Bb {
-            self.blocks.remove(&block_lbl).unwrap()
+        pub fn take_bb(&mut self, block_lbl: Lbl) -> Option<Bb> {
+            self.blocks.remove(&block_lbl)
         }
 
         #[track_caller]
@@ -255,31 +255,74 @@ mod trace {
     use crate::{ir::Stmt, names::Lbl};
     use super::basic_blocks::{Bb, Bbs};
 
-    pub fn schedule_traces(mut bbs: Bbs) -> Vec<Bb> {
-        let mut all_blocks = Vec::new();
-        let mut to_visit = vec![bbs.entry()];
-        let mut visited = BTreeSet::new();
+    struct TraceScheduler {
+        bbs: Bbs,
+        schedule: Vec<Bb>,
+        to_visit: Vec<Lbl>,
+        visited: BTreeSet<Lbl>,
+    }
 
-        while let Some(mut block_lbl) = to_visit.pop() {
-            'inner: loop {
-                let bb = bbs.pop_bb(block_lbl);
-                visited.insert(block_lbl);
-                let mut unvisited_successors = bb
-                    .successors()
-                    .filter(|lbl| !visited.contains(lbl));
-                if let Some(next_lbl) = unvisited_successors.next() {
-                    block_lbl = next_lbl;
-                    to_visit.extend(unvisited_successors);
-                    all_blocks.push(bb);
-                } else {
-                    drop(unvisited_successors);
-                    all_blocks.push(bb);
-                    break 'inner;
-                }
+    impl TraceScheduler {
+        fn new(bbs: Bbs) -> Self {
+            let entry = bbs.entry;
+            Self {
+                bbs,
+                to_visit: vec![entry],
+                schedule: Vec::new(),
+                visited: BTreeSet::new(),
             }
         }
 
-        all_blocks
+        /// # Example
+        /// ```text
+        /// Trace1: [A B C]
+        /// Trace2: [D E A B C]
+        /// Trace3: [F G H I]
+        /// Trace4: [J K]
+        ///
+        /// Output: A B C D E F G H I J K
+        /// ```
+        fn schedule_traces(&mut self) {
+            // Assuming there aren't disconnected basic-blocks, this will traverse the entire graph.
+            // If there ARE disconnected `Bb`s, they will be discarded because they are unreachable.
+            while let Some(trace_start) = self.to_visit.pop() {
+                self.schedule_trace(trace_start);
+            }
+        }
+
+        fn schedule_trace(&mut self, mut block_lbl: Lbl) {
+            loop {
+                let Some(bb) = self.bbs.take_bb(block_lbl) else {
+                    // This `Bb` must have already been visited, skip to next trace.
+                    return;
+                };
+
+                self.visited.insert(block_lbl);
+
+                let mut unvisited_successors = bb
+                    .successors()
+                    .filter(|lbl| !self.visited.contains(lbl));
+
+                if let Some(next_lbl) = unvisited_successors.next() {
+                    // There's more to this trace, advance to next `Bb` in next iteration.
+                    block_lbl = next_lbl;
+                    // But save the other successors to be visited later.
+                    self.to_visit.extend(unvisited_successors);
+                    self.schedule.push(bb);
+                } else {
+                    // There are no more `Bb`s in this trace. Go request a new trace to work on.
+                    drop(unvisited_successors);
+                    self.schedule.push(bb);
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn schedule_traces(mut bbs: Bbs) -> Vec<Bb> {
+        let mut scheduler = TraceScheduler::new(bbs);
+        scheduler.schedule_traces();
+        scheduler.schedule
     }
 
     #[test]
@@ -311,5 +354,162 @@ mod trace {
         };
 
         insta::assert_debug_snapshot!(schedule_traces(bbs));
+    }
+}
+
+mod post_process {
+
+    use crate::{ir::{RVal, Relop, Stmt}, names::Lbl};
+    use super::basic_blocks::Bb;
+
+    fn post_process(schedule: Vec<Bb>) -> Vec<Stmt> {
+        let mut output = Vec::new();
+        let mut stmts = schedule.into_iter().peekable();
+
+        while let Some(mut bb) = stmts.next() {
+            if let Some(bb_next) = stmts.peek_mut() {
+                process_pair(&mut output, bb, bb_next);
+            } else {
+                // Last `Bb`.
+                // => Just add all it's statements.
+                output.extend(bb.stmts.drain(..));
+                output.push(bb.last);
+            }
+        }
+
+        output
+    }
+
+    fn process_pair(output: &mut Vec<Stmt>, bb: Bb, bb_next: &mut Bb) {
+        //  ---- bb --------
+        // |     ...       |
+        // | Stmt::Jmp(L) |  // This jump can be deleted.
+        // ----------------
+        //        |
+        //        v
+        // ---- bb_next ----
+        // | Stmt::Lbl(L) |
+        // |     ...       |
+        // -----------------
+        if let Stmt::Jmp(_, [l1]) = &bb.last
+        && let Stmt::Lbl(l2) = bb_next.stmts.first().unwrap()
+        && l1 == l2 {
+
+            output.extend(bb.stmts);
+
+            // Skip `bb.last` (the uneccessary jump).
+            return;
+        }
+
+        //  ---- bb --------
+        // |     ...       |
+        // | Stmt::Br {..} |
+        // -----------------
+        //        |
+        //        v
+        // ---- bb_next ----
+        // | Stmt::Lbl(..) |
+        // |     ...       |
+        // -----------------
+        if let Bb { stmts, last: last @ Stmt::Br { op, e1, e2, if_true, if_false } } = &bb
+        && let Stmt::Lbl(lbl_next) = bb_next.stmts.first().unwrap() {
+
+            output.extend(stmts.clone());
+
+            if if_true == lbl_next {
+                // The fallthrough case should be `if_false`.
+                // => Negation needed.
+                output.push(negate_branch(op, e1, e2, if_true, if_false));
+                return;
+            } else if if_false != lbl_next {
+                // The next label is neither `if_true` nor `if_false`.
+                // => Create new label `L`.
+                // => Adjust branch so `if_false` is now `L`.
+                // => Insert `Stmt::Lbl(L); Stmt::direct_jmp(if_false)` after the branch.
+                let springboard = Lbl::fresh("springboard");
+                output.push(Stmt::Br { if_false: springboard, op: *op, e1: e1.clone(), e2: e2.clone(), if_true: *if_true });
+                output.push(Stmt::Lbl(springboard));
+                output.push(Stmt::direct_jmp(*if_false));
+                return;
+            } else {
+                // Label `if_false` follows the branch.
+                // => Already canonicalized.
+                output.push(last.clone());
+                return;
+            }
+        }
+
+        // No exceptional cases.
+        // => Already canonicalized.
+        output.extend(bb.stmts);
+        output.push(bb.last);
+    }
+
+    fn negate_branch(op: &Relop, e1: &RVal, e2: &RVal, if_true: &Lbl, if_false: &Lbl) -> Stmt {
+        let new_op = match op {
+            Relop::Eq => Relop::Ne,
+            Relop::Ne => Relop::Eq,
+
+            Relop::Gt => Relop::Lte,
+            Relop::Lt => Relop::Gte,
+            Relop::Gte => Relop::Lt,
+            Relop::Lte => Relop::Gt,
+
+            Relop::GtU => Relop::LteU,
+            Relop::LtU => Relop::GteU,
+            Relop::GteU => Relop::LtU,
+            Relop::LteU => Relop::GtU,
+        };
+
+        Stmt::Br {
+            op: new_op,
+            e1: e1.clone(),
+            e2: e2.clone(),
+            if_true: *if_false, // SWAPPED!
+            if_false: *if_true, // SWAPPED!
+        }
+    }
+
+    #[test]
+    fn test_post_process() {
+        let bbs = vec![
+            Bb {
+                stmts: vec![
+                    Stmt::Lbl("entry".into()),
+                    Stmt::Nop,
+                ],
+                last: Stmt::direct_jmp("x_lt_10"),
+            },
+            Bb {
+                stmts: vec![
+                    Stmt::Lbl("x_lt_10".into()),
+                    Stmt::Nop,
+                ],
+                last: Stmt::Br { op: Relop::Lt, e1: RVal::tmp("y"), e2: 0i64.into(), if_true: "y_negative".into(), if_false: "entry".into() },
+            },
+            Bb {
+                stmts: vec![
+                    Stmt::Lbl("y_negative".into()),
+                    Stmt::Nop,
+                ],
+                last: Stmt::Br { op: Relop::LtU, e1: RVal::tmp("x"), e2: 10u64.into(), if_true: "x_lt_10".into(), if_false: "x_is_big".into() },
+            },
+            Bb {
+                stmts: vec![
+                    Stmt::Lbl("get_outta_here".into()),
+                    Stmt::Nop,
+                ],
+                last: Stmt::Ret(None),
+            },
+            Bb {
+                stmts: vec![
+                    Stmt::Lbl("x_is_big".into()),
+                    Stmt::Nop,
+                ],
+                last: Stmt::direct_jmp("get_outta_here"),
+            }
+        ];
+
+        insta::assert_debug_snapshot!(post_process(bbs));
     }
 }
