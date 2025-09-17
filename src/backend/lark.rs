@@ -6,30 +6,23 @@ use std::{
 use derive_more::{Debug, Display, From};
 use internment::Intern;
 
-use crate::{ir, names::{self, Lbl, Tmp}};
+use crate::{canon, ir, names::{self, Lbl, Tmp}};
 
 use super::Backend;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-#[display("${self:?}")]
 pub enum Reg {
-    Zero,
-    Rv, Ra,
-    A0, A1, A2,
-    S0, S1, S2,
-    T0, T1, T2,
-    K0, K1,
-    Gp, Sp
+    #[display("$zero")] Zero,
+    #[display("$rv")] Rv, #[display("$ra")] Ra,
+    #[display("$a0")] A0, #[display("$a1")] A1, #[display("$a2")] A2,
+    #[display("$s0")] S0, #[display("$s1")] S1, #[display("$s2")] S2,
+    #[display("$t0")] T0, #[display("$t1")] T1, #[display("$t2")] T2,
+    #[display("$k0")] K0, #[display("$k1")] K1,
+    #[display("$gp")] Gp, #[display("$sp")] Sp
 }
 
-#[derive(Clone, Copy, From)]
-pub enum RegOrSlot {
-    Reg(Reg),
-    Slot(i16),
-}
-
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Display)]
 #[display("{self:?}")]
 pub enum Imm {
     #[debug(":{_0}")]
@@ -52,24 +45,17 @@ impl TryFrom<&ir::RVal> for Imm {
     }
 }
 
-#[derive(Debug, From, Clone, Copy)]
+#[derive(Debug, From, Clone, Copy, Display)]
 pub enum Stg {
+    #[display("{_0:?}")]
     #[from]
     Tmp(Tmp),
+    #[display("{_0}")]
     #[from]
     Reg(Reg),
 }
 
-impl std::fmt::Display for Stg {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
-            Stg::Reg(reg) => write!(f, "{reg}"),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instr {
     #[debug("{_0:?}:")]
     Label(Lbl),
@@ -100,6 +86,8 @@ pub enum Instr {
 
     #[debug("j {_0:?}")]
     J(Lbl),
+    #[debug("jal {_0}, {_1:?}")]
+    Jal(Stg, Lbl),
 
     #[debug("tlt {_0}, {_1}, {_2}")]
     Tlt(Stg, Stg, Stg),
@@ -138,6 +126,10 @@ impl<'a> LarkBackend<'a> {
     const GPR_SAVED_REGS: &'static [Reg] = &[
         S0, S1, S2,
     ];
+    #[rustfmt::skip]
+    const GPR_ARG_REGS: &'static [Reg] = &[
+        A0, A1, A2
+    ];
 
     pub fn new(out: &'a mut Vec<Instr>) -> Self {
         Self {
@@ -150,29 +142,84 @@ impl<'a> LarkBackend<'a> {
         self.out.push(instr);
     }
 
-    pub fn stmt_to_asm(&mut self, stmt: ir::Stmt) {
-        use ir::{Stmt, RVal::*, LVal::*, Binop::*};
+    fn imm_binop_to_asm(&mut self, op: canon::Binop, x: canon::RVal, imm: Imm, dst: impl Into<Option<Stg>>) -> Stg {
+        let x_dst = self.expr_to_asm(x, None);
+        let dst = dst.into();
+        fn with_dst(dst: Option<Stg>, base_name: &'static str, code: impl FnOnce(Stg)) -> Stg {
+            let dst = dst.unwrap_or_else(|| names::Tmp::fresh(base_name).into());
+            code(dst);
+            dst
+        };
+        match op {
+            ir::Binop::Add => with_dst(dst, "addi_dst", |dst| {
+                self.emit(AddI(dst, x_dst, imm));
+            }),
+            ir::Binop::Sub => with_dst(dst, "subi_dst", |dst| {
+                self.emit(SubI(dst, x_dst, imm));
+            }),
+            ir::Binop::And => todo!(),
+            ir::Binop::Or => todo!(),
+            ir::Binop::Shr => todo!(),
+            ir::Binop::Xor => todo!(),
+        }
+    }
+
+    fn binop_to_asm(&mut self, op: canon::Binop, x: canon::RVal, y: canon::RVal, dst: impl Into<Option<Stg>>) -> Stg {
+        let x_dst = self.expr_to_asm(x, None);
+        let y_dst = self.expr_to_asm(y, None);
+        let dst = dst.into();
+        fn with_dst(dst: Option<Stg>, base_name: &'static str, code: impl FnOnce(Stg)) -> Stg {
+            let dst = dst.unwrap_or_else(|| names::Tmp::fresh(base_name).into());
+            code(dst);
+            dst
+        };
+        match op {
+            ir::Binop::Add => with_dst(dst, "add_dst", |dst| {
+                self.emit(Add(dst, x_dst, y_dst));
+            }),
+            ir::Binop::Sub => with_dst(dst, "sub_dst", |dst| {
+                self.emit(Sub(dst, x_dst, y_dst));
+            }),
+            ir::Binop::And => todo!(),
+            ir::Binop::Or => todo!(),
+            ir::Binop::Shr => todo!(),
+            ir::Binop::Xor => todo!(),
+        }
+    }
+
+    pub fn render(&self) -> &[Instr] {
+        &self.out[..]
+    }
+}
+
+impl<'a> Backend for LarkBackend<'a> {
+    type Temporary = Stg;
+
+    type Instruction = Instr;
+
+    fn stmt_to_asm(&mut self, stmt: crate::canon::Stmt) {
+        use crate::canon::{self, Stmt, RVal::*, LVal::*, Binop::*};
         match stmt {
             // M[base + n] = src
-            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Int(offset))), rhs) |
-            Stmt::Move(Mem(Binop(Add, Int(offset), LVal(Tmp(base)))), rhs) => {
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Int(offset)))), rhs) |
+            Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Int(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), Imm::Int(offset as u16), rhs_dst));
+                self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
-            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Nat(offset))), rhs) |
-            Stmt::Move(Mem(Binop(Add, Nat(offset), LVal(Tmp(base)))), rhs) => {
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Nat(offset)))), rhs) |
+            Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Nat(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), Imm::Int(offset as u16), rhs_dst));
+                self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
             // M[base] = src
             Stmt::Move(Mem(LVal(Tmp(base))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), Imm::Int(0), rhs_dst));
+                self.emit(Sw(base.into(), self::Imm::Int(0), rhs_dst));
             }
             Stmt::Move(Mem(lhs), rhs) => {
                 let rhs_tmp = self.expr_to_asm(rhs, None);
                 let lhs_tmp = self.expr_to_asm(*lhs, None);
-                self.emit(Sw(lhs_tmp, Imm::Int(0), rhs_tmp));
+                self.emit(Sw(lhs_tmp, self::Imm::Int(0), rhs_tmp));
             }
 
             // tmp1 = tmp2
@@ -180,23 +227,33 @@ impl<'a> LarkBackend<'a> {
                 self.emit(Mv(lhs.into(), rhs.into()));
             }
 
-            Stmt::Move(Tmp(lhs), Int(i)) => {
-                self.emit(Li(lhs.into(), Imm::Int(i as u16)));
+            Stmt::Move(Tmp(lhs), Imm(canon::Imm::Int(i))) => {
+                self.emit(Li(lhs.into(), self::Imm::Int(i as u16)));
             }
 
             Stmt::Move(Tmp(lhs), rhs) => {
                 let _ = self.expr_to_asm(rhs, Stg::Tmp(lhs));
             }
 
-            Stmt::Move(Global(_), _) => todo!(),
+            Stmt::Call(opt_dst, func, args) => {
+                for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
+                    self.expr_to_asm(arg, Stg::Reg(*reg));
+                }
+                self.emit(Instr::Jal(Ra.into(), func));
+                if let Some(dst) = opt_dst {
+                    // Store the return value in a temporary if requested.
+                    self.emit(Instr::Mv(dst.into(), Rv.into()));
+                }
+            }
 
-            Stmt::RVal(rval) => {
+            Stmt::Switch(expr, lbls) => todo!(),
+
+            Stmt::Discard(rval) => {
                 let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
             }
-            Stmt::Jmp(Byte(_) | Int(_) | Nat(_) | Lbl(_), [lbl]) => self.emit(Instr::J(lbl)),
-            Stmt::Jmp(rval, lbls) => todo!(),
+            Stmt::Jmp(lbl) => self.emit(Instr::J(lbl)),
 
-            Stmt::Seq(Stmt::Br {e1, op, e2, if_true, if_false}, Stmt::Seq(Stmt::Lbl(lbl), rest)) if lbl == if_true => {
+            Stmt::Br {e1, op, e2, if_true} => {
                 let e1_tmp = self.expr_to_asm(e1, None);
                 let e2_tmp = self.expr_to_asm(e2, None);
                 let bool_tmp = names::Tmp::fresh("bool");
@@ -205,15 +262,8 @@ impl<'a> LarkBackend<'a> {
                     ir::Relop::LtU => self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
                 }
-                self.emit(Bf(bool_tmp.into(), if_false.into()));
+                self.emit(Bt(bool_tmp.into(), if_true.into()));
                 self.emit(Label(if_true));
-                self.stmt_to_asm(*rest);
-            }
-            Stmt::Br {e1, op, e2, if_true, if_false} => todo!(),
-
-            Stmt::Seq(stmt1, stmt2) => {
-                self.stmt_to_asm(*stmt1);
-                self.stmt_to_asm(*stmt2);
             }
 
             Stmt::Lbl(lbl) => self.emit(Label(lbl)),
@@ -226,82 +276,52 @@ impl<'a> LarkBackend<'a> {
         }
     }
 
-    fn expr_to_asm(&mut self, rval: ir::RVal, dst: impl Into<Option<Stg>>) -> Stg {
-        use ir::{Binop::*, RVal};
+    fn expr_to_asm(&mut self, rval: crate::canon::RVal, dst: impl Into<Option<Stg>>) -> Stg {
+        use crate::canon::{Binop::*, RVal::*, LVal::*, Imm::*};
+
+        // If no destination tmp has been provided, create one using the given base name.
+        // If one has been provided, use that instead.
         let mk_dst = |base_name: &str| -> Stg {
             dst.into().unwrap_or_else(|| names::Tmp::fresh(base_name).into())
         };
 
         match rval {
-            RVal::Byte(x) => {
-                let dst = mk_dst("li_byte");
-                self.emit(Li(dst, Imm::Int(x as u16)));
-                dst
-            }
-            RVal::Nat(x) => {
-                let dst = mk_dst("li_nat");
-                self.emit(Li(dst, Imm::Int(x as u16)));
-                dst
-            }
-            RVal::Int(x) => {
-                let dst = mk_dst("li_int");
-                self.emit(Li(dst, Imm::Int(x as u16)));
-                dst
-            }
-            RVal::Lbl(lbl) => {
-                let dst = mk_dst("li_lbl");
-                self.emit(Li(dst, Imm::Lbl(lbl.render().into())));
-                dst
-            }
-            RVal::LVal(lval) => match lval {
-                ir::LVal::Tmp(tmp) => tmp.into(),
-                ir::LVal::Mem(rval) => {
-                    let addr = self.expr_to_asm(*rval, None);
-                    let dst = mk_dst("load");
-                    self.emit(Lw(dst, addr, Imm::Int(0)));
+            Imm(imm) => match imm {
+                Byte(x) => {
+                    let dst = mk_dst("li_byte");
+                    self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
-                ir::LVal::Global(intern) => todo!(),
+                Nat(x) => {
+                    let dst = mk_dst("li_nat");
+                    self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    dst
+                }
+                Int(x) => {
+                    let dst = mk_dst("li_int");
+                    self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    dst
+                }
+                Lbl(lbl) => {
+                    let dst = mk_dst("li_lbl");
+                    self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
+                    dst
+                }
+            }
+            LVal(lval) => match lval {
+                Tmp(tmp) => tmp.into(),
+                Mem(rval) => {
+                    let addr = self.expr_to_asm(*rval, None);
+                    let dst = mk_dst("load");
+                    self.emit(Lw(dst, addr, self::Imm::Int(0)));
+                    dst
+                }
             },
 
-            RVal::Binop(op, x, RVal::Nat(n)) => self.imm_binop_to_asm(op, *x, Imm::Int(n as u16), mk_dst("imm_binop_res")),
-            RVal::Binop(op, x, y) => self.binop_to_asm(op, *x, *y, mk_dst("binop_res")),
+            Binop(op, x, Imm(Nat(n))) => self.imm_binop_to_asm(op, *x, self::Imm::Int(n as u16), mk_dst("imm_binop_res")),
+            Binop(op, x, y) => self.binop_to_asm(op, *x, *y, mk_dst("binop_res")),
 
-            RVal::Unop(unop, rval) => todo!(),
-            RVal::BitCast(ty, rval) => todo!(),
-            RVal::Call(rval, rvals) => todo!(),
-            RVal::Seq(stmt, rval) => {
-                self.stmt_to_asm(*stmt);
-                self.expr_to_asm(*rval, mk_dst("seq_res"))
-            }
+            Unop(unop, rval) => todo!(),
         }
-    }
-
-    fn imm_binop_to_asm(&mut self, op: ir::Binop, x: ir::RVal, imm: Imm, dst: Stg) -> Stg {
-        let x_dst = self.expr_to_asm(x, None);
-        match op {
-            ir::Binop::Add => self.emit(AddI(dst, x_dst, imm)),
-            ir::Binop::Sub => self.emit(SubI(dst, x_dst, imm)),
-            ir::Binop::And => todo!(),
-            ir::Binop::Or => todo!(),
-            ir::Binop::Shr => todo!(),
-            ir::Binop::Xor => todo!(),
-        }
-        dst
-    }
-
-    fn binop_to_asm(&mut self, op: ir::Binop, x: ir::RVal, y: ir::RVal, dst: impl Into<Option<Stg>>) -> Stg {
-        let x_dst = self.expr_to_asm(x, None);
-        let y_dst = self.expr_to_asm(y, None);
-        let dst = names::Tmp::fresh("binop_res").into();
-        match op {
-            ir::Binop::Add => self.emit(Add(dst, x_dst, y_dst)),
-            ir::Binop::Sub => self.emit(Sub(dst, x_dst, y_dst)),
-            ir::Binop::And => todo!(),
-            ir::Binop::Or => todo!(),
-            ir::Binop::Shr => todo!(),
-            ir::Binop::Xor => todo!(),
-        }
-        dst
     }
 }

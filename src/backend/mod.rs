@@ -1,25 +1,12 @@
-use crate::ir;
+use crate::{canon, ir};
 
 pub mod lark;
 
-pub trait Backend<OutStream>
-where
-    OutStream: Extend<Self::Instruction>,
-{
+pub trait Backend {
     type Temporary;
     type Instruction;
-    fn create_backend(out: &mut OutStream) -> Self;
-    fn stmt_to_asm(&mut self, stmt: ir::Stmt);
-    fn expr_to_asm(&mut self, rval: ir::RVal) -> Self::Temporary;
-}
-
-pub fn run_backend<B, Tmp, Instr, Out>(out: &mut Out, stmt: ir::Stmt)
-where
-    B: Backend<Out, Instruction = Instr, Temporary = Tmp>,
-    Out: Extend<<B as Backend<Out>>::Instruction>,
-{
-    let mut backend = B::create_backend(out);
-    backend.stmt_to_asm(stmt)
+    fn stmt_to_asm(&mut self, stmt: canon::Stmt);
+    fn expr_to_asm(&mut self, rval: canon::RVal, opt_dst: impl Into<Option<Self::Temporary>>) -> Self::Temporary;
 }
 
 #[cfg(test)]
@@ -37,12 +24,14 @@ mod tests {
         let mut out = vec![];
         let mut be = lark::LarkBackend::new(&mut out);
         for decl in mod_ast.decls {
-            let ir = decl.value.to_ir();
-            for ir_wrap in ir {
-                be.stmt_to_asm(ir_wrap.as_stmt());
+            let subr_lbl = crate::names::Lbl::SubrStart(decl.value.name);
+            let ir_stmts = decl.value.to_ir().into_iter().map(|w| w.as_stmt()).collect();
+            let stmts = canon::canonicalize(subr_lbl, ir_stmts);
+            for stmt in stmts {
+                be.stmt_to_asm(stmt);
             }
         }
-        out
+        be.render().to_vec()
     }
 
     #[test]
@@ -82,7 +71,7 @@ mod tests {
         "
         ));
     }
-    
+
     #[test]
     fn simple_while() {
         assert_debug_snapshot!(compile_to_lark(
@@ -92,6 +81,21 @@ mod tests {
                 while x < 10 {
                     x = x + 1;
                 }
+            }
+        "
+        ));
+    }
+
+    #[test]
+    fn nested_call() {
+        assert_debug_snapshot!(compile_to_lark(
+            "
+            subr add3(a: nat, b: nat, c: nat) nat {
+                ret a + b + c;
+            }
+
+            subr main() nat {
+                ret add3(1, add3(9, 8, 7), 2 + 3);
             }
         "
         ));

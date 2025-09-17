@@ -3,9 +3,10 @@ source: src/backend/mod.rs
 expression: "compile_to_lark(\"\n            subr main() nat {\n                let a = 24;\n                ret 1 + a - 49;\n            }\n        \")"
 ---
 [
+    subr<main>:,
     li %a, 24,
     li %li_nat.0, 1,
     subi %imm_binop_res.1, %a, 49,
-    add %binop_res.2, %li_nat.0, %imm_binop_res.1,
-    jr $Ra,
+    add $rv, %li_nat.0, %imm_binop_res.1,
+    jr $ra,
 ]

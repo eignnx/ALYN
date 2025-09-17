@@ -1,5 +1,12 @@
 //! Canonicalize IR
 
+use crate::{ir, names::Lbl};
+
+/// # Goals
+/// - Flatten RVal::Seq and Stmt::Seq terms into a linear vector of statements.
+/// - Extract RVal::Call terms into their own statements.
+///     + Either Stmt::RVal(RVal::Call(..)),
+///     + or Stmt::Move(Tmp(..), RVal::Call(..))
 pub mod flatten {
     use crate::{ir::{LVal, RVal, Stmt}, names::Tmp};
 
@@ -46,13 +53,14 @@ pub mod flatten {
                 RVal::Binop(binop, Box::new(x), Box::new(y))
             },
             RVal::Call(func @ RVal::Lbl(_), args) => {
+                // TODO: don't create temporary if func has ret type void
                 let mut new_args = Vec::new();
                 for arg in args {
                     new_args.push(Box::new(flatten_rval(*arg, out)));
                 }
-                let call_res: LVal = Tmp::fresh("ret_val").into();
-                out.push(Stmt::Move(call_res.clone(), RVal::Call(func, new_args)));
-                call_res.into()
+                let ret_val: LVal = Tmp::fresh("ret_val").into();
+                out.push(Stmt::Move(ret_val.clone(), RVal::Call(func, new_args)));
+                ret_val.into()
             }
             RVal::Call(indirect_func, args) => todo!("handle indirect function calls"),
             RVal::Unop(unop, rval) => {
@@ -79,6 +87,8 @@ pub mod flatten {
     }
 }
 
+/// # Goals
+/// Split the sequence of instructions into basic blocks.
 pub mod basic_blocks {
     use std::{collections::BTreeMap, mem};
 
@@ -140,13 +150,12 @@ pub mod basic_blocks {
         DroppingTillLbl,
     }
 
-    pub fn group_into_bbs(stmts: Vec<Stmt>) -> Bbs {
+    pub fn group_into_bbs(subr_lbl: Lbl, stmts: Vec<Stmt>) -> Bbs {
         let mut current_bb = Vec::new();
-        let entry = Lbl::fresh("subr_entry");
-        let mut current_bb_label = entry;
-        current_bb.push(Stmt::Lbl(entry));
+        let mut current_bb_label = subr_lbl;
+        current_bb.push(Stmt::Lbl(subr_lbl));
         let mut bbs = Bbs {
-            entry,
+            entry: subr_lbl,
             blocks: BTreeMap::new(),
         };
 
@@ -228,7 +237,7 @@ pub mod basic_blocks {
             Nop,
             Ret(None),
         ];
-        let bbs = group_into_bbs(stmts);
+        let bbs = group_into_bbs("test_subr".into(), stmts);
         insta::assert_debug_snapshot!(bbs);
         assert_eq!(bbs, Bbs {
             entry: bbs.entry,
@@ -250,6 +259,9 @@ pub mod basic_blocks {
     }
 }
 
+/// # Goals
+/// Decide on an ordering of basic blocks that (mostly) has branch instructions followed by their
+/// false label, and jumps followed by their target (if possible).
 mod trace {
     use std::collections::BTreeSet;
     use crate::{ir::Stmt, names::Lbl};
@@ -357,12 +369,15 @@ mod trace {
     }
 }
 
+/// # Goals
+/// - Remove jumps that only jump to the immediately next instruction
+/// - Ensure all branch instructions fallthrough on false
 mod post_process {
 
     use crate::{ir::{RVal, Relop, Stmt}, names::Lbl};
     use super::basic_blocks::Bb;
 
-    fn post_process(schedule: Vec<Bb>) -> Vec<Stmt> {
+    pub fn post_process(schedule: Vec<Bb>) -> Vec<Stmt> {
         let mut output = Vec::new();
         let mut stmts = schedule.into_iter().peekable();
 
@@ -512,4 +527,138 @@ mod post_process {
 
         insta::assert_debug_snapshot!(post_process(bbs));
     }
+}
+
+pub mod canon_ir {
+    use smallvec::SmallVec;
+
+    use crate::{ir, names::{Lbl, Tmp}};
+    pub use crate::ir::{Binop, Relop, Unop};
+
+
+    pub enum Stmt {
+        Move(LVal, RVal),
+        Call(Option<Tmp>, Lbl, SmallVec<[RVal; 2]>),
+        // TODO: CallIndirect(Option<Tmp>, Tmp, SmallVec<[Tmp; 2]>),
+
+        Br { op: Relop, e1: RVal, e2: RVal, if_true: Lbl },
+        Jmp(Lbl),
+        Switch(RVal, SmallVec<[Lbl; 2]>),
+
+        Lbl(Lbl),
+
+        Discard(RVal),
+        Nop,
+        Ret(Option<RVal>),
+    }
+
+    pub enum RVal {
+        LVal(LVal),
+        Imm(Imm),
+        Binop(Binop, Box<RVal>, Box<RVal>),
+        Unop(Unop, Box<RVal>),
+    }
+
+    pub enum LVal {
+        Tmp(Tmp),
+        Mem(Box<RVal>),
+    }
+
+    pub enum Imm {
+        Byte(u8),
+        Int(i64),
+        Nat(u64),
+        Lbl(Lbl),
+    }
+
+    impl From<ir::Stmt> for Stmt {
+        fn from(stmt: ir::Stmt) -> Self {
+            match stmt {
+                ir::Stmt::Move(ir::LVal::Tmp(dst), ir::RVal::Call(ir::RVal::Lbl(func), args)) => {
+                    let args = args.into_iter().map(|arg| (*arg).into()).collect();
+                    Stmt::Call(Some(dst.into()), func, args)
+                }
+                ir::Stmt::RVal(ir::RVal::Call(ir::RVal::Lbl(func), args)) => {
+                    let args = args.into_iter().map(|arg| (*arg).into()).collect();
+                    Stmt::Call(None, func, args)
+                }
+
+                ir::Stmt::Move(lval, rval) => Stmt::Move(lval.into(), rval.into()),
+                // Can almost replace `ir::Stmt::RVal(..)` with `Nop`, but MMIO may require mem loads be executed.
+                ir::Stmt::RVal(rval) => Stmt::Discard(rval.into()), 
+
+                ir::Stmt::Jmp(_, []) => unreachable!("Encountered Stmt::Jmp(_, [])!\n!!! {stmt:?}"),
+                ir::Stmt::Jmp(ir::RVal::Lbl(_), [lbl]) => Stmt::Jmp(lbl),
+                ir::Stmt::Jmp(rval, lbls) => Stmt::Switch(rval.into(), lbls.into()),
+
+                ir::Stmt::Br { op, e1, e2, if_true, if_false: _ } => Stmt::Br { op, e1: e1.into(), e2: e2.into(), if_true },
+
+                ir::Stmt::Lbl(lbl) => Stmt::Lbl(lbl),
+
+                ir::Stmt::Nop => Stmt::Nop,
+
+                ir::Stmt::Ret(Some(rval)) => Stmt::Ret(Some(rval.into())),
+                ir::Stmt::Ret(None) => Stmt::Ret(None),
+
+                ir::Stmt::Seq(..) => unreachable!("Stmt::Seq terms weren't all removed in `flatten` step!\n!!! {stmt:?}"),
+            }
+        }
+    }
+
+    impl From<ir::RVal> for RVal {
+        fn from(rval: ir::RVal) -> Self {
+            match rval {
+                ir::RVal::Byte(x) => RVal::Imm(Imm::Byte(x)),
+                ir::RVal::Nat(x) => RVal::Imm(Imm::Nat(x)),
+                ir::RVal::Int(x) => RVal::Imm(Imm::Int(x)),
+                ir::RVal::Lbl(lbl) => RVal::Imm(Imm::Lbl(lbl)),
+                ir::RVal::LVal(ir::LVal::Tmp(tmp)) => RVal::LVal(LVal::Tmp(tmp)),
+                ir::RVal::LVal(ir::LVal::Mem(rval)) => RVal::LVal(LVal::Mem(rval.into())),
+                ir::RVal::LVal(ir::LVal::Global(rval)) => todo!(),
+                ir::RVal::Binop(binop, x, y) => RVal::Binop(binop, x.into(), y.into()),
+                ir::RVal::Unop(unop, rval) => RVal::Unop(unop, rval.into()),
+                ir::RVal::BitCast(ty, rval) => todo!(),
+                ir::RVal::Call(rval, rvals) => unreachable!(),
+                ir::RVal::Seq(stmt, rval) => unreachable!("RVal::Seq terms weren't all removed in `flatten` step!\n!!! {rval:?}"),
+            }
+        }
+    }
+
+    impl From<Box<ir::RVal>> for Box<RVal> {
+        fn from(value: Box<ir::RVal>) -> Self {
+            Box::new((*value).into())
+        }
+    }
+
+    impl From<ir::LVal> for LVal {
+        fn from(value: ir::LVal) -> Self {
+            match value {
+                ir::LVal::Tmp(tmp) => LVal::Tmp(tmp),
+                ir::LVal::Mem(rval) => LVal::Mem(rval.into()),
+                ir::LVal::Global(intern) => todo!(),
+            }
+        }
+    }
+}
+
+pub use canon_ir::*;
+
+pub fn canonicalize(subr_lbl: Lbl, stmts: Vec<ir::Stmt>) -> Vec<canon_ir::Stmt> {
+    let mut flattened = Vec::new();
+    for stmt in stmts {
+        flatten::flatten_stmt(stmt, &mut flattened);
+    }
+
+    let bbs = basic_blocks::group_into_bbs(subr_lbl, flattened);
+
+    let schedule = trace::schedule_traces(bbs);
+
+    let processed_stmts = post_process::post_process(schedule);
+
+    let mut canon_stmts = Vec::new();
+    for stmt in processed_stmts {
+        canon_stmts.push(canon_ir::Stmt::from(stmt));
+    }
+
+    canon_stmts
 }

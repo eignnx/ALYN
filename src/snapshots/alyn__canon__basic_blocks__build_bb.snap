@@ -3,7 +3,7 @@ source: src/canon.rs
 expression: bbs
 ---
 Bbs {
-    entry: local<subr_entry#0>,
+    entry: local<test_subr>,
     blocks: {
         local<A>: Bb {
             stmts: [
@@ -19,9 +19,9 @@ Bbs {
             ],
             last: ret,
         },
-        local<subr_entry#0>: Bb {
+        local<test_subr>: Bb {
             stmts: [
-                :local<subr_entry#0>,
+                :local<test_subr>,
                 nop,
                 nop,
             ],
