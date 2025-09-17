@@ -535,7 +535,7 @@ pub mod canon_ir {
     use crate::{ir, names::{Lbl, Tmp}};
     pub use crate::ir::{Binop, Relop, Unop};
 
-
+    #[derive(Debug)]
     pub enum Stmt {
         Move(LVal, RVal),
         Call(Option<Tmp>, Lbl, SmallVec<[RVal; 2]>),
@@ -552,6 +552,7 @@ pub mod canon_ir {
         Ret(Option<RVal>),
     }
 
+    #[derive(Debug)]
     pub enum RVal {
         LVal(LVal),
         Imm(Imm),
@@ -559,11 +560,13 @@ pub mod canon_ir {
         Unop(Unop, Box<RVal>),
     }
 
+    #[derive(Debug)]
     pub enum LVal {
         Tmp(Tmp),
         Mem(Box<RVal>),
     }
 
+    #[derive(Debug)]
     pub enum Imm {
         Byte(u8),
         Int(i64),

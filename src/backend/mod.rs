@@ -27,6 +27,7 @@ mod tests {
             let subr_lbl = crate::names::Lbl::SubrStart(decl.value.name);
             let ir_stmts = decl.value.to_ir().into_iter().map(|w| w.as_stmt()).collect();
             let stmts = canon::canonicalize(subr_lbl, ir_stmts);
+            eprintln!("{stmts:#?}");
             for stmt in stmts {
                 be.stmt_to_asm(stmt);
             }

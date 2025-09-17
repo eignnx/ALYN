@@ -162,19 +162,19 @@ impl Ann<ast::Stmt> {
                 let cond = cond.to_ir().as_cond();
                 let cond_lbl = Lbl::fresh("while_cond");
                 let body_lbl = Lbl::fresh("while_body");
-                let end = Lbl::fresh("end_while");
+                let end_lbl = Lbl::fresh("end_while");
 
                 let stmts = std::iter::empty()
                     .chain([ir::Stmt::Lbl(cond_lbl)])
-                    .chain([cond(body_lbl, end)])
+                    .chain([cond(body_lbl, end_lbl)])
                     .chain([ir::Stmt::Lbl(body_lbl)])
                     .chain(to_ir_stmts(body))
                     .chain([ir::Stmt::direct_jmp(cond_lbl)])
-                    .chain([ir::Stmt::Lbl(end)]);
+                    .chain([ir::Stmt::Lbl(end_lbl)]);
 
                 IrWrap::Stmt(ir::Stmt::seq(stmts))
             }
-            ast::Stmt::Ret(None) => todo!(),
+            ast::Stmt::Ret(None) => IrWrap::Stmt(ir::Stmt::Ret(None)),
             ast::Stmt::Ret(Some(rval)) => IrWrap::Stmt(ir::Stmt::Ret(Some(rval.to_ir().as_expr()))),
         }
     }
@@ -350,6 +350,18 @@ mod test {
                     }
                 }
                 ret -1;
+            }
+        ");
+    }
+
+    #[test]
+    fn simple_while() {
+        do_test!("
+            subr test_simple_while(n: nat) {
+                while n < 100 {
+                    n = n + 1;
+                }
+                ret;
             }
         ");
     }

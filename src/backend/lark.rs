@@ -263,7 +263,6 @@ impl<'a> Backend for LarkBackend<'a> {
                     _ => todo!("impl relop: {op:?}"),
                 }
                 self.emit(Bt(bool_tmp.into(), if_true.into()));
-                self.emit(Label(if_true));
             }
 
             Stmt::Lbl(lbl) => self.emit(Label(lbl)),

@@ -375,9 +375,9 @@ impl Ann<Stmt> {
                 Ok(())
             }
             Stmt::Ret(None) => {
-                if tcx.get_subr_ret_ty().is_some() {
+                let Some(Ty::Void) = tcx.get_subr_ret_ty() else {
                     return Err(TyckErr::RetVoidInNonVoidSubr { span: self.span });
-                }
+                };
                 Ok(())
             }
             Stmt::Ret(Some(rval)) => {

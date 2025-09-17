@@ -9,7 +9,6 @@ expression: "compile_to_lark(\"\n            subr main() nat {\n                
     li %li_nat.0, 10,
     tltu %bool.1, %x, %li_nat.0,
     bt %bool.1, local<while_body#1>,
-    local<while_body#1>:,
     local<end_while#2>:,
     jr $ra,
     local<while_body#1>:,
