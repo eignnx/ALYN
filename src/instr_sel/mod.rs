@@ -2,7 +2,8 @@ use crate::{canon, ir};
 
 pub mod lark;
 
-pub trait Backend {
+/// Something that can perform instruction selection.
+pub trait InstrSel {
     type Temporary;
     type Instruction;
     fn stmt_to_asm(&mut self, stmt: canon::Stmt);

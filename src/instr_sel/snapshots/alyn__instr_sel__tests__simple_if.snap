@@ -1,0 +1,18 @@
+---
+source: src/instr_sel/mod.rs
+expression: "compile_to_lark(\"\n            subr main() nat {\n                if 1 == 1 {\n                    let x = 1;\n                } else {\n                    let x = 2;\n                }\n            }\n        \")"
+---
+[
+    subr<main>:,
+    li %li_nat.0, 1,
+    li %li_nat.1, 1,
+    teq %bool.2, %li_nat.0, %li_nat.1,
+    bt %bool.2, local<if_true#0>,
+    local<if_false#1>:,
+    li %x, 2,
+    local<end_if#2>:,
+    jr $ra,
+    local<if_true#0>:,
+    li %x, 1,
+    j local<end_if#2>,
+]

@@ -8,7 +8,7 @@ use internment::Intern;
 
 use crate::{canon, ir, names::{self, Lbl, Tmp}};
 
-use super::Backend;
+use super::InstrSel;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -192,7 +192,7 @@ impl<'a> LarkBackend<'a> {
     }
 }
 
-impl<'a> Backend for LarkBackend<'a> {
+impl<'a> InstrSel for LarkBackend<'a> {
     type Temporary = Stg;
 
     type Instruction = Instr;

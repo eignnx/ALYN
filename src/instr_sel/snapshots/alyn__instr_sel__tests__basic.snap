@@ -1,0 +1,9 @@
+---
+source: src/instr_sel/mod.rs
+expression: "compile_to_lark(\"\n            subr main() nat {\n                ret 0;\n            }\n        \")"
+---
+[
+    subr<main>:,
+    li $rv, 0,
+    jr $ra,
+]

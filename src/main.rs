@@ -5,11 +5,11 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::backend::Backend;
+use crate::instr_sel::InstrSel;
 
 mod ast;
 mod ast_to_ir;
-mod backend;
+mod instr_sel;
 mod frame;
 mod ir;
 mod names;
@@ -48,7 +48,7 @@ fn main() {
         let canon_stmts = canon::canonicalize(subr_name, ir);
 
         let mut out = Vec::new();
-        let mut backend = backend::lark::LarkBackend::new(&mut out);
+        let mut backend = instr_sel::lark::LarkBackend::new(&mut out);
         for stmt in canon_stmts {
             backend.stmt_to_asm(stmt);
         }

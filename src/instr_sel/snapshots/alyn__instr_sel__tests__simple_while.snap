@@ -1,0 +1,17 @@
+---
+source: src/instr_sel/mod.rs
+expression: "compile_to_lark(\"\n            subr main() nat {\n                let x = 1;\n                while x < 10 {\n                    x = x + 1;\n                }\n            }\n        \")"
+---
+[
+    subr<main>:,
+    li %x, 1,
+    local<while_cond#0>:,
+    li %li_nat.0, 10,
+    tltu %bool.1, %x, %li_nat.0,
+    bt %bool.1, local<while_body#1>,
+    local<end_while#2>:,
+    jr $ra,
+    local<while_body#1>:,
+    addi %x, %x, 1,
+    j local<while_cond#0>,
+]
