@@ -333,7 +333,8 @@ mod test {
         //     }
         //     return -1;
         // }
-        do_test!("
+        do_test!(
+            "
             subr binsearch(x: int, v: *int, n: nat) int {
                 let low = 0;
                 let high = n - 1;
@@ -351,18 +352,21 @@ mod test {
                 }
                 ret -1;
             }
-        ");
+        "
+        );
     }
 
     #[test]
     fn simple_while() {
-        do_test!("
+        do_test!(
+            "
             subr test_simple_while(n: nat) {
                 while n < 100 {
                     n = n + 1;
                 }
                 ret;
             }
-        ");
+        "
+        );
     }
 }

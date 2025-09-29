@@ -1,23 +1,28 @@
+use derive_more::From;
 use smallvec::{SmallVec, smallvec};
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write,
 };
 
-use crate::{names::Tmp, regalloc::{live_sets::LiveSets, Cc}};
+use crate::{
+    names::Tmp,
+    regalloc::{Cc, live_sets::LiveSets},
+};
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(From, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// A storage node
 pub enum Stg<R> {
+    #[from]
     Tmp(Tmp),
     Reg(R),
 }
 
-impl<R> From<Tmp> for Stg<R> {
-    fn from(tmp: Tmp) -> Self {
-        Self::Tmp(tmp)
+impl<R> Stg<R> {
+    fn from_reg(reg: R) -> Self {
+        Self::Reg(reg)
     }
 }
 
@@ -53,8 +58,9 @@ impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
     }
 }
 
-impl<R> ColorGraph<R> 
-where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
+impl<R> ColorGraph<R>
+where
+    R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static,
 {
     fn from_interferences(interferences: Interferences) -> Self {
         let graph = interferences
@@ -68,14 +74,14 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
         Self { graph }
     }
 
-    fn insert(&mut self, ng: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
-        self.graph.insert(ng, neighbors);
+    fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
+        self.graph.insert(n, neighbors);
     }
 
     #[track_caller]
-    fn degree(&self, ng: &Stg<R>) -> usize {
-        let Some(neighbors) = self.graph.get(ng) else {
-            panic!("Unknown storage node: {ng:?}");
+    fn degree(&self, n: &Stg<R>) -> usize {
+        let Some(neighbors) = self.graph.get(n) else {
+            panic!("Unknown storage node: {n:?}");
         };
 
         // Only count node groups that haven't been removed from the graph.
@@ -86,31 +92,31 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
     }
 
     #[track_caller]
-    fn is_sig_degree(&self, ng: &Stg<R>) -> bool {
-        self.degree(ng) >= R::N_GPRS
+    fn is_sig_degree(&self, n: &Stg<R>) -> bool {
+        self.degree(n) >= R::N_GPRS
     }
 
     #[track_caller]
-    fn is_insig_degree(&self, ng: &Stg<R>) -> bool {
-        self.degree(ng) < R::N_GPRS
+    fn is_insig_degree(&self, n: &Stg<R>) -> bool {
+        self.degree(n) < R::N_GPRS
     }
 
-    fn coalesce(&mut self, ng1: &Stg<R>, ng2: &Stg<R>) {
+    fn coalesce(&mut self, n1: &Stg<R>, n2: &Stg<R>) {
         todo!()
     }
 
-    fn take(&mut self, ng: &Stg<R>) -> NodeEntry<R> {
-        let Some(entry) = self.graph.remove_entry(ng) else {
-            panic!("Unknown storage node: {ng:?}");
+    fn take(&mut self, n: &Stg<R>) -> NodeEntry<R> {
+        let Some(entry) = self.graph.remove_entry(n) else {
+            panic!("Unknown storage node: {n:?}");
         };
         entry
     }
 
     fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
         let mut key: Option<Stg<R>> = None;
-        for ng in self.graph.keys() {
-            if self.is_insig_degree(ng) {
-                key = Some(ng.clone());
+        for n in self.graph.keys() {
+            if self.is_insig_degree(n) {
+                key = Some(n.clone());
                 break;
             }
         }
@@ -118,21 +124,13 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
     }
 
     fn choose_node_to_spill(&mut self) -> Option<NodeEntry<R>> {
-        let max_ng = self
-            .graph
-            .keys()
-            .max_by_key(|ng| self.degree(ng))
-            .cloned()?;
-        eprintln!(
-            "Max degree node: {max_ng:?} (degree {})",
-            self.degree(&max_ng)
-        );
-        Some(self.take(&max_ng))
+        let max_node = self.graph.keys().max_by_key(|n| self.degree(n)).cloned()?;
+        Some(self.take(&max_node))
     }
 
-    fn active_neighbors_of(&self, ng: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
-        let Some(neighbors) = self.graph.get(ng) else {
-            panic!("Unknown Stg<R>: {ng:?}");
+    fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
+        let Some(neighbors) = self.graph.get(n) else {
+            panic!("Unknown Stg<R>: {n:?}");
         };
         neighbors
             .iter()
@@ -151,8 +149,9 @@ pub struct RegAlloc<R> {
     stack_slots_allocated: BTreeMap<Stg<R>, i32>,
 }
 
-impl<R> RegAlloc<R> 
-where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
+impl<R> RegAlloc<R>
+where
+    R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static,
 {
     fn new() -> Self {
         Self {
@@ -167,18 +166,20 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
             eprintln!("COLOR GRAPH:\n{color_graph:?}");
-            let mut stack = self.simplify_phase(&mut color_graph);
-            match self.select_phase(&mut color_graph, &mut stack) {
-                Err(ng_to_spill) => {
-                    eprintln!("Perform Spill");
-                    cfg = self.spill_and_rewrite(cfg, ng_to_spill);
-                }
+            let mut node_stack = self.simplify_phase(&mut color_graph);
+            match self.select_phase(&mut color_graph, &mut node_stack) {
                 Ok(assignments) => return RegAllocation { cfg, assignments },
+                Err(to_spill) => {
+                    eprintln!("Perform Spill");
+                    cfg = self.spill_and_rewrite(cfg, to_spill);
+                }
             }
         }
         panic!("Register allocation failed: iteration limit exceeded");
     }
 
+    /// Computes live-sets and builds a color graph given a control-flow graph representing a
+    /// program.
     fn build_phase<I: Instr>(&mut self, cfg: &Cfg<I>) -> (LiveSets, ColorGraph<R>) {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
@@ -192,14 +193,16 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
         (live_sets, cg)
     }
 
+    /// To "simplify" a node is to remove it from the color graph and push it onto a stack for use
+    /// later. Returns the stack of Stg nodes that have been removed from the graph.
     fn simplify_phase(&mut self, color_graph: &mut ColorGraph<R>) -> Vec<NodeEntry<R>> {
-        let mut stack = Vec::new();
+        let mut node_stack = Vec::new();
 
         loop {
             // First remove all easy nodes and save them to the stack.
             while let Some(entry) = color_graph.take_some_insig_node() {
                 eprintln!(">> simplify: {:?}", entry.0);
-                stack.push(entry);
+                node_stack.push(entry);
             }
 
             // Then if we're not done, we'll have to (potentially) spill a node.
@@ -207,33 +210,35 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
             // to see if that freed up more easy nodes.
             if let Some(entry) = color_graph.choose_node_to_spill() {
                 eprintln!(">> simplify (potentially spill): {:?}", entry.0);
-                stack.push(entry);
+                node_stack.push(entry);
             } else {
                 // Graph must be empty, so return the stack.
                 eprintln!("Done simplifying graph");
-                return stack;
+                return node_stack;
             }
         }
     }
 
+    /// Pops Stg nodes off of the node stack and selects a color for each one. If any cannot be
+    /// colored, returns `Err` of the problematic node.
     fn select_phase(
         &mut self,
         color_graph: &mut ColorGraph<R>,
-        stack: &mut Vec<NodeEntry<R>>,
+        node_stack: &mut Vec<NodeEntry<R>>,
     ) -> Result<BTreeMap<Tmp, R>, Stg<R>> {
-        let mut assignments = BTreeMap::<Tmp, R>::new();
+        let mut assignments = BTreeMap::new();
 
-        while let Some((stg, neighbors)) = stack.pop() {
+        while let Some((stg, neighbors)) = node_stack.pop() {
             color_graph.insert(stg.clone(), neighbors.clone());
-            if let Some((ng, reg_id)) =
-                self.select_once(color_graph, &assignments, stg.clone(), neighbors)
-            {
-                match ng {
-                    Stg::Tmp(tmp) => { assignments.insert(tmp, reg_id); }
+            if let Some(reg) = self.select_once(color_graph, &assignments, stg.clone()) {
+                match stg {
+                    Stg::Tmp(tmp) => {
+                        assignments.insert(tmp, reg);
+                    }
                     Stg::Reg(_) => {}
                 }
             } else {
-                // Return the problematic node group for rewriting in the caller.
+                // Return the problematic node for rewriting in the caller.
                 eprintln!("  * STOP! SPILL NEEDED FOR: {stg:?}");
                 return Err(stg);
             }
@@ -242,28 +247,40 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
         Ok(assignments)
     }
 
+    /// Given the current color-graph and the current assignments of nodes, chooses a color
+    /// (register) for the given node.
     fn select_once(
         &mut self,
         color_graph: &mut ColorGraph<R>,
         assignments: &BTreeMap<Tmp, R>,
         stg: Stg<R>,
-        neighbors: BTreeSet<Stg<R>>,
-    ) -> Option<(Stg<R>, R)> {
-        let mut reg_ids_in_use = BTreeSet::new();
+    ) -> Option<R> {
+        let mut regs_in_use = BTreeSet::<R>::new();
+
+        // Collect all neighbors of `stg` in the color-graph.
         for neighbor in color_graph.active_neighbors_of(&stg) {
-            if let Stg::Tmp(tmp) = neighbor {
-                let in_use = assignments.get(tmp).unwrap().clone();
-                reg_ids_in_use.insert(in_use);
-            } else {
-                // TODO: anything here?
+            match neighbor {
+                Stg::Tmp(tmp) => {
+                    // If the neighbor is a Tmp that has already been assigned, its assigned
+                    // register is "in use".
+                    if let Some(in_use) = assignments.get(tmp).cloned() {
+                        regs_in_use.insert(in_use);
+                    }
+                    // If the Tmp hasn't been assigned a register, skip.
+                }
+                // A Reg as a neighbor is obviously "in use" because `stg` cannot be assigned that
+                // register since it conflicts.
+                Stg::Reg(reg) => {
+                    regs_in_use.insert(reg.clone());
+                }
             }
         }
-        for gpr in R::GPRS {
-            if !reg_ids_in_use.contains(&gpr) {
-                return Some((stg, gpr.clone()));
-            }
-        }
-        None
+
+        // Find the first general-purpose register that's not in use.
+        R::GPRS
+            .into_iter()
+            .find(|gpr| !regs_in_use.contains(*gpr))
+            .cloned()
     }
 
     fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: Stg<R>) -> Cfg<I> {
@@ -320,9 +337,9 @@ where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
         Cfg::new(cfg.entry, cfg.params, new_stmts)
     }
 
-    fn get_or_insert_stack_slot(&mut self, ng: Stg<R>) -> i32 {
+    fn get_or_insert_stack_slot(&mut self, n: Stg<R>) -> i32 {
         let next_idx = (self.stack_slots_allocated.len() * 2) as i32; // Assume all values are two bytes.
-        self.stack_slots_allocated.entry(ng).or_insert(next_idx);
+        self.stack_slots_allocated.entry(n).or_insert(next_idx);
         next_idx
     }
 }
@@ -336,7 +353,9 @@ mod tests {
 
     #[derive(Debug, Display, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Reg {
-        R1, R2, R3
+        R1,
+        R2,
+        R3,
     }
 
     impl Cc<Reg> for Reg {
@@ -344,7 +363,6 @@ mod tests {
     }
 
     fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
-
         crate::names::reset_name_ids();
         eprintln!("<<<<<<<<<<<<< GPRS = {:?} >>>>>>>>>>>>>", Reg::GPRS);
         let cfg = Cfg::new(0, params, program);
@@ -362,7 +380,7 @@ mod tests {
                 let reg_rendered = format!("${reg_id}");
                 rendered = rendered.replace(&tmp_rendered, &reg_rendered);
             }
-            eprintln!("{rendered}");
+            eprintln!("|\t{rendered}");
         }
     }
 

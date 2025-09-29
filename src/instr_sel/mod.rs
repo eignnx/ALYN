@@ -7,7 +7,11 @@ pub trait InstrSel {
     type Temporary;
     type Instruction;
     fn stmt_to_asm(&mut self, stmt: canon::Stmt);
-    fn expr_to_asm(&mut self, rval: canon::RVal, opt_dst: impl Into<Option<Self::Temporary>>) -> Self::Temporary;
+    fn expr_to_asm(
+        &mut self,
+        rval: canon::RVal,
+        opt_dst: impl Into<Option<Self::Temporary>>,
+    ) -> Self::Temporary;
 }
 
 #[cfg(test)]
@@ -26,7 +30,12 @@ mod tests {
         let mut be = lark::LarkBackend::new(&mut out);
         for decl in mod_ast.decls {
             let subr_lbl = crate::names::Lbl::SubrStart(decl.value.name);
-            let ir_stmts = decl.value.to_ir().into_iter().map(|w| w.as_stmt()).collect();
+            let ir_stmts = decl
+                .value
+                .to_ir()
+                .into_iter()
+                .map(|w| w.as_stmt())
+                .collect();
             let stmts = canon::canonicalize(subr_lbl, ir_stmts);
             eprintln!("{stmts:#?}");
             for stmt in stmts {
@@ -39,7 +48,7 @@ mod tests {
     #[test]
     fn basic() {
         assert_debug_snapshot!(compile_to_lark(
-        "
+            "
             subr main() nat {
                 ret 0;
             }

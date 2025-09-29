@@ -64,7 +64,7 @@ impl IrWrap {
                     Stmt::Seq(stmt, Box::new(rest))
                 }
                 _ => Stmt::RVal(rval.clone()),
-            }
+            },
             IrWrap::Cond(mk_stmt) => {
                 let after = Lbl::fresh("after_cond");
                 Stmt::Seq(Box::new(mk_stmt(after, after)), Box::new(Stmt::Lbl(after)))

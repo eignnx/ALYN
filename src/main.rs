@@ -1,6 +1,5 @@
 #![feature(deref_patterns)]
 #![allow(incomplete_features)]
-
 #![allow(unused)]
 
 use std::path::{Path, PathBuf};
@@ -9,8 +8,9 @@ use crate::instr_sel::InstrSel;
 
 mod ast;
 mod ast_to_ir;
-mod instr_sel;
+mod canon;
 mod frame;
+mod instr_sel;
 mod ir;
 mod names;
 mod parse;
@@ -19,7 +19,6 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
-mod canon;
 
 fn main() {
     let Some(fname) = std::env::args().nth(1) else {

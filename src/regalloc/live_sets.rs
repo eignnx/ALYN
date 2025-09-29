@@ -129,7 +129,7 @@ impl<'a, I: std::fmt::Debug> std::fmt::Display for DisplayLiveSets<'a, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, stmt) in self.stmts.iter().enumerate() {
             // Write stmt
-            write!(f, "{:<30} ", format!("{stmt:?}"))?;
+            write!(f, "|\t{:<40} ", format!("{stmt:?}"))?;
             // Write live-ins
             write!(f, "{{")?;
             for live_in in self.live_sets.get_live_ins(i) {

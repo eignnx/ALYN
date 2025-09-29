@@ -6,7 +6,10 @@ use std::{
 use derive_more::{Debug, Display, From};
 use internment::Intern;
 
-use crate::{canon, ir, names::{self, Lbl, Tmp}};
+use crate::{
+    canon, ir,
+    names::{self, Lbl, Tmp},
+};
 
 use super::InstrSel;
 
@@ -142,7 +145,13 @@ impl<'a> LarkBackend<'a> {
         self.out.push(instr);
     }
 
-    fn imm_binop_to_asm(&mut self, op: canon::Binop, x: canon::RVal, imm: Imm, dst: impl Into<Option<Stg>>) -> Stg {
+    fn imm_binop_to_asm(
+        &mut self,
+        op: canon::Binop,
+        x: canon::RVal,
+        imm: Imm,
+        dst: impl Into<Option<Stg>>,
+    ) -> Stg {
         let x_dst = self.expr_to_asm(x, None);
         let dst = dst.into();
         fn with_dst(dst: Option<Stg>, base_name: &'static str, code: impl FnOnce(Stg)) -> Stg {
@@ -164,7 +173,13 @@ impl<'a> LarkBackend<'a> {
         }
     }
 
-    fn binop_to_asm(&mut self, op: canon::Binop, x: canon::RVal, y: canon::RVal, dst: impl Into<Option<Stg>>) -> Stg {
+    fn binop_to_asm(
+        &mut self,
+        op: canon::Binop,
+        x: canon::RVal,
+        y: canon::RVal,
+        dst: impl Into<Option<Stg>>,
+    ) -> Stg {
         let x_dst = self.expr_to_asm(x, None);
         let y_dst = self.expr_to_asm(y, None);
         let dst = dst.into();
@@ -198,16 +213,16 @@ impl<'a> InstrSel for LarkBackend<'a> {
     type Instruction = Instr;
 
     fn stmt_to_asm(&mut self, stmt: crate::canon::Stmt) {
-        use crate::canon::{self, Stmt, RVal::*, LVal::*, Binop::*};
+        use crate::canon::{self, Binop::*, LVal::*, RVal::*, Stmt};
         match stmt {
             // M[base + n] = src
-            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Int(offset)))), rhs) |
-            Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Int(offset)), LVal(Tmp(base)))), rhs) => {
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Int(offset)))), rhs)
+            | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Int(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
                 self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
-            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Nat(offset)))), rhs) |
-            Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Nat(offset)), LVal(Tmp(base)))), rhs) => {
+            Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Nat(offset)))), rhs)
+            | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Nat(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
                 self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
@@ -253,13 +268,20 @@ impl<'a> InstrSel for LarkBackend<'a> {
             }
             Stmt::Jmp(lbl) => self.emit(Instr::J(lbl)),
 
-            Stmt::Br {e1, op, e2, if_true} => {
+            Stmt::Br {
+                e1,
+                op,
+                e2,
+                if_true,
+            } => {
                 let e1_tmp = self.expr_to_asm(e1, None);
                 let e2_tmp = self.expr_to_asm(e2, None);
                 let bool_tmp = names::Tmp::fresh("bool");
                 match op {
                     ir::Relop::Eq => self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
-                    ir::Relop::LtU => self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::LtU => {
+                        self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
+                    }
                     _ => todo!("impl relop: {op:?}"),
                 }
                 self.emit(Bt(bool_tmp.into(), if_true.into()));
@@ -276,12 +298,13 @@ impl<'a> InstrSel for LarkBackend<'a> {
     }
 
     fn expr_to_asm(&mut self, rval: crate::canon::RVal, dst: impl Into<Option<Stg>>) -> Stg {
-        use crate::canon::{Binop::*, RVal::*, LVal::*, Imm::*};
+        use crate::canon::{Binop::*, Imm::*, LVal::*, RVal::*};
 
         // If no destination tmp has been provided, create one using the given base name.
         // If one has been provided, use that instead.
         let mk_dst = |base_name: &str| -> Stg {
-            dst.into().unwrap_or_else(|| names::Tmp::fresh(base_name).into())
+            dst.into()
+                .unwrap_or_else(|| names::Tmp::fresh(base_name).into())
         };
 
         match rval {
@@ -306,7 +329,7 @@ impl<'a> InstrSel for LarkBackend<'a> {
                     self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
                     dst
                 }
-            }
+            },
             LVal(lval) => match lval {
                 Tmp(tmp) => tmp.into(),
                 Mem(rval) => {
@@ -317,7 +340,9 @@ impl<'a> InstrSel for LarkBackend<'a> {
                 }
             },
 
-            Binop(op, x, Imm(Nat(n))) => self.imm_binop_to_asm(op, *x, self::Imm::Int(n as u16), mk_dst("imm_binop_res")),
+            Binop(op, x, Imm(Nat(n))) => {
+                self.imm_binop_to_asm(op, *x, self::Imm::Int(n as u16), mk_dst("imm_binop_res"))
+            }
             Binop(op, x, y) => self.binop_to_asm(op, *x, *y, mk_dst("binop_res")),
 
             Unop(unop, rval) => todo!(),

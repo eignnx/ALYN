@@ -8,7 +8,10 @@ use crate::{ir, names::Lbl};
 ///     + Either Stmt::RVal(RVal::Call(..)),
 ///     + or Stmt::Move(Tmp(..), RVal::Call(..))
 pub mod flatten {
-    use crate::{ir::{LVal, RVal, Stmt}, names::Tmp};
+    use crate::{
+        ir::{LVal, RVal, Stmt},
+        names::Tmp,
+    };
 
     pub fn flatten_stmt(stmt: Stmt, out: &mut Vec<Stmt>) {
         match stmt {
@@ -25,10 +28,22 @@ pub mod flatten {
                 let rval = flatten_rval(rval, out);
                 out.push(Stmt::Jmp(rval, lbls));
             }
-            Stmt::Br { op, e1, e2, if_true, if_false } => {
+            Stmt::Br {
+                op,
+                e1,
+                e2,
+                if_true,
+                if_false,
+            } => {
                 let e1 = flatten_rval(e1, out);
                 let e2 = flatten_rval(e2, out);
-                out.push(Stmt::Br { op, e1, e2, if_true, if_false });
+                out.push(Stmt::Br {
+                    op,
+                    e1,
+                    e2,
+                    if_true,
+                    if_false,
+                });
             }
             Stmt::Seq(stmt1, stmt2) => {
                 flatten_stmt(*stmt1, out);
@@ -51,7 +66,7 @@ pub mod flatten {
                 let x = flatten_rval(*x, out);
                 let y = flatten_rval(*y, out);
                 RVal::Binop(binop, Box::new(x), Box::new(y))
-            },
+            }
             RVal::Call(func @ RVal::Lbl(_), args) => {
                 // TODO: don't create temporary if func has ret type void
                 let mut new_args = Vec::new();
@@ -92,7 +107,10 @@ pub mod flatten {
 pub mod basic_blocks {
     use std::{collections::BTreeMap, mem};
 
-    use crate::{ir::{LVal, RVal, Relop, Stmt}, names::{Lbl, Tmp}};
+    use crate::{
+        ir::{LVal, RVal, Relop, Stmt},
+        names::{Lbl, Tmp},
+    };
 
     // Basic Block
     #[derive(Debug, PartialEq)]
@@ -105,7 +123,9 @@ pub mod basic_blocks {
         pub fn successors(&self) -> impl DoubleEndedIterator<Item = Lbl> {
             let mut succs = Vec::new();
             match &self.last {
-                Stmt::Br { if_false, if_true, .. } => {
+                Stmt::Br {
+                    if_false, if_true, ..
+                } => {
                     succs.push(*if_false); // We want these visited first
                     succs.push(*if_true);
                 }
@@ -168,52 +188,59 @@ pub mod basic_blocks {
                     match stmt {
                         Stmt::Lbl(lbl) => {
                             // End current block, insert jump to next one, create next one.
-                            bbs.blocks.insert(current_bb_label, Bb {
-                                stmts: mem::replace(&mut current_bb, Vec::new()),
-                                last: Stmt::direct_jmp(lbl),
-                            });
+                            bbs.blocks.insert(
+                                current_bb_label,
+                                Bb {
+                                    stmts: mem::replace(&mut current_bb, Vec::new()),
+                                    last: Stmt::direct_jmp(lbl),
+                                },
+                            );
                             current_bb_label = lbl;
                             current_bb.push(Stmt::Lbl(lbl));
-                        },
+                        }
 
                         Stmt::Br { .. } | Stmt::Jmp(..) | Stmt::Ret(..) => {
-                            bbs.blocks.insert(current_bb_label, Bb {
-                                stmts: mem::replace(&mut current_bb, Vec::new()),
-                                last: stmt,
-                            });
+                            bbs.blocks.insert(
+                                current_bb_label,
+                                Bb {
+                                    stmts: mem::replace(&mut current_bb, Vec::new()),
+                                    last: stmt,
+                                },
+                            );
                             state = State::DroppingTillLbl;
                         }
 
-                        Stmt::Move(..) | Stmt::RVal(..) |  Stmt::Nop => current_bb.push(stmt),
+                        Stmt::Move(..) | Stmt::RVal(..) | Stmt::Nop => current_bb.push(stmt),
                         Stmt::Seq(..) => unreachable!(),
                     }
                 }
-                State::DroppingTillLbl => {
-                    loop {
-                        if let Stmt::Lbl(lbl) = stmt {
-                            current_bb_label = lbl;
-                            current_bb.push(Stmt::Lbl(lbl));
-                            state = State::CollectingStmts;
-                            continue 'main;
-                        } else {
-                            drop(stmt);
-                        }
-
-                        if let Some(s) = stmts.next() {
-                            stmt = s;
-                        } else {
-                            break 'main;
-                        }
+                State::DroppingTillLbl => loop {
+                    if let Stmt::Lbl(lbl) = stmt {
+                        current_bb_label = lbl;
+                        current_bb.push(Stmt::Lbl(lbl));
+                        state = State::CollectingStmts;
+                        continue 'main;
+                    } else {
+                        drop(stmt);
                     }
-                }
+
+                    if let Some(s) = stmts.next() {
+                        stmt = s;
+                    } else {
+                        break 'main;
+                    }
+                },
             }
         }
 
         if !current_bb.is_empty() {
-            bbs.blocks.insert(current_bb_label, Bb {
-                stmts: current_bb,
-                last: Stmt::Ret(None),
-            });
+            bbs.blocks.insert(
+                current_bb_label,
+                Bb {
+                    stmts: current_bb,
+                    last: Stmt::Ret(None),
+                },
+            );
         }
 
         bbs
@@ -221,41 +248,61 @@ pub mod basic_blocks {
 
     #[test]
     fn build_bb() {
-        use Stmt::*;
         use crate::ir::RVal;
-        let br = Br { op: Relop::Eq, e1: RVal::Int(1), e2: RVal::Int(1), if_true: "B".into(), if_false: "A".into() };
+        use Stmt::*;
+        let br = Br {
+            op: Relop::Eq,
+            e1: RVal::Int(1),
+            e2: RVal::Int(1),
+            if_true: "B".into(),
+            if_false: "A".into(),
+        };
         let stmts = vec![
             Nop,
             Nop,
             Lbl("A".into()),
             Nop,
             br.clone(),
-            Nop, // dead code
+            Nop,                   // dead code
             Stmt::direct_jmp("B"), // dead code
-            Nop, // dead code
+            Nop,                   // dead code
             Lbl("B".into()),
             Nop,
             Ret(None),
         ];
         let bbs = group_into_bbs("test_subr".into(), stmts);
         insta::assert_debug_snapshot!(bbs);
-        assert_eq!(bbs, Bbs {
-            entry: bbs.entry,
-            blocks: [
-                (bbs.entry, Bb {
-                    stmts: vec![Stmt::Lbl(bbs.entry), Nop, Nop],
-                    last: Stmt::direct_jmp("A"),
-                }),
-                ("A".into(), Bb {
-                    stmts: vec![Lbl("A".into()), Nop],
-                    last: br,
-                }),
-                ("B".into(), Bb {
-                    stmts: vec![Lbl("B".into()), Nop],
-                    last: Ret(None),
-                }),
-            ].into_iter().collect()
-        });
+        assert_eq!(
+            bbs,
+            Bbs {
+                entry: bbs.entry,
+                blocks: [
+                    (
+                        bbs.entry,
+                        Bb {
+                            stmts: vec![Stmt::Lbl(bbs.entry), Nop, Nop],
+                            last: Stmt::direct_jmp("A"),
+                        }
+                    ),
+                    (
+                        "A".into(),
+                        Bb {
+                            stmts: vec![Lbl("A".into()), Nop],
+                            last: br,
+                        }
+                    ),
+                    (
+                        "B".into(),
+                        Bb {
+                            stmts: vec![Lbl("B".into()), Nop],
+                            last: Ret(None),
+                        }
+                    ),
+                ]
+                .into_iter()
+                .collect()
+            }
+        );
     }
 }
 
@@ -263,9 +310,9 @@ pub mod basic_blocks {
 /// Decide on an ordering of basic blocks that (mostly) has branch instructions followed by their
 /// false label, and jumps followed by their target (if possible).
 mod trace {
-    use std::collections::BTreeSet;
-    use crate::{ir::Stmt, names::Lbl};
     use super::basic_blocks::{Bb, Bbs};
+    use crate::{ir::Stmt, names::Lbl};
+    use std::collections::BTreeSet;
 
     struct TraceScheduler {
         bbs: Bbs,
@@ -311,9 +358,8 @@ mod trace {
 
                 self.visited.insert(block_lbl);
 
-                let mut unvisited_successors = bb
-                    .successors()
-                    .filter(|lbl| !self.visited.contains(lbl));
+                let mut unvisited_successors =
+                    bb.successors().filter(|lbl| !self.visited.contains(lbl));
 
                 if let Some(next_lbl) = unvisited_successors.next() {
                     // There's more to this trace, advance to next `Bb` in next iteration.
@@ -339,30 +385,59 @@ mod trace {
 
     #[test]
     fn build_trace() {
-        use Stmt::*;
-        use crate::{ir::{LVal, RVal, Relop, Stmt}, names::{Lbl, Tmp}};
         use super::basic_blocks::group_into_bbs;
+        use crate::{
+            ir::{LVal, RVal, Relop, Stmt},
+            names::{Lbl, Tmp},
+        };
+        use Stmt::*;
 
         let bbs = Bbs {
             entry: "entry".into(),
             blocks: [
-                ("entry".into(), Bb {
-                    stmts: vec![Stmt::Lbl("entry".into()), Nop, Nop],
-                    last: Stmt::direct_jmp("A"),
-                }),
-                ("A".into(), Bb {
-                    stmts: vec![Lbl("A".into()), Nop],
-                    last: Br { op: Relop::Eq, e1: RVal::Int(1), e2: RVal::Int(1), if_true: "B".into(), if_false: "C".into() },
-                }),
-                ("B".into(), Bb {
-                    stmts: vec![Lbl("B".into()), Nop],
-                    last: Ret(None),
-                }),
-                ("C".into(), Bb {
-                    stmts: vec![Lbl("C".into()), Nop, Nop],
-                    last: Br { op: Relop::Eq, e1: RVal::Int(1), e2: RVal::Int(1), if_true: "C".into(), if_false: "A".into() },
-                }),
-            ].into_iter().collect()
+                (
+                    "entry".into(),
+                    Bb {
+                        stmts: vec![Stmt::Lbl("entry".into()), Nop, Nop],
+                        last: Stmt::direct_jmp("A"),
+                    },
+                ),
+                (
+                    "A".into(),
+                    Bb {
+                        stmts: vec![Lbl("A".into()), Nop],
+                        last: Br {
+                            op: Relop::Eq,
+                            e1: RVal::Int(1),
+                            e2: RVal::Int(1),
+                            if_true: "B".into(),
+                            if_false: "C".into(),
+                        },
+                    },
+                ),
+                (
+                    "B".into(),
+                    Bb {
+                        stmts: vec![Lbl("B".into()), Nop],
+                        last: Ret(None),
+                    },
+                ),
+                (
+                    "C".into(),
+                    Bb {
+                        stmts: vec![Lbl("C".into()), Nop, Nop],
+                        last: Br {
+                            op: Relop::Eq,
+                            e1: RVal::Int(1),
+                            e2: RVal::Int(1),
+                            if_true: "C".into(),
+                            if_false: "A".into(),
+                        },
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         insta::assert_debug_snapshot!(schedule_traces(bbs));
@@ -374,8 +449,11 @@ mod trace {
 /// - Ensure all branch instructions fallthrough on false
 mod post_process {
 
-    use crate::{ir::{RVal, Relop, Stmt}, names::Lbl};
     use super::basic_blocks::Bb;
+    use crate::{
+        ir::{RVal, Relop, Stmt},
+        names::Lbl,
+    };
 
     pub fn post_process(schedule: Vec<Bb>) -> Vec<Stmt> {
         let mut output = Vec::new();
@@ -407,9 +485,9 @@ mod post_process {
         // |     ...       |
         // -----------------
         if let Stmt::Jmp(_, [l1]) = &bb.last
-        && let Stmt::Lbl(l2) = bb_next.stmts.first().unwrap()
-        && l1 == l2 {
-
+            && let Stmt::Lbl(l2) = bb_next.stmts.first().unwrap()
+            && l1 == l2
+        {
             output.extend(bb.stmts);
 
             // Skip `bb.last` (the uneccessary jump).
@@ -426,9 +504,19 @@ mod post_process {
         // | Stmt::Lbl(..) |
         // |     ...       |
         // -----------------
-        if let Bb { stmts, last: last @ Stmt::Br { op, e1, e2, if_true, if_false } } = &bb
-        && let Stmt::Lbl(lbl_next) = bb_next.stmts.first().unwrap() {
-
+        if let Bb {
+            stmts,
+            last:
+                last @ Stmt::Br {
+                    op,
+                    e1,
+                    e2,
+                    if_true,
+                    if_false,
+                },
+        } = &bb
+            && let Stmt::Lbl(lbl_next) = bb_next.stmts.first().unwrap()
+        {
             output.extend(stmts.clone());
 
             if if_true == lbl_next {
@@ -442,7 +530,13 @@ mod post_process {
                 // => Adjust branch so `if_false` is now `L`.
                 // => Insert `Stmt::Lbl(L); Stmt::direct_jmp(if_false)` after the branch.
                 let springboard = Lbl::fresh("springboard");
-                output.push(Stmt::Br { if_false: springboard, op: *op, e1: e1.clone(), e2: e2.clone(), if_true: *if_true });
+                output.push(Stmt::Br {
+                    if_false: springboard,
+                    op: *op,
+                    e1: e1.clone(),
+                    e2: e2.clone(),
+                    if_true: *if_true,
+                });
                 output.push(Stmt::Lbl(springboard));
                 output.push(Stmt::direct_jmp(*if_false));
                 return;
@@ -489,40 +583,37 @@ mod post_process {
     fn test_post_process() {
         let bbs = vec![
             Bb {
-                stmts: vec![
-                    Stmt::Lbl("entry".into()),
-                    Stmt::Nop,
-                ],
+                stmts: vec![Stmt::Lbl("entry".into()), Stmt::Nop],
                 last: Stmt::direct_jmp("x_lt_10"),
             },
             Bb {
-                stmts: vec![
-                    Stmt::Lbl("x_lt_10".into()),
-                    Stmt::Nop,
-                ],
-                last: Stmt::Br { op: Relop::Lt, e1: RVal::tmp("y"), e2: 0i64.into(), if_true: "y_negative".into(), if_false: "entry".into() },
+                stmts: vec![Stmt::Lbl("x_lt_10".into()), Stmt::Nop],
+                last: Stmt::Br {
+                    op: Relop::Lt,
+                    e1: RVal::tmp("y"),
+                    e2: 0i64.into(),
+                    if_true: "y_negative".into(),
+                    if_false: "entry".into(),
+                },
             },
             Bb {
-                stmts: vec![
-                    Stmt::Lbl("y_negative".into()),
-                    Stmt::Nop,
-                ],
-                last: Stmt::Br { op: Relop::LtU, e1: RVal::tmp("x"), e2: 10u64.into(), if_true: "x_lt_10".into(), if_false: "x_is_big".into() },
+                stmts: vec![Stmt::Lbl("y_negative".into()), Stmt::Nop],
+                last: Stmt::Br {
+                    op: Relop::LtU,
+                    e1: RVal::tmp("x"),
+                    e2: 10u64.into(),
+                    if_true: "x_lt_10".into(),
+                    if_false: "x_is_big".into(),
+                },
             },
             Bb {
-                stmts: vec![
-                    Stmt::Lbl("get_outta_here".into()),
-                    Stmt::Nop,
-                ],
+                stmts: vec![Stmt::Lbl("get_outta_here".into()), Stmt::Nop],
                 last: Stmt::Ret(None),
             },
             Bb {
-                stmts: vec![
-                    Stmt::Lbl("x_is_big".into()),
-                    Stmt::Nop,
-                ],
+                stmts: vec![Stmt::Lbl("x_is_big".into()), Stmt::Nop],
                 last: Stmt::direct_jmp("get_outta_here"),
-            }
+            },
         ];
 
         insta::assert_debug_snapshot!(post_process(bbs));
@@ -532,16 +623,23 @@ mod post_process {
 pub mod canon_ir {
     use smallvec::SmallVec;
 
-    use crate::{ir, names::{Lbl, Tmp}};
     pub use crate::ir::{Binop, Relop, Unop};
+    use crate::{
+        ir,
+        names::{Lbl, Tmp},
+    };
 
     #[derive(Debug)]
     pub enum Stmt {
         Move(LVal, RVal),
         Call(Option<Tmp>, Lbl, SmallVec<[RVal; 2]>),
         // TODO: CallIndirect(Option<Tmp>, Tmp, SmallVec<[Tmp; 2]>),
-
-        Br { op: Relop, e1: RVal, e2: RVal, if_true: Lbl },
+        Br {
+            op: Relop,
+            e1: RVal,
+            e2: RVal,
+            if_true: Lbl,
+        },
         Jmp(Lbl),
         Switch(RVal, SmallVec<[Lbl; 2]>),
 
@@ -588,13 +686,24 @@ pub mod canon_ir {
 
                 ir::Stmt::Move(lval, rval) => Stmt::Move(lval.into(), rval.into()),
                 // Can almost replace `ir::Stmt::RVal(..)` with `Nop`, but MMIO may require mem loads be executed.
-                ir::Stmt::RVal(rval) => Stmt::Discard(rval.into()), 
+                ir::Stmt::RVal(rval) => Stmt::Discard(rval.into()),
 
                 ir::Stmt::Jmp(_, []) => unreachable!("Encountered Stmt::Jmp(_, [])!\n!!! {stmt:?}"),
                 ir::Stmt::Jmp(ir::RVal::Lbl(_), [lbl]) => Stmt::Jmp(lbl),
                 ir::Stmt::Jmp(rval, lbls) => Stmt::Switch(rval.into(), lbls.into()),
 
-                ir::Stmt::Br { op, e1, e2, if_true, if_false: _ } => Stmt::Br { op, e1: e1.into(), e2: e2.into(), if_true },
+                ir::Stmt::Br {
+                    op,
+                    e1,
+                    e2,
+                    if_true,
+                    if_false: _,
+                } => Stmt::Br {
+                    op,
+                    e1: e1.into(),
+                    e2: e2.into(),
+                    if_true,
+                },
 
                 ir::Stmt::Lbl(lbl) => Stmt::Lbl(lbl),
 
@@ -603,7 +712,9 @@ pub mod canon_ir {
                 ir::Stmt::Ret(Some(rval)) => Stmt::Ret(Some(rval.into())),
                 ir::Stmt::Ret(None) => Stmt::Ret(None),
 
-                ir::Stmt::Seq(..) => unreachable!("Stmt::Seq terms weren't all removed in `flatten` step!\n!!! {stmt:?}"),
+                ir::Stmt::Seq(..) => unreachable!(
+                    "Stmt::Seq terms weren't all removed in `flatten` step!\n!!! {stmt:?}"
+                ),
             }
         }
     }
@@ -622,7 +733,9 @@ pub mod canon_ir {
                 ir::RVal::Unop(unop, rval) => RVal::Unop(unop, rval.into()),
                 ir::RVal::BitCast(ty, rval) => todo!(),
                 ir::RVal::Call(rval, rvals) => unreachable!(),
-                ir::RVal::Seq(stmt, rval) => unreachable!("RVal::Seq terms weren't all removed in `flatten` step!\n!!! {rval:?}"),
+                ir::RVal::Seq(stmt, rval) => unreachable!(
+                    "RVal::Seq terms weren't all removed in `flatten` step!\n!!! {rval:?}"
+                ),
             }
         }
     }
