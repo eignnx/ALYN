@@ -4,7 +4,7 @@ use std::{
     io::Write,
 };
 
-use crate::{names::Tmp, regalloc::live_sets::LiveSets};
+use crate::{names::Tmp, regalloc::{live_sets::LiveSets, Cc}};
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
@@ -54,7 +54,7 @@ impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
 }
 
 impl<R> ColorGraph<R> 
-where R: std::fmt::Debug + Ord + Clone
+where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
 {
     fn from_interferences(interferences: Interferences) -> Self {
         let graph = interferences
@@ -86,13 +86,13 @@ where R: std::fmt::Debug + Ord + Clone
     }
 
     #[track_caller]
-    fn is_sig_degree<const N: usize>(&self, ng: &Stg<R>) -> bool {
-        self.degree(ng) >= N
+    fn is_sig_degree(&self, ng: &Stg<R>) -> bool {
+        self.degree(ng) >= R::N_GPRS
     }
 
     #[track_caller]
-    fn is_insig_degree<const N: usize>(&self, ng: &Stg<R>) -> bool {
-        self.degree(ng) < N
+    fn is_insig_degree(&self, ng: &Stg<R>) -> bool {
+        self.degree(ng) < R::N_GPRS
     }
 
     fn coalesce(&mut self, ng1: &Stg<R>, ng2: &Stg<R>) {
@@ -106,10 +106,10 @@ where R: std::fmt::Debug + Ord + Clone
         entry
     }
 
-    fn take_some_insig_node<const N: usize>(&mut self) -> Option<NodeEntry<R>> {
+    fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
         let mut key: Option<Stg<R>> = None;
         for ng in self.graph.keys() {
-            if self.is_insig_degree::<N>(ng) {
+            if self.is_insig_degree(ng) {
                 key = Some(ng.clone());
                 break;
             }
@@ -140,19 +140,19 @@ where R: std::fmt::Debug + Ord + Clone
     }
 }
 
-pub struct RegAllocation<I: Instr> {
+pub struct RegAllocation<I: Instr, R> {
     cfg: Cfg<I>,
-    assignments: BTreeMap<Tmp, usize>,
+    assignments: BTreeMap<Tmp, R>,
 }
 
 /// Register Allocator
-pub struct RegAlloc<const N_GPRS: usize, R> {
+pub struct RegAlloc<R> {
     /// Maps temporaries to an offset from the frame pointer.
     stack_slots_allocated: BTreeMap<Stg<R>, i32>,
 }
 
-impl<const N_GPRS: usize, R> RegAlloc<N_GPRS, R> 
-where R: std::fmt::Debug + Ord + Clone
+impl<R> RegAlloc<R> 
+where R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static
 {
     fn new() -> Self {
         Self {
@@ -162,7 +162,7 @@ where R: std::fmt::Debug + Ord + Clone
 
     const MAX_ITERS: usize = 16;
 
-    fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I> {
+    fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I, R> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
@@ -197,7 +197,7 @@ where R: std::fmt::Debug + Ord + Clone
 
         loop {
             // First remove all easy nodes and save them to the stack.
-            while let Some(entry) = color_graph.take_some_insig_node::<N_GPRS>() {
+            while let Some(entry) = color_graph.take_some_insig_node() {
                 eprintln!(">> simplify: {:?}", entry.0);
                 stack.push(entry);
             }
@@ -220,8 +220,8 @@ where R: std::fmt::Debug + Ord + Clone
         &mut self,
         color_graph: &mut ColorGraph<R>,
         stack: &mut Vec<NodeEntry<R>>,
-    ) -> Result<BTreeMap<Tmp, usize>, Stg<R>> {
-        let mut assignments = BTreeMap::new();
+    ) -> Result<BTreeMap<Tmp, R>, Stg<R>> {
+        let mut assignments = BTreeMap::<Tmp, R>::new();
 
         while let Some((stg, neighbors)) = stack.pop() {
             color_graph.insert(stg.clone(), neighbors.clone());
@@ -245,22 +245,22 @@ where R: std::fmt::Debug + Ord + Clone
     fn select_once(
         &mut self,
         color_graph: &mut ColorGraph<R>,
-        assignments: &BTreeMap<Tmp, usize>,
+        assignments: &BTreeMap<Tmp, R>,
         stg: Stg<R>,
         neighbors: BTreeSet<Stg<R>>,
-    ) -> Option<(Stg<R>, usize)> {
+    ) -> Option<(Stg<R>, R)> {
         let mut reg_ids_in_use = BTreeSet::new();
         for neighbor in color_graph.active_neighbors_of(&stg) {
             if let Stg::Tmp(tmp) = neighbor {
-                let in_use = *assignments.get(tmp).unwrap();
+                let in_use = assignments.get(tmp).unwrap().clone();
                 reg_ids_in_use.insert(in_use);
             } else {
                 // TODO: anything here?
             }
         }
-        for reg_id in 0..N_GPRS {
-            if !reg_ids_in_use.contains(&reg_id) {
-                return Some((stg, reg_id));
+        for gpr in R::GPRS {
+            if !reg_ids_in_use.contains(&gpr) {
+                return Some((stg, gpr.clone()));
             }
         }
         None
@@ -329,20 +329,26 @@ where R: std::fmt::Debug + Ord + Clone
 
 #[cfg(test)]
 mod tests {
+    use derive_more::Display;
+
     use super::super::test_datastructures::{Expr as E, Expr, Stmt as S, Stmt};
     use super::*;
 
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Debug, Display, Clone, PartialEq, Eq, PartialOrd, Ord)]
     enum Reg {
         R1, R2, R3
     }
 
-    fn compute_assignments<const N: usize>(params: Vec<Tmp>, program: Vec<Stmt>) {
+    impl Cc<Reg> for Reg {
+        const GPRS: &[Self] = &[Reg::R1, Reg::R2, Reg::R3];
+    }
+
+    fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
 
         crate::names::reset_name_ids();
-        eprintln!("<<<<<<<<<<<<< N_GPRS = {N} >>>>>>>>>>>>>");
+        eprintln!("<<<<<<<<<<<<< GPRS = {:?} >>>>>>>>>>>>>", Reg::GPRS);
         let cfg = Cfg::new(0, params, program);
-        let mut ra = RegAlloc::<N, Reg>::new();
+        let mut ra = RegAlloc::<Reg>::new();
         let alloc = ra.allocate_registers(cfg);
         eprintln!("ASSIGNMENTS:");
         for (tmp, reg_id) in &alloc.assignments {
@@ -391,11 +397,11 @@ mod tests {
             S::ret("p"),
         ];
 
-        compute_assignments::<3>(vec!["base".into(), "n".into()], program.clone());
+        compute_assignments(vec!["base".into(), "n".into()], program.clone());
         eprintln!("==============================");
         eprintln!("==============================");
         eprintln!("==============================");
-        compute_assignments::<2>(vec!["base".into(), "n".into()], program.clone());
+        compute_assignments(vec!["base".into(), "n".into()], program.clone());
     }
 
     #[test]
@@ -460,10 +466,10 @@ mod tests {
                  S::Br(E::binop("low", "high"), "loop_top".into()),
             S::ret(-1),
         ];
-        compute_assignments::<3>(vec!["x".into(), "v".into(), "n".into()], program.clone());
+        compute_assignments(vec!["x".into(), "v".into(), "n".into()], program.clone());
         eprintln!("=======================================");
         eprintln!("=======================================");
         eprintln!("=======================================");
-        compute_assignments::<4>(vec!["x".into(), "v".into(), "n".into()], program.clone());
+        compute_assignments(vec!["x".into(), "v".into(), "n".into()], program.clone());
     }
 }

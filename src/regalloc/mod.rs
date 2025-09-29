@@ -50,3 +50,11 @@ pub trait Instr: std::fmt::Debug {
     fn mk_store_to_stack(addr: i32, src: Tmp) -> Self;
     fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self;
 }
+
+/// Calling convention
+pub trait Cc<R: 'static + Clone> {
+    /// A list of all the available general-purpose registers.
+    const GPRS: &'static [R];
+
+    const N_GPRS: usize = Self::GPRS.len();
+}
