@@ -9,48 +9,34 @@ use crate::{names::Tmp, regalloc::live_sets::LiveSets};
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct NodeGroup(SmallVec<[Tmp; 2]>);
+/// A storage node
+pub enum Stg<R> {
+    Tmp(Tmp),
+    Reg(R),
+}
 
-impl From<Tmp> for NodeGroup {
+impl<R> From<Tmp> for Stg<R> {
     fn from(tmp: Tmp) -> Self {
-        Self(smallvec![tmp])
+        Self::Tmp(tmp)
     }
 }
 
-impl NodeGroup {
-    #[track_caller]
-    fn get_one(&self) -> &Tmp {
-        self.0.first().expect("Empty NodeGroup!")
-    }
-
-    fn iter(&self) -> impl Iterator<Item = Tmp> {
-        self.0.iter().copied()
-    }
-}
-
-impl std::fmt::Debug for NodeGroup {
+impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.0.len() == 1 {
-            write!(f, "{:?}", self.0[0])
-        } else {
-            for (i, tmp) in self.iter().enumerate() {
-                if i > 0 {
-                    write!(f, "&")?;
-                }
-                write!(f, "{tmp:?}")?;
-            }
-            Ok(())
+        match self {
+            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Stg::Reg(reg) => write!(f, "{reg:?}"),
         }
     }
 }
 
-type NodeEntry = (NodeGroup, BTreeSet<NodeGroup>);
+type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 
-struct ColorGraph {
-    graph: BTreeMap<NodeGroup, BTreeSet<NodeGroup>>,
+struct ColorGraph<R> {
+    graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
 }
 
-impl std::fmt::Debug for ColorGraph {
+impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "strict graph {{")?;
         for (tmp, neighbors) in &self.graph {
@@ -67,27 +53,29 @@ impl std::fmt::Debug for ColorGraph {
     }
 }
 
-impl ColorGraph {
+impl<R> ColorGraph<R> 
+where R: std::fmt::Debug + Ord + Clone
+{
     fn from_interferences(interferences: Interferences) -> Self {
         let graph = interferences
             .take_graph()
             .into_iter()
             .map(|(tmp, neighbors)| {
-                let neighbors = neighbors.into_iter().map(NodeGroup::from).collect();
-                (NodeGroup::from(tmp), neighbors)
+                let neighbors = neighbors.into_iter().map(Stg::from).collect();
+                (tmp.into(), neighbors)
             })
             .collect();
         Self { graph }
     }
 
-    fn insert(&mut self, ng: NodeGroup, neighbors: BTreeSet<NodeGroup>) {
+    fn insert(&mut self, ng: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
         self.graph.insert(ng, neighbors);
     }
 
     #[track_caller]
-    fn degree(&self, ng: &NodeGroup) -> usize {
+    fn degree(&self, ng: &Stg<R>) -> usize {
         let Some(neighbors) = self.graph.get(ng) else {
-            panic!("Unknown NodeGroup: {ng:?}");
+            panic!("Unknown storage node: {ng:?}");
         };
 
         // Only count node groups that haven't been removed from the graph.
@@ -98,28 +86,28 @@ impl ColorGraph {
     }
 
     #[track_caller]
-    fn is_sig_degree<const N: usize>(&self, ng: &NodeGroup) -> bool {
+    fn is_sig_degree<const N: usize>(&self, ng: &Stg<R>) -> bool {
         self.degree(ng) >= N
     }
 
     #[track_caller]
-    fn is_insig_degree<const N: usize>(&self, ng: &NodeGroup) -> bool {
+    fn is_insig_degree<const N: usize>(&self, ng: &Stg<R>) -> bool {
         self.degree(ng) < N
     }
 
-    fn coalesce(&mut self, ng1: &NodeGroup, ng2: &NodeGroup) {
+    fn coalesce(&mut self, ng1: &Stg<R>, ng2: &Stg<R>) {
         todo!()
     }
 
-    fn take(&mut self, ng: &NodeGroup) -> NodeEntry {
+    fn take(&mut self, ng: &Stg<R>) -> NodeEntry<R> {
         let Some(entry) = self.graph.remove_entry(ng) else {
-            panic!("Unknown NodeGroup: {ng:?}");
+            panic!("Unknown storage node: {ng:?}");
         };
         entry
     }
 
-    fn take_some_insig_node<const N: usize>(&mut self) -> Option<NodeEntry> {
-        let mut key = None;
+    fn take_some_insig_node<const N: usize>(&mut self) -> Option<NodeEntry<R>> {
+        let mut key: Option<Stg<R>> = None;
         for ng in self.graph.keys() {
             if self.is_insig_degree::<N>(ng) {
                 key = Some(ng.clone());
@@ -129,7 +117,7 @@ impl ColorGraph {
         Some(self.take(&key?))
     }
 
-    fn choose_node_to_spill(&mut self) -> Option<NodeEntry> {
+    fn choose_node_to_spill(&mut self) -> Option<NodeEntry<R>> {
         let max_ng = self
             .graph
             .keys()
@@ -142,9 +130,9 @@ impl ColorGraph {
         Some(self.take(&max_ng))
     }
 
-    fn active_neighbors_of(&self, ng: &NodeGroup) -> impl Iterator<Item = &NodeGroup> {
+    fn active_neighbors_of(&self, ng: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
         let Some(neighbors) = self.graph.get(ng) else {
-            panic!("Unknown NodeGroup: {ng:?}");
+            panic!("Unknown Stg<R>: {ng:?}");
         };
         neighbors
             .iter()
@@ -158,12 +146,14 @@ pub struct RegAllocation<I: Instr> {
 }
 
 /// Register Allocator
-pub struct RegAlloc<const N_GPRS: usize> {
+pub struct RegAlloc<const N_GPRS: usize, R> {
     /// Maps temporaries to an offset from the frame pointer.
-    stack_slots_allocated: BTreeMap<NodeGroup, i32>,
+    stack_slots_allocated: BTreeMap<Stg<R>, i32>,
 }
 
-impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
+impl<const N_GPRS: usize, R> RegAlloc<N_GPRS, R> 
+where R: std::fmt::Debug + Ord + Clone
+{
     fn new() -> Self {
         Self {
             stack_slots_allocated: Default::default(),
@@ -189,7 +179,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         panic!("Register allocation failed: iteration limit exceeded");
     }
 
-    fn build_phase<I: Instr>(&mut self, cfg: &Cfg<I>) -> (LiveSets, ColorGraph) {
+    fn build_phase<I: Instr>(&mut self, cfg: &Cfg<I>) -> (LiveSets, ColorGraph<R>) {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
@@ -202,7 +192,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         (live_sets, cg)
     }
 
-    fn simplify_phase(&mut self, color_graph: &mut ColorGraph) -> Vec<NodeEntry> {
+    fn simplify_phase(&mut self, color_graph: &mut ColorGraph<R>) -> Vec<NodeEntry<R>> {
         let mut stack = Vec::new();
 
         loop {
@@ -228,24 +218,24 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 
     fn select_phase(
         &mut self,
-        color_graph: &mut ColorGraph,
-        stack: &mut Vec<NodeEntry>,
-    ) -> Result<BTreeMap<Tmp, usize>, NodeGroup> {
+        color_graph: &mut ColorGraph<R>,
+        stack: &mut Vec<NodeEntry<R>>,
+    ) -> Result<BTreeMap<Tmp, usize>, Stg<R>> {
         let mut assignments = BTreeMap::new();
 
-        while let Some((ng, neighbors)) = stack.pop() {
-            color_graph.insert(ng.clone(), neighbors.clone());
+        while let Some((stg, neighbors)) = stack.pop() {
+            color_graph.insert(stg.clone(), neighbors.clone());
             if let Some((ng, reg_id)) =
-                self.select_once(color_graph, &assignments, ng.clone(), neighbors)
+                self.select_once(color_graph, &assignments, stg.clone(), neighbors)
             {
-                for tmp in ng.iter() {
-                    eprintln!("  * select `{tmp:?}` --> `${reg_id}`");
-                    assignments.insert(tmp, reg_id);
+                match ng {
+                    Stg::Tmp(tmp) => { assignments.insert(tmp, reg_id); }
+                    Stg::Reg(_) => {}
                 }
             } else {
                 // Return the problematic node group for rewriting in the caller.
-                eprintln!("  * STOP! SPILL NEEDED FOR: {ng:?}");
-                return Err(ng);
+                eprintln!("  * STOP! SPILL NEEDED FOR: {stg:?}");
+                return Err(stg);
             }
         }
 
@@ -254,26 +244,29 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
 
     fn select_once(
         &mut self,
-        color_graph: &mut ColorGraph,
+        color_graph: &mut ColorGraph<R>,
         assignments: &BTreeMap<Tmp, usize>,
-        ng: NodeGroup,
-        neighbors: BTreeSet<NodeGroup>,
-    ) -> Option<(NodeGroup, usize)> {
+        stg: Stg<R>,
+        neighbors: BTreeSet<Stg<R>>,
+    ) -> Option<(Stg<R>, usize)> {
         let mut reg_ids_in_use = BTreeSet::new();
-        for neighbor in color_graph.active_neighbors_of(&ng) {
-            let a_neighbor = neighbor.get_one();
-            let in_use = *assignments.get(a_neighbor).unwrap();
-            reg_ids_in_use.insert(in_use);
+        for neighbor in color_graph.active_neighbors_of(&stg) {
+            if let Stg::Tmp(tmp) = neighbor {
+                let in_use = *assignments.get(tmp).unwrap();
+                reg_ids_in_use.insert(in_use);
+            } else {
+                // TODO: anything here?
+            }
         }
         for reg_id in 0..N_GPRS {
             if !reg_ids_in_use.contains(&reg_id) {
-                return Some((ng, reg_id));
+                return Some((stg, reg_id));
             }
         }
         None
     }
 
-    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: NodeGroup) -> Cfg<I> {
+    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: Stg<R>) -> Cfg<I> {
         // To spill X we need to find all mentions of X. If it's a Use of X,
         // insert Stmt::StackLoad(new_tmp, X_address) before and edit the using
         // instruction.
@@ -295,7 +288,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
             let mut insert_after = Vec::new();
             let mut changed = false;
 
-            for tmp in to_spill.iter() {
+            if let Stg::Tmp(tmp) = to_spill {
                 let mut new_tmp = None;
                 if uses.contains(&tmp) {
                     let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
@@ -312,6 +305,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
                     changed = true;
                 }
             }
+
             if changed {
                 eprintln!("++ rewrite stmt:\t{stmt:?}");
             } else {
@@ -326,7 +320,7 @@ impl<const N_GPRS: usize> RegAlloc<N_GPRS> {
         Cfg::new(cfg.entry, cfg.params, new_stmts)
     }
 
-    fn get_or_insert_stack_slot(&mut self, ng: NodeGroup) -> i32 {
+    fn get_or_insert_stack_slot(&mut self, ng: Stg<R>) -> i32 {
         let next_idx = (self.stack_slots_allocated.len() * 2) as i32; // Assume all values are two bytes.
         self.stack_slots_allocated.entry(ng).or_insert(next_idx);
         next_idx
@@ -338,11 +332,17 @@ mod tests {
     use super::super::test_datastructures::{Expr as E, Expr, Stmt as S, Stmt};
     use super::*;
 
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    enum Reg {
+        R1, R2, R3
+    }
+
     fn compute_assignments<const N: usize>(params: Vec<Tmp>, program: Vec<Stmt>) {
+
         crate::names::reset_name_ids();
         eprintln!("<<<<<<<<<<<<< N_GPRS = {N} >>>>>>>>>>>>>");
         let cfg = Cfg::new(0, params, program);
-        let mut ra = RegAlloc::<N>::new();
+        let mut ra = RegAlloc::<N, Reg>::new();
         let alloc = ra.allocate_registers(cfg);
         eprintln!("ASSIGNMENTS:");
         for (tmp, reg_id) in &alloc.assignments {

@@ -1,0 +1,6 @@
+subr main() nat {
+    let x = 1 + 2;
+    let y = x + x;
+    ret y - 12;
+}
+
