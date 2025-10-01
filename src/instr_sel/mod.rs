@@ -1,17 +1,45 @@
-use crate::{canon, ir};
+use derive_more::{Display, From};
+
+use crate::{canon, ir, names::Tmp};
 
 pub mod lark;
 
+/// A storage node
+#[derive(From, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Stg<R> {
+    #[display("{_0:?}")]
+    #[from]
+    Tmp(Tmp),
+    #[display("{_0}")]
+    Reg(R),
+}
+
+impl<R> Stg<R> {
+    fn from_reg(reg: R) -> Self {
+        Self::Reg(reg)
+    }
+}
+
+impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Stg::Reg(reg) => write!(f, "{reg:?}"),
+        }
+    }
+}
+
 /// Something that can perform instruction selection.
 pub trait InstrSel {
-    type Temporary;
+    /// The type that represents a CPU register.
+    type Register;
     type Instruction;
     fn stmt_to_asm(&mut self, stmt: canon::Stmt);
     fn expr_to_asm(
         &mut self,
         rval: canon::RVal,
-        opt_dst: impl Into<Option<Self::Temporary>>,
-    ) -> Self::Temporary;
+        opt_dst: impl Into<Option<Stg<Self::Register>>>,
+    ) -> Stg<Self::Register>;
 }
 
 #[cfg(test)]

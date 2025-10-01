@@ -6,34 +6,12 @@ use std::{
 };
 
 use crate::{
+    instr_sel::Stg,
     names::Tmp,
     regalloc::{Cc, live_sets::LiveSets},
 };
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
-
-#[derive(From, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-/// A storage node
-pub enum Stg<R> {
-    #[from]
-    Tmp(Tmp),
-    Reg(R),
-}
-
-impl<R> Stg<R> {
-    fn from_reg(reg: R) -> Self {
-        Self::Reg(reg)
-    }
-}
-
-impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
-            Stg::Reg(reg) => write!(f, "{reg:?}"),
-        }
-    }
-}
 
 type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 
@@ -80,15 +58,7 @@ where
 
     #[track_caller]
     fn degree(&self, n: &Stg<R>) -> usize {
-        let Some(neighbors) = self.graph.get(n) else {
-            panic!("Unknown storage node: {n:?}");
-        };
-
-        // Only count node groups that haven't been removed from the graph.
-        neighbors
-            .iter()
-            .filter(|neighbor| self.graph.contains_key(*neighbor))
-            .count()
+        self.active_neighbors_of(n).count()
     }
 
     #[track_caller]
@@ -112,6 +82,8 @@ where
         entry
     }
 
+    /// Removes an arbitrary node (and its neighbor set) as long as the node has fewer than N
+    /// neighbors. Returns `None` if no such node can be found.
     fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
         let mut key: Option<Stg<R>> = None;
         for n in self.graph.keys() {
@@ -128,6 +100,8 @@ where
         Some(self.take(&max_node))
     }
 
+    /// Only count as a neighbor if the node is still in the graph. Instances of neighbors whose
+    /// node is not in `self.graph` are skipped.
     fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
         let Some(neighbors) = self.graph.get(n) else {
             panic!("Unknown Stg<R>: {n:?}");
@@ -194,7 +168,8 @@ where
     }
 
     /// To "simplify" a node is to remove it from the color graph and push it onto a stack for use
-    /// later. Returns the stack of Stg nodes that have been removed from the graph.
+    /// later. Returns the stack of Stg nodes (and their neighbor sets) that have been removed from
+    /// the graph.
     fn simplify_phase(&mut self, color_graph: &mut ColorGraph<R>) -> Vec<NodeEntry<R>> {
         let mut node_stack = Vec::new();
 

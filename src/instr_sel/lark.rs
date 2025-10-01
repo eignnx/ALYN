@@ -48,15 +48,7 @@ impl TryFrom<&ir::RVal> for Imm {
     }
 }
 
-#[derive(Debug, From, Clone, Copy, Display)]
-pub enum Stg {
-    #[display("{_0:?}")]
-    #[from]
-    Tmp(Tmp),
-    #[display("{_0}")]
-    #[from]
-    Reg(Reg),
-}
+type Stg = super::Stg<Reg>;
 
 #[derive(Debug, Clone)]
 pub enum Instr {
@@ -208,7 +200,7 @@ impl<'a> LarkBackend<'a> {
 }
 
 impl<'a> InstrSel for LarkBackend<'a> {
-    type Temporary = Stg;
+    type Register = Reg;
 
     type Instruction = Instr;
 
@@ -254,10 +246,10 @@ impl<'a> InstrSel for LarkBackend<'a> {
                 for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
                     self.expr_to_asm(arg, Stg::Reg(*reg));
                 }
-                self.emit(Instr::Jal(Ra.into(), func));
+                self.emit(Instr::Jal(Stg::from_reg(Ra), func));
                 if let Some(dst) = opt_dst {
                     // Store the return value in a temporary if requested.
-                    self.emit(Instr::Mv(dst.into(), Rv.into()));
+                    self.emit(Instr::Mv(dst.into(), Stg::from_reg(Rv)));
                 }
             }
 
@@ -291,9 +283,9 @@ impl<'a> InstrSel for LarkBackend<'a> {
             Stmt::Nop => self.emit(Nop),
             Stmt::Ret(Some(rval)) => {
                 self.expr_to_asm(rval, Stg::Reg(Rv));
-                self.emit(Jr(Ra.into()));
+                self.emit(Jr(Stg::from_reg(Ra)));
             }
-            Stmt::Ret(None) => self.emit(Jr(Ra.into())),
+            Stmt::Ret(None) => self.emit(Jr(Stg::from_reg(Ra))),
         }
     }
 
