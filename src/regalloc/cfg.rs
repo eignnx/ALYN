@@ -9,7 +9,7 @@ use super::Instr;
 pub type NodeId = usize;
 
 /// Control Flow Graph
-pub struct Cfg<I: Instr> {
+pub struct Cfg<I> {
     pub params: Vec<Tmp>,
     pub stmts: Vec<I>,
     pub edges: Vec<(NodeId, NodeId)>,
@@ -39,6 +39,10 @@ impl<I: Instr> Cfg<I> {
         this.discover_edges();
 
         this
+    }
+
+    pub fn iter_stmts(&self) -> impl Iterator<Item = &I> {
+        self.stmts.iter()
     }
 
     #[track_caller]

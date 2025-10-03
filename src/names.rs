@@ -63,8 +63,8 @@ impl std::fmt::Debug for Lbl {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Tmp(pub Intern<String>);
+#[derive(From, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tmp(#[from] pub Intern<String>);
 
 impl From<&str> for Tmp {
     fn from(name: &str) -> Self {

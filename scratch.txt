@@ -1,0 +1,87 @@
+   Compiling alyn v0.1.0 (C:\Users\gideo\Documents\Asm\alyn)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.67s
+     Running `target\debug\alyn.exe ex/binsearch.alyn`
+-----------------------
+computing live sets...
+LIVE SETS:
+|	subr<main>:                              { } -> { }
+|	li $rv, 0                                { } -> { }
+|	jr $ra                                   { } -> { }
+
+computing interferences...
+converting to color graph...
+COLOR GRAPH:
+strict graph {
+}
+
+Done simplifying graph
+-----------------------
+computing live sets...
+LIVE SETS:
+|	subr<binsearch>:                         { %arr %len %tgt } -> { %arr %len %tgt }
+|	li %lo, 0                                { %arr %len %tgt } -> { %arr %len %lo %tgt }
+|	mv %hi, %len                             { %arr %len %lo %tgt } -> { %arr %hi %lo %tgt }
+|	local<while_cond#0>:                     { %arr %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	tltu %bool.0, %lo, %hi                   { %arr %hi %lo %tgt } -> { %arr %bool.0 %hi %lo %tgt }
+|	bt %bool.0, local<while_body#1>          { %arr %bool.0 %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	local<end_while#2>:                      { } -> { }
+|	li $rv, 65535                            { } -> { }
+|	jr $ra                                   { } -> { }
+|	local<while_body#1>:                     { %arr %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	sub %binop_res.2, %lo, %hi               { %arr %hi %lo %tgt } -> { %arr %binop_res.2 %hi %lo %tgt }
+|	li %shamt.3, 1                           { %arr %binop_res.2 %hi %lo %tgt } -> { %arr %binop_res.2 %hi %lo %shamt.3 %tgt }
+|	shr %imm_binop_res.1, %binop_res.2, %shamt.3 { %arr %binop_res.2 %hi %lo %shamt.3 %tgt } -> { %arr %hi %imm_binop_res.1 %lo %tgt }
+|	add %mid, %imm_binop_res.1, %lo          { %arr %hi %imm_binop_res.1 %lo %tgt } -> { %arr %hi %lo %mid %tgt }
+|	add %binop_res.4, %arr, %mid             { %arr %hi %lo %mid %tgt } -> { %arr %binop_res.4 %hi %lo %mid %tgt }
+|	lw %elem, [%binop_res.4 + 0]             { %arr %binop_res.4 %hi %lo %mid %tgt } -> { %arr %elem %hi %lo %mid %tgt }
+|	teq %bool.5, %tgt, %elem                 { %arr %elem %hi %lo %mid %tgt } -> { %arr %bool.5 %elem %hi %lo %mid %tgt }
+|	bt %bool.5, local<if_true#6>             { %arr %bool.5 %elem %hi %lo %mid %tgt } -> { %arr %elem %hi %lo %mid %tgt }
+|	local<if_false#7>:                       { %arr %elem %hi %lo %mid %tgt } -> { %arr %elem %hi %lo %mid %tgt }
+|	local<end_if#8>:                         { %arr %elem %hi %lo %mid %tgt } -> { %arr %elem %hi %lo %mid %tgt }
+|	tlt %bool.6, %tgt, %elem                 { %arr %elem %hi %lo %mid %tgt } -> { %arr %bool.6 %hi %lo %mid %tgt }
+|	bt %bool.6, local<if_true#3>             { %arr %bool.6 %hi %lo %mid %tgt } -> { %arr %hi %lo %mid %tgt }
+|	local<if_false#4>:                       { %arr %hi %mid %tgt } -> { %arr %hi %mid %tgt }
+|	mv %lo, %mid                             { %arr %hi %mid %tgt } -> { %arr %hi %lo %tgt }
+|	local<end_if#5>:                         { %arr %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	j local<while_cond#0>                    { %arr %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	local<if_true#3>:                        { %arr %lo %mid %tgt } -> { %arr %lo %mid %tgt }
+|	mv %hi, %mid                             { %arr %lo %mid %tgt } -> { %arr %hi %lo %tgt }
+|	j local<end_if#5>                        { %arr %hi %lo %tgt } -> { %arr %hi %lo %tgt }
+|	local<if_true#6>:                        { } -> { }
+|	jr $ra                                   { } -> { }
+
+computing interferences...
+converting to color graph...
+COLOR GRAPH:
+strict graph {
+    arr -- { binop_res_2 binop_res_4 bool_0 bool_5 bool_6 elem hi imm_binop_res_1 lo mid shamt_3 }
+    binop_res_2 -- { arr hi lo shamt_3 tgt }
+    binop_res_4 -- { arr hi lo mid tgt }
+    bool_0 -- { arr hi lo tgt }
+    bool_5 -- { arr elem hi lo mid tgt }
+    bool_6 -- { arr hi lo mid tgt }
+    elem -- { arr bool_5 hi lo mid tgt }
+    hi -- { arr binop_res_2 binop_res_4 bool_0 bool_5 bool_6 elem imm_binop_res_1 lo mid shamt_3 tgt }
+    imm_binop_res_1 -- { arr hi lo tgt }
+    len -- { lo }
+    lo -- { arr binop_res_2 binop_res_4 bool_0 bool_5 bool_6 elem hi imm_binop_res_1 len mid shamt_3 tgt }
+    mid -- { arr binop_res_4 bool_5 bool_6 elem hi lo tgt }
+    shamt_3 -- { arr binop_res_2 hi lo tgt }
+    tgt -- { binop_res_2 binop_res_4 bool_0 bool_5 bool_6 elem hi imm_binop_res_1 lo mid shamt_3 }
+}
+
+>> simplify: %binop_res.2
+>> simplify: %arr
+>> simplify: %binop_res.4
+>> simplify: %bool.0
+>> simplify: %bool.5
+>> simplify: %bool.6
+>> simplify: %elem
+>> simplify: %hi
+>> simplify: %imm_binop_res.1
+>> simplify: %len
+>> simplify: %lo
+>> simplify: %mid
+>> simplify: %shamt.3
+>> simplify: %tgt
+Done simplifying graph

@@ -2,7 +2,7 @@ use derive_more::From;
 use smallvec::{SmallVec, smallvec};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::Write,
+    io::Write, marker::PhantomData,
 };
 
 use crate::{
@@ -113,29 +113,31 @@ where
 }
 
 pub struct RegAllocation<I: Instr, R> {
-    cfg: Cfg<I>,
-    assignments: BTreeMap<Tmp, R>,
+    pub cfg: Cfg<I>,
+    pub assignments: BTreeMap<Tmp, R>,
 }
 
 /// Register Allocator
 pub struct RegAlloc<R> {
     /// Maps temporaries to an offset from the frame pointer.
-    stack_slots_allocated: BTreeMap<Stg<R>, i32>,
+    stack_slots_allocated: BTreeMap<Tmp, i32>,
+    _phantom: PhantomData<R>,
 }
 
 impl<R> RegAlloc<R>
 where
     R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static,
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             stack_slots_allocated: Default::default(),
+            _phantom: PhantomData,
         }
     }
 
-    const MAX_ITERS: usize = 16;
+    pub const MAX_ITERS: usize = 16;
 
-    fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I, R> {
+    pub fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I, R> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
@@ -149,7 +151,7 @@ where
                 }
             }
         }
-        panic!("Register allocation failed: iteration limit exceeded");
+        panic!("Register allocation failed: iteration limit ({}) exceeded", Self::MAX_ITERS);
     }
 
     /// Computes live-sets and builds a color graph given a control-flow graph representing a
@@ -200,23 +202,21 @@ where
         &mut self,
         color_graph: &mut ColorGraph<R>,
         node_stack: &mut Vec<NodeEntry<R>>,
-    ) -> Result<BTreeMap<Tmp, R>, Stg<R>> {
+    ) -> Result<BTreeMap<Tmp, R>, Tmp> {
         let mut assignments = BTreeMap::new();
 
         while let Some((stg, neighbors)) = node_stack.pop() {
             color_graph.insert(stg.clone(), neighbors.clone());
-            if let Some(reg) = self.select_once(color_graph, &assignments, stg.clone()) {
-                match stg {
-                    Stg::Tmp(tmp) => {
-                        assignments.insert(tmp, reg);
-                    }
-                    Stg::Reg(_) => {}
-                }
-            } else {
+            let Stg::Tmp(tmp) = stg else {
+                continue;
+            };
+            let Some(reg) = self.select_once(color_graph, &assignments, stg.clone()) else {
                 // Return the problematic node for rewriting in the caller.
-                eprintln!("  * STOP! SPILL NEEDED FOR: {stg:?}");
-                return Err(stg);
-            }
+                eprintln!("  * STOP! SPILL NEEDED FOR: {tmp:?}");
+                return Err(tmp);
+            };
+            assignments.insert(tmp, reg);
+
         }
 
         Ok(assignments)
@@ -258,7 +258,7 @@ where
             .cloned()
     }
 
-    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: Stg<R>) -> Cfg<I> {
+    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: Tmp) -> Cfg<I> {
         // To spill X we need to find all mentions of X. If it's a Use of X,
         // insert Stmt::StackLoad(new_tmp, X_address) before and edit the using
         // instruction.
@@ -274,28 +274,26 @@ where
             defs.clear();
             uses.clear();
             stmt.add_defs_uses(&mut defs, &mut uses);
-            let slot_addr = self.get_or_insert_stack_slot(to_spill.clone());
+            let slot_addr = self.get_or_insert_stack_slot(to_spill);
             let stmt_ref = &mut stmt;
 
             let mut insert_after = Vec::new();
             let mut changed = false;
 
-            if let Stg::Tmp(tmp) = to_spill {
-                let mut new_tmp = None;
-                if uses.contains(&tmp) {
-                    let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
-                    let new_stmt = I::mk_load_from_stack(dst, slot_addr);
-                    eprintln!("++ inserting stmt:\t{new_stmt:?}");
-                    new_stmts.push(new_stmt);
-                    stmt_ref.replace_use_occurrances(tmp, dst);
-                    changed = true;
-                }
-                if defs.contains(&tmp) {
-                    let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(tmp.as_str()));
-                    stmt_ref.replace_def_occurrances(tmp, src);
-                    insert_after.push(I::mk_store_to_stack(slot_addr, src));
-                    changed = true;
-                }
+            let mut new_tmp = None;
+            if uses.contains(&to_spill) {
+                let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
+                let new_stmt = I::mk_load_from_stack(dst, slot_addr);
+                eprintln!("++ inserting stmt:\t{new_stmt:?}");
+                new_stmts.push(new_stmt);
+                stmt_ref.replace_use_occurrances(to_spill, dst.into());
+                changed = true;
+            }
+            if defs.contains(&to_spill) {
+                let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
+                stmt_ref.replace_def_occurrances(to_spill, src.into());
+                insert_after.push(I::mk_store_to_stack(slot_addr, src));
+                changed = true;
             }
 
             if changed {
@@ -312,7 +310,7 @@ where
         Cfg::new(cfg.entry, cfg.params, new_stmts)
     }
 
-    fn get_or_insert_stack_slot(&mut self, n: Stg<R>) -> i32 {
+    fn get_or_insert_stack_slot(&mut self, n: Tmp) -> i32 {
         let next_idx = (self.stack_slots_allocated.len() * 2) as i32; // Assume all values are two bytes.
         self.stack_slots_allocated.entry(n).or_insert(next_idx);
         next_idx

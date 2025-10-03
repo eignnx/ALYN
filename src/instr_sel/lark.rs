@@ -8,7 +8,7 @@ use internment::Intern;
 
 use crate::{
     canon, ir,
-    names::{self, Lbl, Tmp},
+    names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx},
 };
 
 use super::InstrSel;
@@ -23,6 +23,22 @@ pub enum Reg {
     #[display("$t0")] T0, #[display("$t1")] T1, #[display("$t2")] T2,
     #[display("$k0")] K0, #[display("$k1")] K1,
     #[display("$gp")] Gp, #[display("$sp")] Sp
+}
+
+impl From<Reg> for super::Stg<Reg> {
+    fn from(reg: Reg) -> Self {
+        Stg::Reg(reg)
+    }
+}
+
+impl Cc<Reg> for Reg {
+    #[rustfmt::skip]
+    const GPRS: &'static [Reg] = &[
+        Rv, Ra,
+        A0, A1, A2,
+        S0, S1, S2,
+        T0, T1, T2,
+    ];
 }
 
 #[derive(Debug, Clone, Display)]
@@ -68,6 +84,9 @@ pub enum Instr {
     #[debug("subi {_0}, {_1}, {_2}")]
     SubI(Stg, Stg, Imm),
 
+    #[debug("shr {_0}, {_1}, {_2}")]
+    Shr(Stg, Stg, Stg),
+
     #[debug("jr {_0}")]
     Jr(Stg),
     #[debug("nop")]
@@ -101,6 +120,180 @@ pub enum Instr {
     Bf(Stg, Lbl),
     #[debug("bt {_0}, {_1:?}")]
     Bt(Stg, Lbl),
+}
+
+impl crate::regalloc::Instr for Instr {
+    type Register = Reg;
+
+    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
+        match self {
+            Label(lbl) => {}
+            Mv(lhs, rhs) => {
+                defs.extend(lhs.try_as_tmp());
+                uses.extend(rhs.try_as_tmp());
+            }
+            Add(dst, src1, src2) |
+            Sub(dst, src1, src2) |
+            Shr(dst, src1, src2) => {
+                defs.extend(dst.try_as_tmp());
+                uses.extend([*src1, *src2].into_iter().flat_map(Stg::try_as_tmp));
+            }
+            AddI(dst, src1, imm) |
+            SubI(dst, src1, imm) => {
+                defs.extend(dst.try_as_tmp());
+                uses.extend(src1.try_as_tmp());
+            }
+            Jr(stg) => uses.extend(stg.try_as_tmp()),
+            Nop => {}
+            Li(stg, imm) => defs.extend(stg.try_as_tmp()),
+            Lw(dst, base, imm) => {
+                defs.extend(dst.try_as_tmp());
+                uses.extend(base.try_as_tmp());
+            }
+            Sw(base, imm, src) => {
+                uses.extend([*base, *src].into_iter().flat_map(Stg::try_as_tmp));
+            }
+            J(lbl) => {}
+            Jal(stg, lbl) => defs.extend(stg.try_as_tmp()),
+            Tlt( dst, src1, src2) |
+            Tge( dst, src1, src2) |
+            Teq( dst, src1, src2) |
+            Tne( dst, src1, src2) |
+            Tltu(dst, src1, src2) |
+            Tgeu(dst, src1, src2) => {
+                defs.extend(dst.try_as_tmp());
+                uses.extend([*src1, *src2].into_iter().flat_map(Stg::try_as_tmp));
+            }
+            Bf(stg, lbl) | Bt(stg, lbl) => uses.extend(stg.try_as_tmp()),
+        }
+    }
+
+    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)> {
+        if let Mv(Stg::Tmp(lhs), Stg::Tmp(rhs)) = self {
+            Some((*lhs, *rhs))
+        } else {
+            None
+        }
+    }
+
+    fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {
+        match self {
+            Li(stg, _) |
+            Lw(stg, _, _) |
+            Mv(stg, _) |
+            Jal(stg, _) |
+            AddI(stg, _, _) |
+            SubI(stg, _, _) |
+            Add(stg,  _, _) |
+            Sub(stg,  _, _) |
+            Shr(stg,  _, _) |
+            Tlt(stg,  _, _) |
+            Tge(stg,  _, _) |
+            Teq(stg,  _, _) |
+            Tne(stg,  _, _) |
+            Tltu(stg, _, _) |
+            Tgeu(stg, _, _) => {
+                if let Stg::Tmp(tmp) = stg {
+                    if *tmp == old {
+                        *stg = new;
+                    }
+                }
+            }
+
+            Label(..) | Jr(..) | Nop | Sw(..) | J(..) | Bf(..) | Bt(..) => {}
+        }
+    }
+
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Stg) {
+        match self {
+            Mv(_, stg) |
+            Jr(stg) |
+            AddI(_, stg, _) |
+            SubI(_, stg, _) |
+            Lw(_, stg, _) |
+            Bf(stg, _) |
+            Bt(stg, _) => {
+                if let Stg::Tmp(tmp) = stg {
+                    if *tmp == old {
+                        *stg = new;
+                    }
+                }
+            }
+
+            Add(_, stg1, stg2) |
+            Sub(_, stg1, stg2) |
+            Shr(_, stg1, stg2) |
+            Tlt( _, stg1, stg2) |
+            Tge( _, stg1, stg2) |
+            Teq( _, stg1, stg2) |
+            Tne( _, stg1, stg2) |
+            Tltu(_, stg1, stg2) |
+            Tgeu(_, stg1, stg2) |
+            Sw(stg1, _, stg2) => {
+                if let Stg::Tmp(tmp1) = stg1 {
+                    if *tmp1 == old {
+                        *stg1 = new;
+                    }
+                }
+                if let Stg::Tmp(tmp2) = stg2 {
+                    if *tmp2 == old {
+                        *stg2 = new;
+                    }
+                }
+            }
+
+
+            Jal(..) | J(..) | Li(..) | Nop | Label(..) => {}
+        }
+    }
+
+    fn get_label(&self) -> Option<Lbl> {
+        if let Self::Label(lbl) = self {
+            Some(*lbl)
+        } else {
+            None
+        }
+    }
+
+    fn ctrl_tx(&self) -> Option<CtrlTx> {
+        match self {
+            // TODO: This assumes JR is used for subroutine jumps only. Does not apply if used as
+            // Switch jump.
+            Jr(Stg::Reg(Ra)) => None,
+            Jr(_) => todo!(),
+
+            Jal(_, lbl) |
+            J(lbl) => Some(CtrlTx::Jump(*lbl)),
+
+            Nop |
+            Li(..) |
+            Lw(..) |
+            Sw(..) |
+            Label(..) |
+            Mv(..) |
+            Add(..) |
+            AddI(..) |
+            Sub(..) |
+            SubI(..) |
+            Shr(..) |
+            Tlt(..) |
+            Tge(..) |
+            Teq(..) |
+            Tne(..) |
+            Tltu(..) |
+            Tgeu(..) => Some(CtrlTx::Advance),
+
+            Bf(stg, lbl) | Bt(stg, lbl) => Some(CtrlTx::Branch(*lbl)),
+        }
+    }
+
+    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
+        Sw(Sp.into(), Imm::Int(addr.cast_unsigned() as u16), src.into())
+    }
+
+    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
+        Lw(dst.into(), Sp.into(), Imm::Int(addr.cast_unsigned() as u16))
+    }
 }
 
 use Instr::*;
@@ -160,7 +353,11 @@ impl<'a> LarkBackend<'a> {
             }),
             ir::Binop::And => todo!(),
             ir::Binop::Or => todo!(),
-            ir::Binop::Shr => todo!(),
+            ir::Binop::Shr => with_dst(dst, "shr_dst", |dst| {
+                let shamt = Stg::Tmp(Tmp::fresh("shamt"));
+                self.emit(Li(shamt, imm));
+                self.emit(Shr(dst, x_dst, shamt));
+            }),
             ir::Binop::Xor => todo!(),
         }
     }
@@ -246,10 +443,10 @@ impl<'a> InstrSel for LarkBackend<'a> {
                 for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
                     self.expr_to_asm(arg, Stg::Reg(*reg));
                 }
-                self.emit(Instr::Jal(Stg::from_reg(Ra), func));
+                self.emit(Jal(Ra.into(), func));
                 if let Some(dst) = opt_dst {
                     // Store the return value in a temporary if requested.
-                    self.emit(Instr::Mv(dst.into(), Stg::from_reg(Rv)));
+                    self.emit(Mv(dst.into(), Rv.into()));
                 }
             }
 
@@ -273,6 +470,9 @@ impl<'a> InstrSel for LarkBackend<'a> {
                     ir::Relop::Eq => self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     ir::Relop::LtU => {
                         self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
+                    }
+                    ir::Relop::Lt => {
+                        self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
                     }
                     _ => todo!("impl relop: {op:?}"),
                 }
@@ -338,6 +538,8 @@ impl<'a> InstrSel for LarkBackend<'a> {
             Binop(op, x, y) => self.binop_to_asm(op, *x, *y, mk_dst("binop_res")),
 
             Unop(unop, rval) => todo!(),
+
+            BitCast(_ty, rval) => self.expr_to_asm(*rval, mk_dst("bitcast")), // Nothing needs to be done here?
         }
     }
 }

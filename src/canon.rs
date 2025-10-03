@@ -626,7 +626,7 @@ pub mod canon_ir {
     pub use crate::ir::{Binop, Relop, Unop};
     use crate::{
         ir,
-        names::{Lbl, Tmp},
+        names::{Lbl, Tmp}, ty::Ty,
     };
 
     #[derive(Debug)]
@@ -656,6 +656,7 @@ pub mod canon_ir {
         Imm(Imm),
         Binop(Binop, Box<RVal>, Box<RVal>),
         Unop(Unop, Box<RVal>),
+        BitCast(Ty, Box<RVal>),
     }
 
     #[derive(Debug)]
@@ -731,7 +732,7 @@ pub mod canon_ir {
                 ir::RVal::LVal(ir::LVal::Global(rval)) => todo!(),
                 ir::RVal::Binop(binop, x, y) => RVal::Binop(binop, x.into(), y.into()),
                 ir::RVal::Unop(unop, rval) => RVal::Unop(unop, rval.into()),
-                ir::RVal::BitCast(ty, rval) => todo!(),
+                ir::RVal::BitCast(ty, rval) => RVal::BitCast(ty, rval.into()),
                 ir::RVal::Call(rval, rvals) => unreachable!(),
                 ir::RVal::Seq(stmt, rval) => unreachable!(
                     "RVal::Seq terms weren't all removed in `flatten` step!\n!!! {rval:?}"

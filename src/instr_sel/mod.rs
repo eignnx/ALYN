@@ -15,8 +15,22 @@ pub enum Stg<R> {
 }
 
 impl<R> Stg<R> {
-    fn from_reg(reg: R) -> Self {
+    pub fn from_reg(reg: R) -> Self {
         Self::Reg(reg)
+    }
+
+    pub fn try_as_tmp(self) -> Option<Tmp> {
+        match self {
+            Self::Tmp(tmp) => Some(tmp),
+            Self::Reg(_) => None,
+        }
+    }
+
+    pub fn try_as_reg(self) -> Option<R> {
+        match self {
+            Self::Tmp(_) => None,
+            Self::Reg(reg) => Some(reg),
+        }
     }
 }
 

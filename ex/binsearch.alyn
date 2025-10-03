@@ -1,0 +1,21 @@
+subr main() int {
+    ret +0;
+}
+
+subr binsearch(arr: *int, len: nat, tgt: int) int {
+    let lo = 0;
+    let hi = len;
+    while lo < hi {
+        let mid = (lo - hi) >> 1 + lo;
+        let elem = *(arr + mid);
+        if tgt == elem {
+            ret bitcast{int}(mid);
+        }
+        if tgt < elem {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    ret -1;
+}
