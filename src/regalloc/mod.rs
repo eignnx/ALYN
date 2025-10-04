@@ -1,10 +1,16 @@
-use std::collections::{BTreeSet, HashMap, LinkedList};
+use std::{
+    collections::{BTreeSet, HashMap, LinkedList},
+    fmt::Debug,
+};
 
 use derive_more::From;
 use internment::Intern;
 use smallvec::SmallVec;
 
-use crate::{instr_sel::Stg, names::{Lbl, Tmp}};
+use crate::{
+    instr_sel::Stg,
+    names::{Lbl, Tmp},
+};
 
 pub mod cfg;
 mod interferences;
@@ -35,10 +41,14 @@ pub enum CtrlTx {
     Branch(Lbl),
 }
 
-pub trait Instr: std::fmt::Debug {
-    type Register: Copy;
+pub trait Instr: Debug {
+    type Register: Copy + Debug;
 
-    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>);
+    fn add_defs_uses(
+        &self,
+        defs: &mut impl Extend<Stg<Self::Register>>,
+        uses: &mut impl Extend<Stg<Self::Register>>,
+    );
 
     /// `%a <- %b` is a pure move instruction from one register/temporary to another.
     /// Returns the lefthand side (`%a`) and the righthand side (`%b`) respectively.

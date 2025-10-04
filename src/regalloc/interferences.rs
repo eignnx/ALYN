@@ -1,27 +1,32 @@
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt::{Debug, Display},
+};
 
 use super::{
     Instr,
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-use crate::names::Tmp;
+use crate::{instr_sel::Stg, names::Tmp};
 
 #[derive(Default)]
-pub struct Interferences {
-    graph: HashMap<Tmp, BTreeSet<Tmp>>,
+pub struct Interferences<R> {
+    graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
 }
 
-impl Interferences {
+impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            graph: Default::default(),
+        }
     }
 
-    pub fn all_tmps(&self) -> impl Iterator<Item = Tmp> {
+    pub fn all_nodes(&self) -> impl Iterator<Item = Stg<R>> {
         self.graph.keys().copied()
     }
 
-    pub fn take_graph(self) -> HashMap<Tmp, BTreeSet<Tmp>> {
+    pub fn take_graph(self) -> BTreeMap<Stg<R>, BTreeSet<Stg<R>>> {
         self.graph
     }
 
@@ -38,13 +43,17 @@ impl Interferences {
     ///    ret;
     /// ```
     /// In the above, `%orphan` will have an empty set of neighbors in the interference graph.
-    fn ensure_all_tmps_registered(&mut self, live_sets: &LiveSets) {
+    fn ensure_all_tmps_registered(&mut self, live_sets: &LiveSets<R>) {
         for tmp in live_sets.all_tmps() {
             self.graph.insert(tmp, Default::default());
         }
     }
 
-    pub fn compute_interferences<I: Instr>(&mut self, cfg: &Cfg<I>, live_sets: &LiveSets) {
+    pub fn compute_interferences<I: Instr<Register = R>>(
+        &mut self,
+        cfg: &Cfg<I>,
+        live_sets: &LiveSets<R>,
+    ) {
         self.ensure_all_tmps_registered(live_sets);
 
         let mut defs = BTreeSet::new();
@@ -56,8 +65,8 @@ impl Interferences {
                 // > add interference edges `(a, b1), ..., (a, bj)` for any `bi` that is *not* the
                 // > same as `c`.
                 for live_out in live_sets.get_live_outs(id) {
-                    if live_out != rhs {
-                        self.record_interference(lhs, live_out);
+                    if live_out != rhs.into() {
+                        self.record_interference(lhs.into(), live_out);
                     }
                 }
             } else {
@@ -75,14 +84,14 @@ impl Interferences {
         }
     }
 
-    pub fn interferes_with(&self, a: Tmp, b: Tmp) -> bool {
+    pub fn interferes_with(&self, a: Stg<R>, b: Stg<R>) -> bool {
         let Some(neighbors) = self.graph.get(&a) else {
             panic!("Tmp not in interference graph: {a:?}");
         };
         neighbors.contains(&b)
     }
 
-    pub fn record_interference(&mut self, a: Tmp, b: Tmp) {
+    pub fn record_interference(&mut self, a: Stg<R>, b: Stg<R>) {
         if a == b {
             return;
         }
@@ -91,7 +100,7 @@ impl Interferences {
     }
 }
 
-impl std::fmt::Debug for Interferences {
+impl<R: Debug> Debug for Interferences<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{{")?;
         for (tmp, neighbors) in &self.graph {
@@ -105,7 +114,7 @@ impl std::fmt::Debug for Interferences {
     }
 }
 
-impl std::fmt::Display for Interferences {
+impl<R: Debug> Display for Interferences<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "strict graph {{")?;
         for (tmp, neighbors) in &self.graph {

@@ -1,26 +1,41 @@
-use derive_more::From;
+use derive_more::{Display, From};
 
-use crate::names::{Lbl, Tmp};
+use crate::{
+    instr_sel::Stg,
+    names::{Lbl, Tmp},
+    regalloc::Cc,
+};
 
 use super::{CtrlTx, Instr};
 
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Reg {
+    R1,
+    R2,
+    R3,
+}
+
+impl Cc<Reg> for Reg {
+    const GPRS: &[Self] = &[Reg::R1, Reg::R2, Reg::R3];
+}
+
 #[derive(Clone, From)]
 pub(super) enum Stmt {
-    Mov(Tmp, Expr),
+    Mov(Stg<Reg>, Expr),
     Store {
         addr: Expr,
         src: Expr,
     },
     StackStore {
         addr: i32,
-        src: Tmp,
+        src: Stg<Reg>,
     },
     Load {
-        dst: Tmp,
+        dst: Stg<Reg>,
         addr: Expr,
     },
     StackLoad {
-        dst: Tmp,
+        dst: Stg<Reg>,
         addr: i32,
     },
     Br(Expr, Lbl),
@@ -31,10 +46,12 @@ pub(super) enum Stmt {
 }
 
 impl Instr for Stmt {
-    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
+    type Register = Reg;
+
+    fn add_defs_uses(&self, defs: &mut impl Extend<Stg<Reg>>, uses: &mut impl Extend<Stg<Reg>>) {
         match self {
-            Stmt::Mov(tmp, expr) => {
-                defs.extend([*tmp]);
+            Stmt::Mov(stg, expr) => {
+                defs.extend([*stg]);
                 expr.defs_uses(defs, uses);
             }
             Stmt::Store { addr, src } => {
@@ -58,24 +75,24 @@ impl Instr for Stmt {
     }
 
     fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)> {
-        if let Self::Mov(lhs, Expr::Tmp(rhs)) = self {
+        if let Self::Mov(Stg::Tmp(lhs), Expr::Tmp(rhs)) = self {
             Some((*lhs, *rhs))
         } else {
             None
         }
     }
 
-    fn replace_def_occurrances(&mut self, old: Tmp, new: Tmp) {
+    fn replace_def_occurrances(&mut self, old: Tmp, new: Stg<Reg>) {
         match self {
-            Stmt::Mov(tmp, expr) => {
-                if *tmp == old {
-                    *tmp = new;
+            Stmt::Mov(dst, expr) => {
+                if *dst == old.into() {
+                    *dst = new;
                 }
             }
             Stmt::Store { addr, src } => {}
             Stmt::StackStore { addr, src } => {}
             Stmt::Load { dst, .. } | Stmt::StackLoad { dst, .. } => {
-                if *dst == old {
+                if *dst == old.into() {
                     *dst = new;
                 }
             }
@@ -85,7 +102,7 @@ impl Instr for Stmt {
         }
     }
 
-    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Stg<Reg>) {
         match self {
             Stmt::Mov(tmp, expr) => expr.replace_use_occurrances(old, new),
             Stmt::Store { addr, src } => {
@@ -93,7 +110,7 @@ impl Instr for Stmt {
                 src.replace_use_occurrances(old, new);
             }
             Stmt::StackStore { addr, src } => {
-                if *src == old {
+                if *src == old.into() {
                     *src = new;
                 }
             }
@@ -127,17 +144,23 @@ impl Instr for Stmt {
     }
 
     fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
-        Self::StackStore { addr, src }
+        Self::StackStore {
+            addr,
+            src: src.into(),
+        }
     }
 
     fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
-        Self::StackLoad { dst, addr }
+        Self::StackLoad {
+            dst: dst.into(),
+            addr,
+        }
     }
 }
 
 impl Stmt {
-    pub(super) fn mov(tmp: impl Into<Tmp>, expr: impl Into<Expr>) -> Self {
-        Self::Mov(tmp.into(), expr.into())
+    pub(super) fn mov(dst: impl Into<Stg<Reg>>, expr: impl Into<Expr>) -> Self {
+        Self::Mov(dst.into(), expr.into())
     }
 
     pub(super) fn br(expr: impl Into<Expr>, offset: impl Into<Lbl>) -> Self {
@@ -178,7 +201,18 @@ pub(super) enum Expr {
     Int(i32),
     #[from(&str)]
     Tmp(Tmp),
+    #[from(Reg)]
+    Reg(Reg),
     Binop(Box<Expr>, Box<Expr>),
+}
+
+impl From<Stg<Reg>> for Expr {
+    fn from(value: Stg<Reg>) -> Self {
+        match value {
+            Stg::Tmp(tmp) => Expr::Tmp(tmp),
+            Stg::Reg(reg) => Expr::Reg(reg),
+        }
+    }
 }
 
 impl Expr {
@@ -186,11 +220,14 @@ impl Expr {
         Self::Binop(Box::new(x.into()), Box::new(y.into()))
     }
 
-    fn defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
+    fn defs_uses(&self, defs: &mut impl Extend<Stg<Reg>>, uses: &mut impl Extend<Stg<Reg>>) {
         match self {
             Expr::Int(_) => {}
             Expr::Tmp(tmp) => {
-                uses.extend([*tmp]);
+                uses.extend([Stg::Tmp(*tmp)]);
+            }
+            Expr::Reg(reg) => {
+                uses.extend([Stg::Reg(*reg)]);
             }
             Expr::Binop(expr1, expr2) => {
                 expr1.defs_uses(defs, uses);
@@ -199,14 +236,15 @@ impl Expr {
         }
     }
 
-    fn replace_use_occurrances(&mut self, old: Tmp, new: Tmp) {
+    fn replace_use_occurrances(&mut self, old: Tmp, new: Stg<Reg>) {
         match self {
             Expr::Int(_) => {}
             Expr::Tmp(tmp) => {
                 if *tmp == old {
-                    *tmp = new;
+                    *self = new.into();
                 }
             }
+            Expr::Reg(_) => {} // We'll never need a register to be replaced
             Expr::Binop(expr1, expr2) => {
                 expr1.replace_use_occurrances(old, new);
                 expr2.replace_use_occurrances(old, new);
@@ -220,6 +258,7 @@ impl std::fmt::Debug for Expr {
         match self {
             Self::Int(x) => write!(f, "{x}"),
             Self::Tmp(tmp) => write!(f, "{tmp:?}"),
+            Self::Reg(reg) => write!(f, "{reg:?}"),
             Self::Binop(lhs, rhs) => write!(f, "({lhs:?} op {rhs:?})"),
         }
     }
@@ -231,11 +270,11 @@ fn test() {
     use Stmt as S;
 
     let _program = vec![
-        S::mov("a", 0),
+        S::mov(Tmp::from("a"), 0),
         "L1".into(),
-        S::mov("b", E::binop("a", 1)),
-        S::mov("c", E::binop("c", "b")),
-        S::mov("a", E::binop("b", 2)),
+        S::mov(Tmp::from("b"), E::binop("a", 1)),
+        S::mov(Tmp::from("c"), E::binop("c", "b")),
+        S::mov(Tmp::from("a"), E::binop("b", 2)),
         S::br(E::binop("a", 100), "L1"),
         S::ret("c"),
     ];

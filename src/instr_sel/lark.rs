@@ -8,7 +8,8 @@ use internment::Intern;
 
 use crate::{
     canon, ir,
-    names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx},
+    names::{self, Lbl, Tmp},
+    regalloc::{Cc, CtrlTx},
 };
 
 use super::InstrSel;
@@ -125,46 +126,43 @@ pub enum Instr {
 impl crate::regalloc::Instr for Instr {
     type Register = Reg;
 
-    fn add_defs_uses(&self, defs: &mut impl Extend<Tmp>, uses: &mut impl Extend<Tmp>) {
+    fn add_defs_uses(&self, defs: &mut impl Extend<Stg>, uses: &mut impl Extend<Stg>) {
         match self {
             Label(lbl) => {}
             Mv(lhs, rhs) => {
-                defs.extend(lhs.try_as_tmp());
-                uses.extend(rhs.try_as_tmp());
+                defs.extend([*lhs]);
+                uses.extend([*rhs]);
             }
-            Add(dst, src1, src2) |
-            Sub(dst, src1, src2) |
-            Shr(dst, src1, src2) => {
-                defs.extend(dst.try_as_tmp());
-                uses.extend([*src1, *src2].into_iter().flat_map(Stg::try_as_tmp));
+            Add(dst, src1, src2) | Sub(dst, src1, src2) | Shr(dst, src1, src2) => {
+                defs.extend([*dst]);
+                uses.extend([*src1, *src2].into_iter());
             }
-            AddI(dst, src1, imm) |
-            SubI(dst, src1, imm) => {
-                defs.extend(dst.try_as_tmp());
-                uses.extend(src1.try_as_tmp());
+            AddI(dst, src1, imm) | SubI(dst, src1, imm) => {
+                defs.extend([*dst]);
+                uses.extend([*src1]);
             }
-            Jr(stg) => uses.extend(stg.try_as_tmp()),
+            Jr(stg) => uses.extend([*stg]),
             Nop => {}
-            Li(stg, imm) => defs.extend(stg.try_as_tmp()),
+            Li(stg, imm) => defs.extend([*stg]),
             Lw(dst, base, imm) => {
-                defs.extend(dst.try_as_tmp());
-                uses.extend(base.try_as_tmp());
+                defs.extend([*dst]);
+                uses.extend([*base]);
             }
             Sw(base, imm, src) => {
-                uses.extend([*base, *src].into_iter().flat_map(Stg::try_as_tmp));
+                uses.extend([*base, *src].into_iter());
             }
             J(lbl) => {}
-            Jal(stg, lbl) => defs.extend(stg.try_as_tmp()),
-            Tlt( dst, src1, src2) |
-            Tge( dst, src1, src2) |
-            Teq( dst, src1, src2) |
-            Tne( dst, src1, src2) |
-            Tltu(dst, src1, src2) |
-            Tgeu(dst, src1, src2) => {
-                defs.extend(dst.try_as_tmp());
-                uses.extend([*src1, *src2].into_iter().flat_map(Stg::try_as_tmp));
+            Jal(stg, lbl) => defs.extend([*stg]),
+            Tlt(dst, src1, src2)
+            | Tge(dst, src1, src2)
+            | Teq(dst, src1, src2)
+            | Tne(dst, src1, src2)
+            | Tltu(dst, src1, src2)
+            | Tgeu(dst, src1, src2) => {
+                defs.extend([*dst]);
+                uses.extend([*src1, *src2].into_iter());
             }
-            Bf(stg, lbl) | Bt(stg, lbl) => uses.extend(stg.try_as_tmp()),
+            Bf(stg, lbl) | Bt(stg, lbl) => uses.extend([*stg]),
         }
     }
 
@@ -178,21 +176,21 @@ impl crate::regalloc::Instr for Instr {
 
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
-            Li(stg, _) |
-            Lw(stg, _, _) |
-            Mv(stg, _) |
-            Jal(stg, _) |
-            AddI(stg, _, _) |
-            SubI(stg, _, _) |
-            Add(stg,  _, _) |
-            Sub(stg,  _, _) |
-            Shr(stg,  _, _) |
-            Tlt(stg,  _, _) |
-            Tge(stg,  _, _) |
-            Teq(stg,  _, _) |
-            Tne(stg,  _, _) |
-            Tltu(stg, _, _) |
-            Tgeu(stg, _, _) => {
+            Li(stg, _)
+            | Lw(stg, _, _)
+            | Mv(stg, _)
+            | Jal(stg, _)
+            | AddI(stg, _, _)
+            | SubI(stg, _, _)
+            | Add(stg, _, _)
+            | Sub(stg, _, _)
+            | Shr(stg, _, _)
+            | Tlt(stg, _, _)
+            | Tge(stg, _, _)
+            | Teq(stg, _, _)
+            | Tne(stg, _, _)
+            | Tltu(stg, _, _)
+            | Tgeu(stg, _, _) => {
                 if let Stg::Tmp(tmp) = stg {
                     if *tmp == old {
                         *stg = new;
@@ -206,13 +204,13 @@ impl crate::regalloc::Instr for Instr {
 
     fn replace_use_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
-            Mv(_, stg) |
-            Jr(stg) |
-            AddI(_, stg, _) |
-            SubI(_, stg, _) |
-            Lw(_, stg, _) |
-            Bf(stg, _) |
-            Bt(stg, _) => {
+            Mv(_, stg)
+            | Jr(stg)
+            | AddI(_, stg, _)
+            | SubI(_, stg, _)
+            | Lw(_, stg, _)
+            | Bf(stg, _)
+            | Bt(stg, _) => {
                 if let Stg::Tmp(tmp) = stg {
                     if *tmp == old {
                         *stg = new;
@@ -220,16 +218,16 @@ impl crate::regalloc::Instr for Instr {
                 }
             }
 
-            Add(_, stg1, stg2) |
-            Sub(_, stg1, stg2) |
-            Shr(_, stg1, stg2) |
-            Tlt( _, stg1, stg2) |
-            Tge( _, stg1, stg2) |
-            Teq( _, stg1, stg2) |
-            Tne( _, stg1, stg2) |
-            Tltu(_, stg1, stg2) |
-            Tgeu(_, stg1, stg2) |
-            Sw(stg1, _, stg2) => {
+            Add(_, stg1, stg2)
+            | Sub(_, stg1, stg2)
+            | Shr(_, stg1, stg2)
+            | Tlt(_, stg1, stg2)
+            | Tge(_, stg1, stg2)
+            | Teq(_, stg1, stg2)
+            | Tne(_, stg1, stg2)
+            | Tltu(_, stg1, stg2)
+            | Tgeu(_, stg1, stg2)
+            | Sw(stg1, _, stg2) => {
                 if let Stg::Tmp(tmp1) = stg1 {
                     if *tmp1 == old {
                         *stg1 = new;
@@ -241,7 +239,6 @@ impl crate::regalloc::Instr for Instr {
                     }
                 }
             }
-
 
             Jal(..) | J(..) | Li(..) | Nop | Label(..) => {}
         }
@@ -262,26 +259,12 @@ impl crate::regalloc::Instr for Instr {
             Jr(Stg::Reg(Ra)) => None,
             Jr(_) => todo!(),
 
-            Jal(_, lbl) |
-            J(lbl) => Some(CtrlTx::Jump(*lbl)),
+            Jal(_, lbl) | J(lbl) => Some(CtrlTx::Jump(*lbl)),
 
-            Nop |
-            Li(..) |
-            Lw(..) |
-            Sw(..) |
-            Label(..) |
-            Mv(..) |
-            Add(..) |
-            AddI(..) |
-            Sub(..) |
-            SubI(..) |
-            Shr(..) |
-            Tlt(..) |
-            Tge(..) |
-            Teq(..) |
-            Tne(..) |
-            Tltu(..) |
-            Tgeu(..) => Some(CtrlTx::Advance),
+            Nop | Li(..) | Lw(..) | Sw(..) | Label(..) | Mv(..) | Add(..) | AddI(..) | Sub(..)
+            | SubI(..) | Shr(..) | Tlt(..) | Tge(..) | Teq(..) | Tne(..) | Tltu(..) | Tgeu(..) => {
+                Some(CtrlTx::Advance)
+            }
 
             Bf(stg, lbl) | Bt(stg, lbl) => Some(CtrlTx::Branch(*lbl)),
         }
@@ -471,9 +454,7 @@ impl<'a> InstrSel for LarkBackend<'a> {
                     ir::Relop::LtU => {
                         self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
                     }
-                    ir::Relop::Lt => {
-                        self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
-                    }
+                    ir::Relop::Lt => self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
                 }
                 self.emit(Bt(bool_tmp.into(), if_true.into()));

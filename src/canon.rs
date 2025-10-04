@@ -626,7 +626,8 @@ pub mod canon_ir {
     pub use crate::ir::{Binop, Relop, Unop};
     use crate::{
         ir,
-        names::{Lbl, Tmp}, ty::Ty,
+        names::{Lbl, Tmp},
+        ty::Ty,
     };
 
     #[derive(Debug)]

@@ -2,7 +2,8 @@ use derive_more::From;
 use smallvec::{SmallVec, smallvec};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::Write, marker::PhantomData,
+    io::Write,
+    marker::PhantomData,
 };
 
 use crate::{
@@ -38,9 +39,9 @@ impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
 
 impl<R> ColorGraph<R>
 where
-    R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static,
+    R: std::fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
 {
-    fn from_interferences(interferences: Interferences) -> Self {
+    fn from_interferences(interferences: Interferences<R>) -> Self {
         let graph = interferences
             .take_graph()
             .into_iter()
@@ -126,7 +127,7 @@ pub struct RegAlloc<R> {
 
 impl<R> RegAlloc<R>
 where
-    R: std::fmt::Debug + Ord + Clone + Cc<R> + 'static,
+    R: std::fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
 {
     pub fn new() -> Self {
         Self {
@@ -137,7 +138,10 @@ where
 
     pub const MAX_ITERS: usize = 16;
 
-    pub fn allocate_registers<I: Instr>(&mut self, mut cfg: Cfg<I>) -> RegAllocation<I, R> {
+    pub fn allocate_registers<I: Instr<Register = R>>(
+        &mut self,
+        mut cfg: Cfg<I>,
+    ) -> RegAllocation<I, R> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
@@ -151,12 +155,18 @@ where
                 }
             }
         }
-        panic!("Register allocation failed: iteration limit ({}) exceeded", Self::MAX_ITERS);
+        panic!(
+            "Register allocation failed: iteration limit ({}) exceeded",
+            Self::MAX_ITERS
+        );
     }
 
     /// Computes live-sets and builds a color graph given a control-flow graph representing a
     /// program.
-    fn build_phase<I: Instr>(&mut self, cfg: &Cfg<I>) -> (LiveSets, ColorGraph<R>) {
+    fn build_phase<I: Instr<Register = R>>(
+        &mut self,
+        cfg: &Cfg<I>,
+    ) -> (LiveSets<R>, ColorGraph<R>) {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
@@ -216,7 +226,6 @@ where
                 return Err(tmp);
             };
             assignments.insert(tmp, reg);
-
         }
 
         Ok(assignments)
@@ -258,7 +267,11 @@ where
             .cloned()
     }
 
-    fn spill_and_rewrite<I: Instr>(&mut self, mut cfg: Cfg<I>, to_spill: Tmp) -> Cfg<I> {
+    fn spill_and_rewrite<I: Instr<Register = R>>(
+        &mut self,
+        mut cfg: Cfg<I>,
+        to_spill: Tmp,
+    ) -> Cfg<I> {
         // To spill X we need to find all mentions of X. If it's a Use of X,
         // insert Stmt::StackLoad(new_tmp, X_address) before and edit the using
         // instruction.
@@ -281,7 +294,7 @@ where
             let mut changed = false;
 
             let mut new_tmp = None;
-            if uses.contains(&to_spill) {
+            if uses.contains(&to_spill.into()) {
                 let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
                 let new_stmt = I::mk_load_from_stack(dst, slot_addr);
                 eprintln!("++ inserting stmt:\t{new_stmt:?}");
@@ -289,7 +302,7 @@ where
                 stmt_ref.replace_use_occurrances(to_spill, dst.into());
                 changed = true;
             }
-            if defs.contains(&to_spill) {
+            if defs.contains(&to_spill.into()) {
                 let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
                 stmt_ref.replace_def_occurrances(to_spill, src.into());
                 insert_after.push(I::mk_store_to_stack(slot_addr, src));
@@ -319,21 +332,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use derive_more::Display;
-
-    use super::super::test_datastructures::{Expr as E, Expr, Stmt as S, Stmt};
+    use super::super::test_datastructures::{Expr as E, Expr, Reg, Stmt as S, Stmt};
     use super::*;
-
-    #[derive(Debug, Display, Clone, PartialEq, Eq, PartialOrd, Ord)]
-    enum Reg {
-        R1,
-        R2,
-        R3,
-    }
-
-    impl Cc<Reg> for Reg {
-        const GPRS: &[Self] = &[Reg::R1, Reg::R2, Reg::R3];
-    }
 
     fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
         crate::names::reset_name_ids();
@@ -378,12 +378,12 @@ mod tests {
         // ret p;
         #[rustfmt::skip]
         let program = vec![
-            S::mov("p", 1),
-            S::mov("i", 1),
+            S::mov(Tmp::from("p"), 1),
+            S::mov(Tmp::from("i"), 1),
             "loop_cond".into(),
                 S::Br(E::binop("i", "n"), "loop_end".into()),
-                S::mov("p", E::binop("p", "base")),
-                S::mov("i", E::binop("i", 1)),
+                S::mov(Tmp::from("p"), E::binop("p", "base")),
+                S::mov(Tmp::from("i"), E::binop("i", 1)),
             "loop_end".into(),
             S::ret("p"),
         ];
@@ -437,18 +437,18 @@ mod tests {
         #[rustfmt::skip]
         let program = vec![
             "binsearch".into(),
-            S::mov("low", 0),
-            S::mov("high", E::binop("n", 1)),
+            S::mov(Tmp::from("low"), 0),
+            S::mov(Tmp::from("high"), E::binop("n", 1)),
             S::jmp("loop_cond"),
             "loop_top".into(),
-                 S::mov("mid", E::binop(E::binop("low", "high"), 2)),
-                 S::Load { dst: "elem".into(), addr: E::binop("v", "mid") },
+                 S::mov(Tmp::from("mid"), E::binop(E::binop("low", "high"), 2)),
+                 S::Load { dst: Tmp::from("elem").into(), addr: E::binop("v", "mid") },
                  S::Br(E::binop("x", "elem"),  "else_if".into()),
-                     S::mov("high", E::binop("mid", 1)),
+                     S::mov(Tmp::from("high"), E::binop("mid", 1)),
                      S::jmp("end_if"),
                  "else_if".into(),
                  S::Br(E::binop("x", "elem"), "else".into()),
-                     S::mov("low", E::binop("mid", 1)),
+                     S::mov(Tmp::from("low"), E::binop("mid", 1)),
                      S::jmp("end_if"),
                  "else".into(),
                      S::ret("mid"),

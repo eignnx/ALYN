@@ -1,26 +1,32 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::{Debug, Display},
+};
 
 use super::{
     Instr,
     cfg::{Cfg, NodeId},
 };
-use crate::names::Tmp;
+use crate::{instr_sel::Stg, names::Tmp};
 
 #[derive(Debug, Default)]
-pub struct LiveSets {
-    live_ins: BTreeMap<NodeId, BTreeSet<Tmp>>,
-    live_outs: BTreeMap<NodeId, BTreeSet<Tmp>>,
+pub struct LiveSets<R> {
+    live_ins: BTreeMap<NodeId, BTreeSet<Stg<R>>>,
+    live_outs: BTreeMap<NodeId, BTreeSet<Stg<R>>>,
 }
 
-impl LiveSets {
+impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            live_ins: Default::default(),
+            live_outs: Default::default(),
+        }
     }
 
-    pub fn compute_live_ins_live_outs<I: Instr>(&mut self, cfg: &Cfg<I>) {
+    pub fn compute_live_ins_live_outs<I: Instr<Register = R>>(&mut self, cfg: &Cfg<I>) {
         // All function parameters need to be marked as live-in in the entry.
         let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
-        entry_live_ins.extend(cfg.params.iter().cloned());
+        entry_live_ins.extend(cfg.params.iter().copied().map(Stg::Tmp));
 
         let mut defs_buf = BTreeSet::new();
         let mut uses_buf = BTreeSet::new();
@@ -40,7 +46,12 @@ impl LiveSets {
     }
 
     /// `LiveOuts[I] = union(LiveIn[p] for p in Succ[I])`
-    fn compute_live_outs<I: Instr>(&mut self, id: NodeId, cfg: &Cfg<I>, recompute: &mut bool) {
+    fn compute_live_outs<I: Instr<Register = R>>(
+        &mut self,
+        id: NodeId,
+        cfg: &Cfg<I>,
+        recompute: &mut bool,
+    ) {
         let live_outs = self.live_outs.entry(id).or_default();
         let old_len = live_outs.len();
         for pred in cfg.successors(id) {
@@ -54,12 +65,12 @@ impl LiveSets {
     }
 
     /// `LiveIns[I] = Uses[I]  U  (LiveOuts[I] - Defs[I])`
-    fn compute_live_ins<I: Instr>(
+    fn compute_live_ins<I: Instr<Register = R>>(
         &mut self,
         id: NodeId,
         stmt: &I,
-        defs: &mut BTreeSet<Tmp>,
-        uses: &mut BTreeSet<Tmp>,
+        defs: &mut BTreeSet<Stg<R>>,
+        uses: &mut BTreeSet<Stg<R>>,
         recompute: &mut bool,
     ) {
         defs.clear();
@@ -68,7 +79,7 @@ impl LiveSets {
 
         let live_ins = self.live_ins.entry(id).or_default();
         let old_len = live_ins.len();
-        live_ins.extend(uses.iter().cloned());
+        live_ins.extend(uses.iter().copied());
         for live_out in self.live_outs.entry(id).or_default().iter().copied() {
             if !defs.contains(&live_out) {
                 live_ins.insert(live_out);
@@ -80,7 +91,7 @@ impl LiveSets {
         }
     }
 
-    pub fn get_live_ins(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
+    pub fn get_live_ins(&self, id: NodeId) -> impl Iterator<Item = Stg<R>> {
         self.live_ins
             .get(&id)
             .map(|set| set.iter())
@@ -89,7 +100,7 @@ impl LiveSets {
             .copied()
     }
 
-    pub fn get_live_outs(&self, id: NodeId) -> impl Iterator<Item = Tmp> {
+    pub fn get_live_outs(&self, id: NodeId) -> impl Iterator<Item = Stg<R>> {
         self.live_outs
             .get(&id)
             .map(|set| set.iter())
@@ -98,21 +109,18 @@ impl LiveSets {
             .copied()
     }
 
-    pub fn all_tmps(&self) -> impl Iterator<Item = Tmp> {
+    pub fn all_tmps(&self) -> impl Iterator<Item = Stg<R>> {
         let mut tmps = BTreeSet::new();
         for live_set in self.live_ins.values() {
-            tmps.extend(live_set.iter().cloned());
+            tmps.extend(live_set.iter().copied());
         }
         for live_set in self.live_outs.values() {
-            tmps.extend(live_set.iter().cloned());
+            tmps.extend(live_set.iter().copied());
         }
         tmps.into_iter()
     }
 
-    pub fn display<'a, I: std::fmt::Debug>(
-        &'a self,
-        stmts: &'a [I],
-    ) -> impl std::fmt::Display + 'a {
+    pub fn display<'a, I: Debug>(&'a self, stmts: &'a [I]) -> impl Display + 'a {
         DisplayLiveSets {
             live_sets: self,
             stmts,
@@ -120,12 +128,12 @@ impl LiveSets {
     }
 }
 
-struct DisplayLiveSets<'a, I> {
-    live_sets: &'a LiveSets,
+struct DisplayLiveSets<'a, I, R> {
+    live_sets: &'a LiveSets<R>,
     stmts: &'a [I],
 }
 
-impl<'a, I: std::fmt::Debug> std::fmt::Display for DisplayLiveSets<'a, I> {
+impl<'a, I: Debug, R: Copy + Eq + Ord + Debug> Display for DisplayLiveSets<'a, I, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, stmt) in self.stmts.iter().enumerate() {
             // Write stmt
@@ -161,8 +169,8 @@ mod tests {
             0,
             ["arg".into()],
             [
-                Stmt::mov("x", 123),
-                Stmt::mov("y", Expr::binop("x", "arg"))
+                Stmt::mov(Tmp::from("x"), 123),
+                Stmt::mov(Tmp::from("y"), Expr::binop("x", "arg"))
             ],
         );
         let mut live_sets = LiveSets::new();

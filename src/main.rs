@@ -45,8 +45,9 @@ fn main() {
         let decl = decl.value;
         let subr_name = names::Lbl::SubrStart(decl.name);
 
-        let params: Vec<_> =
-            decl.params.iter()
+        let params: Vec<_> = decl
+            .params
+            .iter()
             .map(|ann_tmp| Tmp::from(ann_tmp.value.name))
             .collect();
 
