@@ -52,7 +52,7 @@ pub trait Instr: Debug {
 
     /// `%a <- %b` is a pure move instruction from one register/temporary to another.
     /// Returns the lefthand side (`%a`) and the righthand side (`%b`) respectively.
-    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)>;
+    fn try_as_pure_move(&self) -> Option<(Stg<Self::Register>, Stg<Self::Register>)>;
 
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg<Self::Register>);
     fn replace_use_occurrances(&mut self, old: Tmp, new: Stg<Self::Register>);

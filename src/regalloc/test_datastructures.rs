@@ -74,11 +74,11 @@ impl Instr for Stmt {
         }
     }
 
-    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)> {
-        if let Self::Mov(Stg::Tmp(lhs), Expr::Tmp(rhs)) = self {
-            Some((*lhs, *rhs))
-        } else {
-            None
+    fn try_as_pure_move(&self) -> Option<(Stg<Reg>, Stg<Reg>)> {
+        match self {
+            Self::Mov(lhs, Expr::Tmp(tmp)) => Some((*lhs, Stg::Tmp(*tmp))),
+            Self::Mov(lhs, Expr::Reg(reg)) => Some((*lhs, Stg::Reg(*reg))),
+            _ => None,
         }
     }
 

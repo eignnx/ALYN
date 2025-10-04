@@ -65,8 +65,8 @@ impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
                 // > add interference edges `(a, b1), ..., (a, bj)` for any `bi` that is *not* the
                 // > same as `c`.
                 for live_out in live_sets.get_live_outs(id) {
-                    if live_out != rhs.into() {
-                        self.record_interference(lhs.into(), live_out);
+                    if live_out != rhs {
+                        self.record_interference(lhs, live_out);
                     }
                 }
             } else {

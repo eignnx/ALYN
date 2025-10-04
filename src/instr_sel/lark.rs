@@ -166,11 +166,10 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
-    fn try_as_pure_move(&self) -> Option<(Tmp, Tmp)> {
-        if let Mv(Stg::Tmp(lhs), Stg::Tmp(rhs)) = self {
-            Some((*lhs, *rhs))
-        } else {
-            None
+    fn try_as_pure_move(&self) -> Option<(Stg, Stg)> {
+        match self {
+            Self::Mv(lhs, stg) => Some((*lhs, *stg)),
+            _ => None,
         }
     }
 
