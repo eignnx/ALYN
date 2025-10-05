@@ -206,7 +206,7 @@ where
                 node_stack.push(entry);
             } else {
                 // Graph must be empty, so return the stack.
-                eprintln!("Done simplifying graph");
+                // Done simplifying graph.
                 return node_stack;
             }
         }

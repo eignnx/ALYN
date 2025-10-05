@@ -42,6 +42,9 @@ fn main() {
     }
 
     for decl in module.decls {
+        eprintln!("========================================");
+        eprintln!("           Item `{}`", decl.value.name);
+        eprintln!("========================================");
         let decl = decl.value;
         let subr_name = names::Lbl::SubrStart(decl.name);
 
@@ -51,23 +54,35 @@ fn main() {
             .map(|ann_tmp| Tmp::from(ann_tmp.value.name))
             .collect();
 
+        eprintln!(">------------ IR Statements -----------<");
         let ir_wrap = decl.to_ir();
-        let ir = ir_wrap.into_iter().map(|w| w.as_stmt()).collect();
+        let ir = ir_wrap.into_iter().map(|w| w.as_stmt()).inspect(|stmt| {
+            eprintln!("{stmt:?}");
+        }).collect();
+        eprintln!(">--------------------------------------<");
         let canon_stmts = canon::canonicalize(subr_name, ir);
 
         let mut out = Vec::new();
         let mut backend = instr_sel::lark::LarkBackend::new(&mut out);
+        eprintln!("Canonicalized statements:");
         for stmt in canon_stmts {
+            eprintln!("|   {stmt:?}");
             backend.stmt_to_asm(stmt);
         }
+        let asm_before_regalloc = backend.render().to_vec();
 
         let mut ralloc = regalloc::RegAlloc::<instr_sel::lark::Reg>::new();
         let cfg = regalloc::cfg::Cfg::new(
             0, // TODO: is this correct?
             params,
-            backend.render().to_vec(),
+            asm_before_regalloc,
         );
         let reg_allocation = ralloc.allocate_registers(cfg);
+
+        eprintln!("ASSIGNMENTS:");
+        for (tmp, reg_id) in &reg_allocation.assignments {
+            eprintln!("  {tmp:?} -> ${reg_id}");
+        }
 
         println!("\n;;; SUBROUTINE");
         for tgt_lang_stmt in reg_allocation.cfg.iter_stmts() {
