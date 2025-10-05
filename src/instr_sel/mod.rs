@@ -46,14 +46,15 @@ impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
 /// Something that can perform instruction selection.
 pub trait InstrSel {
     /// The type that represents a CPU register.
-    type Register;
-    type Instruction;
+    type Register: std::fmt::Debug;
+    type Instruction: Clone;
     fn stmt_to_asm(&mut self, stmt: canon::Stmt);
     fn expr_to_asm(
         &mut self,
         rval: canon::RVal,
         opt_dst: impl Into<Option<Stg<Self::Register>>>,
     ) -> Stg<Self::Register>;
+    fn render(&self) -> &[Self::Instruction];
 }
 
 #[cfg(test)]

@@ -281,12 +281,12 @@ impl crate::regalloc::Instr for Instr {
 use Instr::*;
 use Reg::*;
 
-pub struct LarkBackend<'a> {
+pub struct LarkInstrSel<'a> {
     out: &'a mut Vec<Instr>,
     current_subr_params: BTreeMap<u8, Tmp>,
 }
 
-impl<'a> LarkBackend<'a> {
+impl<'a> LarkInstrSel<'a> {
     #[rustfmt::skip]
     const GPR_TEMP_REGS: &'static [Reg] = &[
         T0, T1, T2,
@@ -372,13 +372,9 @@ impl<'a> LarkBackend<'a> {
             ir::Binop::Xor => todo!(),
         }
     }
-
-    pub fn render(&self) -> &[Instr] {
-        &self.out[..]
-    }
 }
 
-impl<'a> InstrSel for LarkBackend<'a> {
+impl<'a> InstrSel for LarkInstrSel<'a> {
     type Register = Reg;
 
     type Instruction = Instr;
@@ -521,5 +517,9 @@ impl<'a> InstrSel for LarkBackend<'a> {
 
             BitCast(_ty, rval) => self.expr_to_asm(*rval, mk_dst("bitcast")), // Nothing needs to be done here?
         }
+    }
+
+    fn render(&self) -> &[Instr] {
+        &self.out[..]
     }
 }
