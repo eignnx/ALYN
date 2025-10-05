@@ -2,6 +2,7 @@ use derive_more::From;
 use smallvec::{SmallVec, smallvec};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fmt,
     io::Write,
     marker::PhantomData,
 };
@@ -17,13 +18,13 @@ use super::{Instr, cfg::Cfg, interferences::Interferences};
 type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 
 struct ColorGraph<R> {
-    graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
+    interferences: Interferences<R>,
 }
 
-impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "strict graph {{")?;
-        for (tmp, neighbors) in &self.graph {
+        for (tmp, neighbors) in &self.interferences.graph {
             let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
             write!(f, "    {tmp} -- {{")?;
             for n in neighbors {
@@ -37,24 +38,38 @@ impl<R: std::fmt::Debug> std::fmt::Debug for ColorGraph<R> {
     }
 }
 
+impl<R> From<Interferences<R>> for ColorGraph<R> {
+    fn from(interferences: Interferences<R>) -> Self {
+        Self { interferences }
+    }
+}
+
 impl<R> ColorGraph<R>
 where
-    R: std::fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
+    R: fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
 {
-    fn from_interferences(interferences: Interferences<R>) -> Self {
-        let graph = interferences
-            .take_graph()
-            .into_iter()
-            .map(|(tmp, neighbors)| {
-                let neighbors = neighbors.into_iter().map(Stg::from).collect();
-                (tmp.into(), neighbors)
-            })
-            .collect();
-        Self { graph }
+    pub fn new<I>(cfg: &Cfg<I>, live_sets: &LiveSets<R>) -> Self
+    where
+        I: Instr<Register = R>,
+    {
+        let mut interferences = Interferences::new();
+        interferences.compute_interferences(cfg, live_sets);
+        Self { interferences }
     }
 
     fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
-        self.graph.insert(n, neighbors);
+        self.interferences.graph.insert(n, neighbors);
+    }
+
+    /// Only count as a neighbor if the node is still in the graph. Instances of neighbors whose
+    /// node is not in `self.graph` are skipped.
+    fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
+        let Some(neighbors) = self.interferences.graph.get(n) else {
+            panic!("Unknown Stg<R>: {n:?}");
+        };
+        neighbors
+            .iter()
+            .filter(|neighbor| self.interferences.graph.contains_key(*neighbor))
     }
 
     #[track_caller]
@@ -76,8 +91,8 @@ where
         todo!()
     }
 
-    fn take(&mut self, n: &Stg<R>) -> NodeEntry<R> {
-        let Some(entry) = self.graph.remove_entry(n) else {
+    fn take_node(&mut self, n: &Stg<R>) -> NodeEntry<R> {
+        let Some(entry) = self.interferences.graph.remove_entry(n) else {
             panic!("Unknown storage node: {n:?}");
         };
         entry
@@ -87,29 +102,23 @@ where
     /// neighbors. Returns `None` if no such node can be found.
     fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
         let mut key: Option<Stg<R>> = None;
-        for n in self.graph.keys() {
+        for n in self.interferences.graph.keys() {
             if self.is_insig_degree(n) {
                 key = Some(n.clone());
                 break;
             }
         }
-        Some(self.take(&key?))
+        Some(self.take_node(&key?))
     }
 
     fn choose_node_to_spill(&mut self) -> Option<NodeEntry<R>> {
-        let max_node = self.graph.keys().max_by_key(|n| self.degree(n)).cloned()?;
-        Some(self.take(&max_node))
-    }
-
-    /// Only count as a neighbor if the node is still in the graph. Instances of neighbors whose
-    /// node is not in `self.graph` are skipped.
-    fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
-        let Some(neighbors) = self.graph.get(n) else {
-            panic!("Unknown Stg<R>: {n:?}");
-        };
-        neighbors
-            .iter()
-            .filter(|neighbor| self.graph.contains_key(*neighbor))
+        let max_node = self
+            .interferences
+            .graph
+            .keys()
+            .max_by_key(|n| self.degree(n))
+            .cloned()?;
+        Some(self.take_node(&max_node))
     }
 }
 
@@ -127,7 +136,7 @@ pub struct RegAlloc<R> {
 
 impl<R> RegAlloc<R>
 where
-    R: std::fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
+    R: fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
 {
     pub fn new() -> Self {
         Self {
@@ -171,11 +180,8 @@ where
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
         eprintln!("LIVE SETS:\n{}", live_sets.display(&cfg.stmts[..]));
-        let mut interferences = Interferences::new();
-        eprintln!("computing interferences...");
-        interferences.compute_interferences(cfg, &live_sets);
-        eprintln!("converting to color graph...");
-        let cg = ColorGraph::from_interferences(interferences);
+        eprintln!("initializing color graph...");
+        let cg = ColorGraph::new(cfg, &live_sets);
         (live_sets, cg)
     }
 

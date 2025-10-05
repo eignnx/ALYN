@@ -12,7 +12,7 @@ use crate::{instr_sel::Stg, names::Tmp};
 
 #[derive(Default)]
 pub struct Interferences<R> {
-    graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
+    pub(super) graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
 }
 
 impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
