@@ -246,6 +246,50 @@ pub mod basic_blocks {
         bbs
     }
 
+    fn sanitize_for_dot(value: impl std::fmt::Debug) -> String {
+        let text = format!("{value:?}");
+        let mut new = String::new();
+        for char in text.chars() {
+            match char {
+                '<' | '>' | '#' | '.' | '$' | '%' | '!' | '-' | '=' => {
+                    new.push('\\');
+                }
+                _ => {}
+            }
+            new.push(char);
+        }
+        new
+    }
+
+    impl std::fmt::Display for Bbs {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(f, "digraph x {{")?;
+            writeln!(f, "node [shape=record, fontname=\"courier\"]")?;
+            let mut blocks = self.blocks.clone();
+            let mut to_visit = vec![self.entry];
+            while let Some(current) = to_visit.pop() {
+                if let Some((lbl, bb)) = blocks.remove_entry(&current) {
+                    let lbl = sanitize_for_dot(lbl);
+                    writeln!(f, "\"{lbl}\" [")?;
+                    write!(f, "label = \"{{")?;
+                    for stmt in &bb.stmts {
+                        write!(f, "{} |", sanitize_for_dot(stmt))?;
+                    }
+                    write!(f, " {}", sanitize_for_dot(&bb.last))?;
+                    write!(f, "}}\"")?;
+                    writeln!(f, "shape = \"record\"")?;
+                    writeln!(f, "]")?;
+                    for succ in bb.successors() {
+                        writeln!(f, "\"{lbl}\" -> \"{}\"", sanitize_for_dot(succ))?;
+                    }
+                    to_visit.extend(bb.successors());
+                }
+            }
+            writeln!(f, "}}")?;
+            Ok(())
+        }
+    }
+
     #[test]
     fn build_bb() {
         use crate::ir::RVal;
@@ -767,7 +811,10 @@ pub fn canonicalize(subr_lbl: Lbl, stmts: Vec<ir::Stmt>) -> Vec<canon_ir::Stmt> 
         flatten::flatten_stmt(stmt, &mut flattened);
     }
 
+    eprintln!("############### Basic Blocks ###############");
     let bbs = basic_blocks::group_into_bbs(subr_lbl, flattened);
+    eprintln!("{}", bbs);
+    eprintln!("############################################");
 
     let schedule = trace::schedule_traces(bbs);
 
