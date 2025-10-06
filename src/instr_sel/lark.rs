@@ -258,7 +258,10 @@ impl crate::regalloc::Instr for Instr {
             Jr(Stg::Reg(Ra)) => None,
             Jr(_) => todo!(),
 
-            Jal(_, lbl) | J(lbl) => Some(CtrlTx::Jump(*lbl)),
+            J(lbl) => Some(CtrlTx::Jump(*lbl)),
+
+            // Subr call jumps out, then comes back like nothing happened.
+            Jal(_, lbl) => Some(CtrlTx::Advance),
 
             Nop | Li(..) | Lw(..) | Sw(..) | Label(..) | Mv(..) | Add(..) | AddI(..) | Sub(..)
             | SubI(..) | Shr(..) | Tlt(..) | Tge(..) | Teq(..) | Tne(..) | Tltu(..) | Tgeu(..) => {
