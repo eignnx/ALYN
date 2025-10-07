@@ -4,11 +4,11 @@ expression: "parse_and_convert(\"\n            subr test_simple_while(n: nat) {\
 ---
 Ok(
     [
-        :local<while_cond#0>;
-        if %n u(<) 100 then local<while_body#1> else local<end_while#2>;
+        jmp local<while_cond#0>;
         :local<while_body#1>;
         %n <- (%n + 1);
-        jmp local<while_cond#0>;
+        :local<while_cond#0>;
+        if %n u(<) 100 then local<while_body#1> else local<end_while#2>;
         :local<end_while#2>,
         ret,
     ],

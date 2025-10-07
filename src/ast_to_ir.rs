@@ -165,11 +165,11 @@ impl Ann<ast::Stmt> {
                 let end_lbl = Lbl::fresh("end_while");
 
                 let stmts = std::iter::empty()
-                    .chain([ir::Stmt::Lbl(cond_lbl)])
-                    .chain([cond(body_lbl, end_lbl)])
+                    .chain([ir::Stmt::direct_jmp(cond_lbl)])
                     .chain([ir::Stmt::Lbl(body_lbl)])
                     .chain(to_ir_stmts(body))
-                    .chain([ir::Stmt::direct_jmp(cond_lbl)])
+                    .chain([ir::Stmt::Lbl(cond_lbl)])
+                    .chain([cond(body_lbl, end_lbl)])
                     .chain([ir::Stmt::Lbl(end_lbl)]);
 
                 IrWrap::Stmt(ir::Stmt::seq(stmts))
