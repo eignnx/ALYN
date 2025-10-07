@@ -153,7 +153,7 @@ where
     ) -> RegAllocation<I, R> {
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
-            let (live_sets, mut color_graph) = self.build_phase(&mut cfg);
+            let mut color_graph = self.build_phase(&mut cfg);
             eprintln!("COLOR GRAPH:\n{color_graph:?}");
             let mut node_stack = self.simplify_phase(&mut color_graph);
             match self.select_phase(&mut color_graph, &mut node_stack) {
@@ -175,14 +175,13 @@ where
     fn build_phase<I: Instr<Register = R>>(
         &mut self,
         cfg: &Cfg<I>,
-    ) -> (LiveSets<R>, ColorGraph<R>) {
+    ) -> ColorGraph<R> {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
         eprintln!("LIVE SETS:\n{}", live_sets.display(&cfg.stmts[..]));
         eprintln!("initializing color graph...");
-        let cg = ColorGraph::new(cfg, &live_sets);
-        (live_sets, cg)
+        ColorGraph::new(cfg, &live_sets)
     }
 
     /// To "simplify" a node is to remove it from the color graph and push it onto a stack for use
