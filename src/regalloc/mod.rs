@@ -77,6 +77,9 @@ pub trait Instr: Debug {
 pub trait Cc<R: 'static + Clone> {
     /// A list of all the available general-purpose registers.
     const GPRS: &'static [R];
-
     const N_GPRS: usize = Self::GPRS.len();
+
+    const GPR_SAVED_REGS: &'static [R];
+    const GPR_TEMP_REGS: &'static [R];
+    const GPR_ARG_REGS: &'static [R];
 }

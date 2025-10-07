@@ -40,6 +40,24 @@ impl Cc<Reg> for Reg {
         S0, S1, S2,
         T0, T1, T2,
     ];
+
+    #[rustfmt::skip]
+    const GPR_TEMP_REGS: &'static [Reg] = &[
+        T0, T1, T2,
+        Rv,
+        A0, A1, A2,
+    ];
+
+    #[rustfmt::skip]
+    const GPR_SAVED_REGS: &'static [Reg] = &[
+        S0, S1, S2, Ra,
+    ];
+
+    #[rustfmt::skip]
+    const GPR_ARG_REGS: &'static [Reg] = &[
+        A0, A1, A2
+    ];
+
 }
 
 #[derive(Debug, Clone, Display)]

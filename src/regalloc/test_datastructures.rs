@@ -17,6 +17,9 @@ pub enum Reg {
 
 impl Cc<Reg> for Reg {
     const GPRS: &[Self] = &[Reg::R1, Reg::R2, Reg::R3];
+    const GPR_ARG_REGS: &'static [Reg] = &[Reg::R1, Reg::R2];
+    const GPR_TEMP_REGS: &'static [Reg] = &[Reg::R1, Reg::R2];
+    const GPR_SAVED_REGS: &'static [Reg] = &[Reg::R3];
 }
 
 #[derive(Clone, From)]
