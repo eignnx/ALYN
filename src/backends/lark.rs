@@ -10,9 +10,8 @@ use crate::{
     canon, ir,
     names::{self, Lbl, Tmp},
     regalloc::{Cc, CtrlTx},
+    instr_sel::Select,
 };
-
-use crate::InstrSel;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -399,7 +398,7 @@ impl<'a> LarkInstrSel<'a> {
     }
 }
 
-impl<'a> InstrSel for LarkInstrSel<'a> {
+impl<'a> Select for LarkInstrSel<'a> {
     type Register = Reg;
 
     type Instruction = Instr;

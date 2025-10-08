@@ -1,4 +1,4 @@
-use crate::{instr_sel::{self, InstrSel}, names::Lbl};
+use crate::{instr_sel::{self, Select}, names::Lbl};
 
 
 pub struct I8086InstrSel;
@@ -41,7 +41,7 @@ pub enum Instr {
 }
 
 
-impl InstrSel for I8086InstrSel {
+impl Select for I8086InstrSel {
     type Register = Reg;
 
     type Instruction = Instr;

@@ -42,7 +42,7 @@ impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
 }
 
 /// Something that can perform instruction selection.
-pub trait InstrSel {
+pub trait Select {
     /// The type that represents a CPU register.
     type Register: std::fmt::Debug;
     type Instruction: Clone;

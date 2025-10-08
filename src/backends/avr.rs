@@ -10,7 +10,7 @@ use crate::{
     canon, instr_sel, ir, names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx}
 };
 
-use crate::instr_sel::InstrSel;
+use crate::instr_sel::Select;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -369,7 +369,7 @@ impl<'a> AvrInstrSel<'a> {
     }
 }
 
-impl<'a> InstrSel for AvrInstrSel<'a> {
+impl<'a> Select for AvrInstrSel<'a> {
     type Register = Reg;
 
     type Instruction = Instr;

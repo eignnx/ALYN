@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    instr_sel::{InstrSel, Stg},
+    instr_sel::{Select, Stg},
     backends::lark::LarkInstrSel,
     names::Tmp,
     regalloc::Instr,
@@ -41,11 +41,11 @@ fn main() {
     compiler.compile(&fname[..], &src[..]);
 }
 
-pub struct Compiler<ISel: InstrSel> {
+pub struct Compiler<ISel: Select> {
     instr_select: ISel,
 }
 
-impl<ISel: InstrSel> Compiler<ISel>
+impl<ISel: Select> Compiler<ISel>
 where
     ISel::Register: Ord + Eq + Copy + regalloc::Cc<ISel::Register> + 'static,
     ISel::Instruction: Instr<Register = ISel::Register>,
