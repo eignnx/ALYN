@@ -52,10 +52,9 @@ where
         let mut cfg = Cfg::new(0, params, stmts);
         self.precolor(&mut cfg);
 
-        for _ in 0..Self::MAX_ITERS {
-            eprintln!("-----------------------");
+        for i in 0..Self::MAX_ITERS {
+            eprintln!("============= Iteration #{} ============", i + 1);
             let mut color_graph = self.build_phase(&mut cfg);
-            eprintln!("COLOR GRAPH:\n{color_graph:?}");
             let mut node_stack = self.simplify_phase(&mut color_graph);
             match self.select_phase(&mut color_graph, &mut node_stack) {
                 Ok(assignments) => return RegAllocation { cfg, assignments },
@@ -98,7 +97,9 @@ where
         live_sets.compute_live_ins_live_outs(cfg);
         eprintln!("LIVE SETS:\n{}", live_sets.display(&cfg.stmts[..]));
         eprintln!("initializing color graph...");
-        ColorGraph::new(cfg, &live_sets)
+        let cg = ColorGraph::new(cfg, &live_sets);
+        eprintln!("COLOR GRAPH:\n{cg:?}");
+        cg
     }
 
     /// To "simplify" a node is to remove it from the color graph and push it onto a stack for use
