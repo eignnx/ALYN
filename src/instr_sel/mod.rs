@@ -2,8 +2,6 @@ use derive_more::{Display, From};
 
 use crate::{canon, ir, names::Tmp};
 
-pub mod lark;
-
 /// A storage node
 #[derive(From, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Stg<R> {
@@ -70,7 +68,7 @@ mod tests {
         mod_ast.check_ty(&mut tcx);
 
         let mut out = vec![];
-        let mut be = lark::LarkBackend::new(&mut out);
+        let mut be = lark::LarkInstrSel::new(&mut out);
         for decl in mod_ast.decls {
             let subr_lbl = crate::names::Lbl::SubrStart(decl.value.name);
             let ir_stmts = decl

@@ -113,7 +113,7 @@ pub mod basic_blocks {
     };
 
     // Basic Block
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, Clone, PartialEq)]
     pub struct Bb {
         pub stmts: Vec<Stmt>,
         pub last: Stmt,
