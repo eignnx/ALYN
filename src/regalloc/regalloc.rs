@@ -177,14 +177,14 @@ where
 
         // Move values in arg registers into the temporaries representing parameters.
         for (&param, &reg) in cfg.params.iter().zip(R::GPR_ARG_REGS) {
-            prologue.push(I::mk_move(param.into(), Stg::Reg(reg)));
+            prologue.extend(I::emit_move(param.into(), Stg::Reg(reg)));
         }
 
         // All saved registers need to be saved to their own temporaries (hopefully to be coalesced
         // away later).
         for &reg in R::GPR_SAVED_REGS {
             let fresh_tmp = Tmp::fresh(format!("saved<{reg:?}>").as_str());
-            prologue.push(I::mk_move(fresh_tmp.into(), Stg::Reg(reg)));
+            prologue.extend(I::emit_move(fresh_tmp.into(), Stg::Reg(reg)));
         }
 
         prologue.extend(cfg.stmts.drain(..));
@@ -322,16 +322,16 @@ where
             let mut new_tmp = None;
             if uses.contains(&to_spill.into()) {
                 let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
-                let new_stmt = I::mk_load_from_stack(dst, slot_addr);
-                eprintln!("++ inserting stmt:\t{new_stmt:?}");
-                new_stmts.push(new_stmt);
+                new_stmts.extend(I::emit_load_from_stack(dst, slot_addr).inspect(|new_stmt| {
+                    eprintln!("++ inserting stmt:\t{new_stmt:?}");
+                }));
                 stmt_ref.replace_use_occurrances(to_spill, dst.into());
                 changed = true;
             }
             if defs.contains(&to_spill.into()) {
                 let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
                 stmt_ref.replace_def_occurrances(to_spill, src.into());
-                insert_after.push(I::mk_store_to_stack(slot_addr, src));
+                insert_after.extend(I::emit_store_to_stack(slot_addr, src));
                 changed = true;
             }
 

@@ -274,16 +274,16 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
-    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
-        todo!()//St(Stg, Stg)
+    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item=Self> {
+        [].into_iter() // TODO
     }
 
-    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
-        todo!()//Ld(Stg, Stg)
+    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item=Self> {
+        [].into_iter() // TODO
     }
 
-    fn mk_move(dst: Stg, src: Stg) -> Self {
-        Mov(dst, src)
+    fn emit_move(dst: Stg, src: Stg) -> impl Iterator<Item=Self> {
+        std::iter::once(Mov(dst, src))
     }
 }
 

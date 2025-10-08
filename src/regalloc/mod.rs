@@ -41,7 +41,7 @@ pub enum CtrlTx {
     Branch(Lbl),
 }
 
-pub trait Instr: Debug {
+pub trait Instr: Debug + Sized {
     type Register: Copy + Debug;
 
     fn add_defs_uses(
@@ -69,9 +69,9 @@ pub trait Instr: Debug {
     /// wouldn't seem like any jump has happened.
     fn ctrl_tx(&self) -> Option<CtrlTx>;
 
-    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self;
-    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self;
-    fn mk_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> Self;
+    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item = Self>;
+    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item = Self>;
+    fn emit_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> impl Iterator<Item = Self>;
 }
 
 /// Calling convention

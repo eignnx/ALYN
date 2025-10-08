@@ -11,7 +11,7 @@ pub enum Reg {
     Si, Di,
 }
 
-type Stg = instr_sel::Stg<Reg>;
+pub type Stg = instr_sel::Stg<Reg>;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Imm {

@@ -7,10 +7,12 @@ use derive_more::{Debug, Display, From};
 use internment::Intern;
 
 use crate::{
-    canon, instr_sel, ir, names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx}
+    canon, ir,
+    names::{self, Lbl, Tmp},
+    regalloc::{Cc, CtrlTx},
 };
 
-use crate::instr_sel::InstrSel;
+use crate::InstrSel;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
@@ -24,7 +26,7 @@ pub enum Reg {
     #[display("$gp")] Gp, #[display("$sp")] Sp
 }
 
-impl From<Reg> for instr_sel::Stg<Reg> {
+impl From<Reg> for crate::Stg<Reg> {
     fn from(reg: Reg) -> Self {
         Stg::Reg(reg)
     }
@@ -81,7 +83,7 @@ impl TryFrom<&ir::RVal> for Imm {
     }
 }
 
-type Stg = instr_sel::Stg<Reg>;
+type Stg = crate::Stg<Reg>;
 
 #[derive(Debug, Clone)]
 pub enum Instr {
@@ -288,16 +290,16 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
-    fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
-        Sw(Sp.into(), Imm::Int(addr.cast_unsigned() as u16), src.into())
+    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item=Self> {
+        std::iter::once(Sw(Sp.into(), Imm::Int(addr.cast_unsigned() as u16), src.into()))
     }
 
-    fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
-        Lw(dst.into(), Sp.into(), Imm::Int(addr.cast_unsigned() as u16))
+    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item=Self> {
+        std::iter::once(Lw(dst.into(), Sp.into(), Imm::Int(addr.cast_unsigned() as u16)))
     }
 
-    fn mk_move(dst: Stg, src: Stg) -> Self {
-        Mv(dst, src)
+    fn emit_move(dst: Stg, src: Stg) -> impl Iterator<Item=Self> {
+        std::iter::once(Mv(dst, src))
     }
 }
 

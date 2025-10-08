@@ -57,6 +57,8 @@ pub trait InstrSel {
 
 #[cfg(test)]
 mod tests {
+    use crate::backends::lark;
+
     use super::*;
     use insta::assert_debug_snapshot;
 
