@@ -10,16 +10,18 @@ use super::{CtrlTx, Instr};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Reg {
-    R1,
-    R2,
-    R3,
+    T0,
+    T1,
+    T2,
+    S0,
+    S1,
 }
 
 impl Cc<Reg> for Reg {
-    const GPRS: &[Self] = &[Reg::R1, Reg::R2, Reg::R3];
-    const GPR_ARG_REGS: &'static [Reg] = &[Reg::R1, Reg::R2];
-    const GPR_TEMP_REGS: &'static [Reg] = &[Reg::R1, Reg::R2];
-    const GPR_SAVED_REGS: &'static [Reg] = &[Reg::R3];
+    const GPRS: &[Self] = &[Reg::T0, Reg::T1, Reg::T2, Reg::S0, Reg::S1];
+    const GPR_ARG_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
+    const GPR_TEMP_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
+    const GPR_SAVED_REGS: &'static [Reg] = &[Reg::S0, Reg::S1];
 }
 
 #[derive(Clone, From)]
@@ -158,6 +160,10 @@ impl Instr for Stmt {
             dst: dst.into(),
             addr,
         }
+    }
+
+    fn mk_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> Self {
+        Self::Mov(dst, src.into())
     }
 }
 

@@ -151,6 +151,8 @@ where
         &mut self,
         mut cfg: Cfg<I>,
     ) -> RegAllocation<I, R> {
+        self.precolor(&mut cfg);
+
         for _ in 0..Self::MAX_ITERS {
             eprintln!("-----------------------");
             let mut color_graph = self.build_phase(&mut cfg);
@@ -168,6 +170,25 @@ where
             "Register allocation failed: iteration limit ({}) exceeded",
             Self::MAX_ITERS
         );
+    }
+
+    fn precolor<I: Instr<Register = R>>(&mut self, cfg: &mut Cfg<I>) {
+        let mut prologue = vec![];
+
+        // Move values in arg registers into the temporaries representing parameters.
+        for (&param, &reg) in cfg.params.iter().zip(R::GPR_ARG_REGS) {
+            prologue.push(I::mk_move(param.into(), Stg::Reg(reg)));
+        }
+
+        // All saved registers need to be saved to their own temporaries (hopefully to be coalesced
+        // away later).
+        for &reg in R::GPR_SAVED_REGS {
+            let fresh_tmp = Tmp::fresh(format!("saved<{reg:?}>").as_str());
+            prologue.push(I::mk_move(fresh_tmp.into(), Stg::Reg(reg)));
+        }
+
+        prologue.extend(cfg.stmts.drain(..));
+        std::mem::replace(&mut cfg.stmts, prologue);
     }
 
     /// Computes live-sets and builds a color graph given a control-flow graph representing a
@@ -394,10 +415,6 @@ mod tests {
         ];
 
         compute_assignments(vec!["base".into(), "n".into()], program.clone());
-        eprintln!("==============================");
-        eprintln!("==============================");
-        eprintln!("==============================");
-        compute_assignments(vec!["base".into(), "n".into()], program.clone());
     }
 
     #[test]
@@ -462,10 +479,6 @@ mod tests {
                  S::Br(E::binop("low", "high"), "loop_top".into()),
             S::ret(-1),
         ];
-        compute_assignments(vec!["x".into(), "v".into(), "n".into()], program.clone());
-        eprintln!("=======================================");
-        eprintln!("=======================================");
-        eprintln!("=======================================");
         compute_assignments(vec!["x".into(), "v".into(), "n".into()], program.clone());
     }
 }

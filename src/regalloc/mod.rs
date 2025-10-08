@@ -71,6 +71,7 @@ pub trait Instr: Debug {
 
     fn mk_store_to_stack(addr: i32, src: Tmp) -> Self;
     fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self;
+    fn mk_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> Self;
 }
 
 /// Calling convention

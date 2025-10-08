@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    instr_sel::{InstrSel, Stg, lark::LarkInstrSel},
+    instr_sel::{InstrSel, Stg},
+    backends::lark::LarkInstrSel,
     names::Tmp,
     regalloc::Instr,
 };
@@ -23,6 +24,7 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+mod backends;
 
 fn main() {
     let Some(fname) = std::env::args().nth(1) else {

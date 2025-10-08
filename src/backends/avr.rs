@@ -7,26 +7,52 @@ use derive_more::{Debug, Display, From};
 use internment::Intern;
 
 use crate::{
-    canon, ir,
-    names::{self, Lbl, Tmp},
-    regalloc::{Cc, CtrlTx},
+    canon, instr_sel, ir, names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx}
 };
 
-use super::InstrSel;
+use crate::instr_sel::InstrSel;
 
 #[rustfmt::skip]
 #[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum Reg {
-    #[display("$zero")] Zero,
-    #[display("$rv")] Rv, #[display("$ra")] Ra,
-    #[display("$a0")] A0, #[display("$a1")] A1, #[display("$a2")] A2,
-    #[display("$s0")] S0, #[display("$s1")] S1, #[display("$s2")] S2,
-    #[display("$t0")] T0, #[display("$t1")] T1, #[display("$t2")] T2,
-    #[display("$k0")] K0, #[display("$k1")] K1,
-    #[display("$gp")] Gp, #[display("$sp")] Sp
+    #[display("$r0")] R0,
+    #[display("$r1")] R1,
+    #[display("$r2")] R2,
+    #[display("$r3")] R3,
+    #[display("$r4")] R4,
+    #[display("$r5")] R5,
+    #[display("$r6")] R6,
+    #[display("$r7")] R7,
+    #[display("$r8")] R8,
+    #[display("$r9")] R9,
+
+    #[display("$r10")] R10,
+    #[display("$r11")] R11,
+    #[display("$r12")] R12,
+    #[display("$r13")] R13,
+    #[display("$r14")] R14,
+    #[display("$r15")] R15,
+    #[display("$r16")] R16,
+    #[display("$r17")] R17,
+    #[display("$r18")] R18,
+    #[display("$r19")] R19,
+
+    #[display("$r20")] R20,
+    #[display("$r21")] R21,
+    #[display("$r22")] R22,
+    #[display("$r23")] R23,
+    #[display("$r24")] R24,
+    #[display("$r25")] R25,
+    #[display("$r26")] R26,
+    #[display("$r27")] R27,
+    #[display("$r28")] R28,
+    #[display("$r29")] R29,
+
+    #[display("$r30")] R30,
+    #[display("$r31")] R31,
 }
 
-impl From<Reg> for super::Stg<Reg> {
+impl From<Reg> for instr_sel::Stg<Reg> {
     fn from(reg: Reg) -> Self {
         Stg::Reg(reg)
     }
@@ -35,28 +61,20 @@ impl From<Reg> for super::Stg<Reg> {
 impl Cc<Reg> for Reg {
     #[rustfmt::skip]
     const GPRS: &'static [Reg] = &[
-        Rv, Ra,
-        A0, A1, A2,
-        S0, S1, S2,
-        T0, T1, T2,
+        // R0,  R1,  R2,  R3,  R4,  R5,  R6,  R7,  R8,  R9,  R10, R11, R12, R13, R14, R15,
+        R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31,
     ];
 
     #[rustfmt::skip]
     const GPR_TEMP_REGS: &'static [Reg] = &[
-        T0, T1, T2,
-        Rv,
-        A0, A1, A2,
+        R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31,
     ];
 
     #[rustfmt::skip]
-    const GPR_SAVED_REGS: &'static [Reg] = &[
-        S0, S1, S2, Ra,
-    ];
+    const GPR_SAVED_REGS: &'static [Reg] = &[];
 
     #[rustfmt::skip]
-    const GPR_ARG_REGS: &'static [Reg] = &[
-        A0, A1, A2
-    ];
+    const GPR_ARG_REGS: &'static [Reg] = &[];
 
 }
 
@@ -83,62 +101,62 @@ impl TryFrom<&ir::RVal> for Imm {
     }
 }
 
-type Stg = super::Stg<Reg>;
+type Stg = instr_sel::Stg<Reg>;
 
 #[derive(Debug, Clone)]
 pub enum Instr {
     #[debug("{_0:?}:")]
     Label(Lbl),
 
-    #[debug("mv {_0}, {_1}")]
-    Mv(Stg, Stg),
+    /// Load immediate
+    #[debug("LDI {_0}, {_1}")]
+    Ldi(Stg, Imm),
 
-    #[debug("add {_0}, {_1}, {_2}")]
-    Add(Stg, Stg, Stg),
-    #[debug("addi {_0}, {_1}, {_2}")]
-    AddI(Stg, Stg, Imm),
+    #[debug("ADD {_0}, {_1}")]
+    Add(Stg, Stg),
 
-    #[debug("sub {_0}, {_1}, {_2}")]
-    Sub(Stg, Stg, Stg),
-    #[debug("subi {_0}, {_1}, {_2}")]
-    SubI(Stg, Stg, Imm),
+    #[debug("SUB {_0}, {_1}")]
+    Sub(Stg, Stg),
 
-    #[debug("shr {_0}, {_1}, {_2}")]
-    Shr(Stg, Stg, Stg),
+    /// LoaD direct from data Space
+    #[debug("LDS {_0}, {_1}")]
+    Lds(Stg, Imm),
 
-    #[debug("jr {_0}")]
-    Jr(Stg),
-    #[debug("nop")]
-    Nop,
-    #[debug("li {_0}, {_1}")]
-    Li(Stg, Imm),
-    #[debug("lw {_0}, [{_1} + {_2}]")]
-    Lw(Stg, Stg, Imm),
-    #[debug("sw [{_0} + {_1}], {_2}]")]
-    Sw(Stg, Imm, Stg),
+    /// STore direct to data Space
+    #[debug("STS {_0}, {_1}")]
+    Sts(Imm, Stg),
 
-    #[debug("j {_0:?}")]
-    J(Lbl),
-    #[debug("jal {_0}, {_1:?}")]
-    Jal(Stg, Lbl),
+    /// Move
+    #[debug("MOV {_0}, {_1}")]
+    Mov(Stg, Stg),
 
-    #[debug("tlt {_0}, {_1}, {_2}")]
-    Tlt(Stg, Stg, Stg),
-    #[debug("tge {_0}, {_1}, {_2}")]
-    Tge(Stg, Stg, Stg),
-    #[debug("teq {_0}, {_1}, {_2}")]
-    Teq(Stg, Stg, Stg),
-    #[debug("tne {_0}, {_1}, {_2}")]
-    Tne(Stg, Stg, Stg),
-    #[debug("tltu {_0}, {_1}, {_2}")]
-    Tltu(Stg, Stg, Stg),
-    #[debug("tgeu {_0}, {_1}, {_2}")]
-    Tgeu(Stg, Stg, Stg),
+    /// Increment
+    #[debug("INC {_0}")]
+    Inc(Stg),
 
-    #[debug("bf {_0}, {_1:?}")]
-    Bf(Stg, Lbl),
-    #[debug("bt {_0}, {_1:?}")]
-    Bt(Stg, Lbl),
+    /// Decrement
+    #[debug("DEC {_0}")]
+    Dec(Stg),
+
+    /// Clear register
+    #[debug("CLR {_0}")]
+    Clr(Stg),
+
+    /// Negate
+    #[debug("NEG {_0}")]
+    Neg(Stg),
+
+    /// Arithmetic Shift Right
+    #[debug("ASR {_0}")]
+    Asr(Stg),
+
+    /// Jump
+    #[debug("JMP {_0:?}")]
+    Jmp(Lbl),
+
+    /// BRanch if Not Equal (branch if Z = 0)
+    #[debug("BRNE {_0:?}")]
+    Brne(Lbl),
 }
 
 impl crate::regalloc::Instr for Instr {
@@ -147,87 +165,63 @@ impl crate::regalloc::Instr for Instr {
     fn add_defs_uses(&self, defs: &mut impl Extend<Stg>, uses: &mut impl Extend<Stg>) {
         match self {
             Label(lbl) => {}
-            Mv(lhs, rhs) => {
-                defs.extend([*lhs]);
-                uses.extend([*rhs]);
-            }
-            Add(dst, src1, src2) | Sub(dst, src1, src2) | Shr(dst, src1, src2) => {
+            Mov(dst, src) | Add(dst, src) | Sub(dst, src) => {
                 defs.extend([*dst]);
-                uses.extend([*src1, *src2].into_iter());
+                uses.extend([*src]);
             }
-            AddI(dst, src1, imm) | SubI(dst, src1, imm) => {
+
+            Neg(dst) | Clr(dst) | Inc(dst) | Dec(dst) | Asr(dst) => {
                 defs.extend([*dst]);
-                uses.extend([*src1]);
+                uses.extend([*dst]);
             }
-            Jr(stg) => uses.extend([*stg]),
-            Nop => {}
-            Li(stg, imm) => defs.extend([*stg]),
-            Lw(dst, base, imm) => {
-                defs.extend([*dst]);
-                uses.extend([*base]);
-            }
-            Sw(base, imm, src) => {
-                uses.extend([*base, *src].into_iter());
-            }
-            J(lbl) => {}
-            Jal(stg, lbl) => defs.extend([*stg]),
-            Tlt(dst, src1, src2)
-            | Tge(dst, src1, src2)
-            | Teq(dst, src1, src2)
-            | Tne(dst, src1, src2)
-            | Tltu(dst, src1, src2)
-            | Tgeu(dst, src1, src2) => {
-                defs.extend([*dst]);
-                uses.extend([*src1, *src2].into_iter());
-            }
-            Bf(stg, lbl) | Bt(stg, lbl) => uses.extend([*stg]),
+
+            Ldi(dst, imm) | Lds(dst, imm) => defs.extend([*dst]),
+            Sts(imm, src) => uses.extend([*src]),
+            Jmp(lbl) | Brne(lbl) => {}
         }
     }
 
     fn try_as_pure_move(&self) -> Option<(Stg, Stg)> {
         match self {
-            Self::Mv(lhs, stg) => Some((*lhs, *stg)),
+            Mov(dst, src) => Some((*dst, *src)),
             _ => None,
         }
     }
 
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
-            Li(stg, _)
-            | Lw(stg, _, _)
-            | Mv(stg, _)
-            | Jal(stg, _)
-            | AddI(stg, _, _)
-            | SubI(stg, _, _)
-            | Add(stg, _, _)
-            | Sub(stg, _, _)
-            | Shr(stg, _, _)
-            | Tlt(stg, _, _)
-            | Tge(stg, _, _)
-            | Teq(stg, _, _)
-            | Tne(stg, _, _)
-            | Tltu(stg, _, _)
-            | Tgeu(stg, _, _) => {
-                if let Stg::Tmp(tmp) = stg {
-                    if *tmp == old {
-                        *stg = new;
-                    }
+            Label(..) | Jmp(..) | Brne(..) | Sts(..) => {}
+
+            Inc(dst) |
+            Dec(dst) |
+            Clr(dst) |
+            Neg(dst) |
+            Asr(dst) |
+            Ldi(dst, _) |
+            Mov(dst, _) |
+            Add(dst, _) |
+            Sub(dst, _) |
+            Lds(dst, _) => {
+                if *dst == Stg::Tmp(old) {
+                    *dst = new;
                 }
             }
 
-            Label(..) | Jr(..) | Nop | Sw(..) | J(..) | Bf(..) | Bt(..) => {}
         }
     }
 
     fn replace_use_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
-            Mv(_, stg)
-            | Jr(stg)
-            | AddI(_, stg, _)
-            | SubI(_, stg, _)
-            | Lw(_, stg, _)
-            | Bf(stg, _)
-            | Bt(stg, _) => {
+            Label(..) | Jmp(..) | Brne(..)  => {}
+
+            Sts(_, stg) |
+            Ldi(stg, _) |
+            Lds(stg, _) |
+            Inc(stg) |
+            Dec(stg) |
+            Clr(stg) |
+            Neg(stg) |
+            Asr(stg) => {
                 if let Stg::Tmp(tmp) = stg {
                     if *tmp == old {
                         *stg = new;
@@ -235,34 +229,25 @@ impl crate::regalloc::Instr for Instr {
                 }
             }
 
-            Add(_, stg1, stg2)
-            | Sub(_, stg1, stg2)
-            | Shr(_, stg1, stg2)
-            | Tlt(_, stg1, stg2)
-            | Tge(_, stg1, stg2)
-            | Teq(_, stg1, stg2)
-            | Tne(_, stg1, stg2)
-            | Tltu(_, stg1, stg2)
-            | Tgeu(_, stg1, stg2)
-            | Sw(stg1, _, stg2) => {
-                if let Stg::Tmp(tmp1) = stg1 {
-                    if *tmp1 == old {
-                        *stg1 = new;
+            Mov(dst, src) |
+            Sub(dst, src) |
+            Add(dst, src) => {
+                        if let Stg::Tmp(tmp1) = dst {
+                            if *tmp1 == old {
+                                *dst = new;
+                            }
+                        }
+                        if let Stg::Tmp(tmp2) = src {
+                            if *tmp2 == old {
+                                *src = new;
+                            }
+                        }
                     }
-                }
-                if let Stg::Tmp(tmp2) = stg2 {
-                    if *tmp2 == old {
-                        *stg2 = new;
-                    }
-                }
-            }
-
-            Jal(..) | J(..) | Li(..) | Nop | Label(..) => {}
         }
     }
 
     fn get_label(&self) -> Option<Lbl> {
-        if let Self::Label(lbl) = self {
+        if let Label(lbl) = self {
             Some(*lbl)
         } else {
             None
@@ -271,57 +256,46 @@ impl crate::regalloc::Instr for Instr {
 
     fn ctrl_tx(&self) -> Option<CtrlTx> {
         match self {
-            // TODO: This assumes JR is used for subroutine jumps only. Does not apply if used as
-            // Switch jump.
-            Jr(Stg::Reg(Ra)) => None,
-            Jr(_) => todo!(),
+            Jmp(lbl) => Some(CtrlTx::Jump(*lbl)),
+            Brne(lbl) => Some(CtrlTx::Branch(*lbl)),
 
-            J(lbl) => Some(CtrlTx::Jump(*lbl)),
-
-            // Subr call jumps out, then comes back like nothing happened.
-            Jal(_, lbl) => Some(CtrlTx::Advance),
-
-            Nop | Li(..) | Lw(..) | Sw(..) | Label(..) | Mv(..) | Add(..) | AddI(..) | Sub(..)
-            | SubI(..) | Shr(..) | Tlt(..) | Tge(..) | Teq(..) | Tne(..) | Tltu(..) | Tgeu(..) => {
-                Some(CtrlTx::Advance)
-            }
-
-            Bf(stg, lbl) | Bt(stg, lbl) => Some(CtrlTx::Branch(*lbl)),
+            Label(..) |
+            Ldi(..) |
+            Add(..) |
+            Sub(..) |
+            Lds(..) |
+            Sts(..) |
+            Mov(..) |
+            Inc(..) |
+            Dec(..) |
+            Clr(..) |
+            Neg(..) |
+            Asr(..) => Some(CtrlTx::Advance)
         }
     }
 
     fn mk_store_to_stack(addr: i32, src: Tmp) -> Self {
-        Sw(Sp.into(), Imm::Int(addr.cast_unsigned() as u16), src.into())
+        todo!()//St(Stg, Stg)
     }
 
     fn mk_load_from_stack(dst: Tmp, addr: i32) -> Self {
-        Lw(dst.into(), Sp.into(), Imm::Int(addr.cast_unsigned() as u16))
+        todo!()//Ld(Stg, Stg)
+    }
+
+    fn mk_move(dst: Stg, src: Stg) -> Self {
+        Mov(dst, src)
     }
 }
 
 use Instr::*;
 use Reg::*;
 
-pub struct LarkInstrSel<'a> {
+pub struct AvrInstrSel<'a> {
     out: &'a mut Vec<Instr>,
     current_subr_params: BTreeMap<u8, Tmp>,
 }
 
-impl<'a> LarkInstrSel<'a> {
-    #[rustfmt::skip]
-    const GPR_TEMP_REGS: &'static [Reg] = &[
-        T0, T1, T2,
-        A0, A1, A2,
-    ];
-    #[rustfmt::skip]
-    const GPR_SAVED_REGS: &'static [Reg] = &[
-        S0, S1, S2,
-    ];
-    #[rustfmt::skip]
-    const GPR_ARG_REGS: &'static [Reg] = &[
-        A0, A1, A2
-    ];
-
+impl<'a> AvrInstrSel<'a> {
     pub fn new(out: &'a mut Vec<Instr>) -> Self {
         Self {
             out,
@@ -349,17 +323,17 @@ impl<'a> LarkInstrSel<'a> {
         };
         match op {
             ir::Binop::Add => with_dst(dst, "addi_dst", |dst| {
-                self.emit(AddI(dst, x_dst, imm));
+                todo!();//self.emit(AddI(dst, x_dst, imm));
             }),
             ir::Binop::Sub => with_dst(dst, "subi_dst", |dst| {
-                self.emit(SubI(dst, x_dst, imm));
+                todo!();//self.emit(SubI(dst, x_dst, imm));
             }),
             ir::Binop::And => todo!(),
             ir::Binop::Or => todo!(),
             ir::Binop::Shr => with_dst(dst, "shr_dst", |dst| {
                 let shamt = Stg::Tmp(Tmp::fresh("shamt"));
-                self.emit(Li(shamt, imm));
-                self.emit(Shr(dst, x_dst, shamt));
+                todo!();//self.emit(Li(shamt, imm));
+                todo!();//self.emit(Shr(dst, x_dst, shamt));
             }),
             ir::Binop::Xor => todo!(),
         }
@@ -382,10 +356,10 @@ impl<'a> LarkInstrSel<'a> {
         };
         match op {
             ir::Binop::Add => with_dst(dst, "add_dst", |dst| {
-                self.emit(Add(dst, x_dst, y_dst));
+                todo!()//self.emit(Add(dst, x_dst, y_dst));
             }),
             ir::Binop::Sub => with_dst(dst, "sub_dst", |dst| {
-                self.emit(Sub(dst, x_dst, y_dst));
+                todo!()//self.emit(Sub(dst, x_dst, y_dst));
             }),
             ir::Binop::And => todo!(),
             ir::Binop::Or => todo!(),
@@ -395,7 +369,7 @@ impl<'a> LarkInstrSel<'a> {
     }
 }
 
-impl<'a> InstrSel for LarkInstrSel<'a> {
+impl<'a> InstrSel for AvrInstrSel<'a> {
     type Register = Reg;
 
     type Instruction = Instr;
@@ -407,31 +381,31 @@ impl<'a> InstrSel for LarkInstrSel<'a> {
             Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Int(offset)))), rhs)
             | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Int(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
+                todo!();//self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
             Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Nat(offset)))), rhs)
             | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Nat(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
+                todo!();//self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
             // M[base] = src
             Stmt::Move(Mem(LVal(Tmp(base))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                self.emit(Sw(base.into(), self::Imm::Int(0), rhs_dst));
+                todo!();//self.emit(Sw(base.into(), self::Imm::Int(0), rhs_dst));
             }
             Stmt::Move(Mem(lhs), rhs) => {
                 let rhs_tmp = self.expr_to_asm(rhs, None);
                 let lhs_tmp = self.expr_to_asm(*lhs, None);
-                self.emit(Sw(lhs_tmp, self::Imm::Int(0), rhs_tmp));
+                todo!();//self.emit(Sw(lhs_tmp, self::Imm::Int(0), rhs_tmp));
             }
 
             // tmp1 = tmp2
             Stmt::Move(Tmp(lhs), LVal(Tmp(rhs))) => {
-                self.emit(Mv(lhs.into(), rhs.into()));
+                todo!();//self.emit(Mv(lhs.into(), rhs.into()));
             }
 
             Stmt::Move(Tmp(lhs), Imm(canon::Imm::Int(i))) => {
-                self.emit(Li(lhs.into(), self::Imm::Int(i as u16)));
+                todo!();//self.emit(Li(lhs.into(), self::Imm::Int(i as u16)));
             }
 
             Stmt::Move(Tmp(lhs), rhs) => {
@@ -439,22 +413,23 @@ impl<'a> InstrSel for LarkInstrSel<'a> {
             }
 
             Stmt::Call(opt_dst, func, args) => {
-                for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
-                    self.expr_to_asm(arg, Stg::Reg(*reg));
-                }
-                self.emit(Jal(Ra.into(), func));
-                if let Some(dst) = opt_dst {
-                    // Store the return value in a temporary if requested.
-                    self.emit(Mv(dst.into(), Rv.into()));
-                }
+                //for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
+                //    self.expr_to_asm(arg, Stg::Reg(*reg));
+                //}
+                //self.emit(Jal(Ra.into(), func));
+                //if let Some(dst) = opt_dst {
+                //    // Store the return value in a temporary if requested.
+                //    self.emit(Mv(dst.into(), Rv.into()));
+                //}
+                todo!()
             }
 
             Stmt::Switch(expr, lbls) => todo!(),
 
             Stmt::Discard(rval) => {
-                let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
+                todo!();//let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
             }
-            Stmt::Jmp(lbl) => self.emit(Instr::J(lbl)),
+            Stmt::Jmp(lbl) => todo!(),//self.emit(Instr::J(lbl)),
 
             Stmt::Br {
                 e1,
@@ -466,23 +441,23 @@ impl<'a> InstrSel for LarkInstrSel<'a> {
                 let e2_tmp = self.expr_to_asm(e2, None);
                 let bool_tmp = names::Tmp::fresh("bool");
                 match op {
-                    ir::Relop::Eq => self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::Eq => todo!(),//self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     ir::Relop::LtU => {
-                        self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
+                        todo!();//self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
                     }
-                    ir::Relop::Lt => self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::Lt => todo!(),//self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
                 }
-                self.emit(Bt(bool_tmp.into(), if_true.into()));
+                todo!();//self.emit(Bt(bool_tmp.into(), if_true.into()));
             }
 
             Stmt::Lbl(lbl) => self.emit(Label(lbl)),
-            Stmt::Nop => self.emit(Nop),
+            Stmt::Nop => todo!(),//self.emit(Nop),
             Stmt::Ret(Some(rval)) => {
-                self.expr_to_asm(rval, Stg::Reg(Rv));
-                self.emit(Jr(Stg::from_reg(Ra)));
+                todo!();//self.expr_to_asm(rval, Stg::Reg(Rv));
+                todo!();//self.emit(Jr(Stg::from_reg(Ra)));
             }
-            Stmt::Ret(None) => self.emit(Jr(Stg::from_reg(Ra))),
+            Stmt::Ret(None) => todo!(),//self.emit(Jr(Stg::from_reg(Ra))),
         }
     }
 
@@ -500,22 +475,22 @@ impl<'a> InstrSel for LarkInstrSel<'a> {
             Imm(imm) => match imm {
                 Byte(x) => {
                     let dst = mk_dst("li_byte");
-                    self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Nat(x) => {
                     let dst = mk_dst("li_nat");
-                    self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Int(x) => {
                     let dst = mk_dst("li_int");
-                    self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Lbl(lbl) => {
                     let dst = mk_dst("li_lbl");
-                    self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
+                    todo!();//self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
                     dst
                 }
             },
@@ -524,7 +499,7 @@ impl<'a> InstrSel for LarkInstrSel<'a> {
                 Mem(rval) => {
                     let addr = self.expr_to_asm(*rval, None);
                     let dst = mk_dst("load");
-                    self.emit(Lw(dst, addr, self::Imm::Int(0)));
+                    todo!();//self.emit(Lw(dst, addr, self::Imm::Int(0)));
                     dst
                 }
             },
