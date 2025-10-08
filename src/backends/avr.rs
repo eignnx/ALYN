@@ -7,7 +7,9 @@ use derive_more::{Debug, Display, From};
 use internment::Intern;
 
 use crate::{
-    canon, instr_sel, ir, names::{self, Lbl, Tmp}, regalloc::{Cc, CtrlTx}
+    canon, instr_sel, ir,
+    names::{self, Lbl, Tmp},
+    regalloc::{Cc, CtrlTx},
 };
 
 use crate::instr_sel::Select;
@@ -75,7 +77,6 @@ impl Cc<Reg> for Reg {
 
     #[rustfmt::skip]
     const GPR_ARG_REGS: &'static [Reg] = &[];
-
 }
 
 #[derive(Debug, Clone, Display)]
@@ -192,36 +193,35 @@ impl crate::regalloc::Instr for Instr {
         match self {
             Label(..) | Jmp(..) | Brne(..) | Sts(..) => {}
 
-            Inc(dst) |
-            Dec(dst) |
-            Clr(dst) |
-            Neg(dst) |
-            Asr(dst) |
-            Ldi(dst, _) |
-            Mov(dst, _) |
-            Add(dst, _) |
-            Sub(dst, _) |
-            Lds(dst, _) => {
+            Inc(dst)
+            | Dec(dst)
+            | Clr(dst)
+            | Neg(dst)
+            | Asr(dst)
+            | Ldi(dst, _)
+            | Mov(dst, _)
+            | Add(dst, _)
+            | Sub(dst, _)
+            | Lds(dst, _) => {
                 if *dst == Stg::Tmp(old) {
                     *dst = new;
                 }
             }
-
         }
     }
 
     fn replace_use_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
-            Label(..) | Jmp(..) | Brne(..)  => {}
+            Label(..) | Jmp(..) | Brne(..) => {}
 
-            Sts(_, stg) |
-            Ldi(stg, _) |
-            Lds(stg, _) |
-            Inc(stg) |
-            Dec(stg) |
-            Clr(stg) |
-            Neg(stg) |
-            Asr(stg) => {
+            Sts(_, stg)
+            | Ldi(stg, _)
+            | Lds(stg, _)
+            | Inc(stg)
+            | Dec(stg)
+            | Clr(stg)
+            | Neg(stg)
+            | Asr(stg) => {
                 if let Stg::Tmp(tmp) = stg {
                     if *tmp == old {
                         *stg = new;
@@ -229,20 +229,18 @@ impl crate::regalloc::Instr for Instr {
                 }
             }
 
-            Mov(dst, src) |
-            Sub(dst, src) |
-            Add(dst, src) => {
-                        if let Stg::Tmp(tmp1) = dst {
-                            if *tmp1 == old {
-                                *dst = new;
-                            }
-                        }
-                        if let Stg::Tmp(tmp2) = src {
-                            if *tmp2 == old {
-                                *src = new;
-                            }
-                        }
+            Mov(dst, src) | Sub(dst, src) | Add(dst, src) => {
+                if let Stg::Tmp(tmp1) = dst {
+                    if *tmp1 == old {
+                        *dst = new;
                     }
+                }
+                if let Stg::Tmp(tmp2) = src {
+                    if *tmp2 == old {
+                        *src = new;
+                    }
+                }
+            }
         }
     }
 
@@ -259,30 +257,20 @@ impl crate::regalloc::Instr for Instr {
             Jmp(lbl) => Some(CtrlTx::Jump(*lbl)),
             Brne(lbl) => Some(CtrlTx::Branch(*lbl)),
 
-            Label(..) |
-            Ldi(..) |
-            Add(..) |
-            Sub(..) |
-            Lds(..) |
-            Sts(..) |
-            Mov(..) |
-            Inc(..) |
-            Dec(..) |
-            Clr(..) |
-            Neg(..) |
-            Asr(..) => Some(CtrlTx::Advance)
+            Label(..) | Ldi(..) | Add(..) | Sub(..) | Lds(..) | Sts(..) | Mov(..) | Inc(..)
+            | Dec(..) | Clr(..) | Neg(..) | Asr(..) => Some(CtrlTx::Advance),
         }
     }
 
-    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item=Self> {
+    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item = Self> {
         [].into_iter() // TODO
     }
 
-    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item=Self> {
+    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item = Self> {
         [].into_iter() // TODO
     }
 
-    fn emit_move(dst: Stg, src: Stg) -> impl Iterator<Item=Self> {
+    fn emit_move(dst: Stg, src: Stg) -> impl Iterator<Item = Self> {
         std::iter::once(Mov(dst, src))
     }
 }
@@ -323,17 +311,17 @@ impl<'a> AvrInstrSel<'a> {
         };
         match op {
             ir::Binop::Add => with_dst(dst, "addi_dst", |dst| {
-                todo!();//self.emit(AddI(dst, x_dst, imm));
+                todo!(); //self.emit(AddI(dst, x_dst, imm));
             }),
             ir::Binop::Sub => with_dst(dst, "subi_dst", |dst| {
-                todo!();//self.emit(SubI(dst, x_dst, imm));
+                todo!(); //self.emit(SubI(dst, x_dst, imm));
             }),
             ir::Binop::And => todo!(),
             ir::Binop::Or => todo!(),
             ir::Binop::Shr => with_dst(dst, "shr_dst", |dst| {
                 let shamt = Stg::Tmp(Tmp::fresh("shamt"));
-                todo!();//self.emit(Li(shamt, imm));
-                todo!();//self.emit(Shr(dst, x_dst, shamt));
+                todo!(); //self.emit(Li(shamt, imm));
+                todo!(); //self.emit(Shr(dst, x_dst, shamt));
             }),
             ir::Binop::Xor => todo!(),
         }
@@ -356,10 +344,10 @@ impl<'a> AvrInstrSel<'a> {
         };
         match op {
             ir::Binop::Add => with_dst(dst, "add_dst", |dst| {
-                todo!()//self.emit(Add(dst, x_dst, y_dst));
+                todo!() //self.emit(Add(dst, x_dst, y_dst));
             }),
             ir::Binop::Sub => with_dst(dst, "sub_dst", |dst| {
-                todo!()//self.emit(Sub(dst, x_dst, y_dst));
+                todo!() //self.emit(Sub(dst, x_dst, y_dst));
             }),
             ir::Binop::And => todo!(),
             ir::Binop::Or => todo!(),
@@ -381,31 +369,31 @@ impl<'a> Select for AvrInstrSel<'a> {
             Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Int(offset)))), rhs)
             | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Int(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                todo!();//self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
+                todo!(); //self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
             Stmt::Move(Mem(Binop(Add, LVal(Tmp(base)), Imm(canon::Imm::Nat(offset)))), rhs)
             | Stmt::Move(Mem(Binop(Add, Imm(canon::Imm::Nat(offset)), LVal(Tmp(base)))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                todo!();//self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
+                todo!(); //self.emit(Sw(base.into(), self::Imm::Int(offset as u16), rhs_dst));
             }
             // M[base] = src
             Stmt::Move(Mem(LVal(Tmp(base))), rhs) => {
                 let rhs_dst = self.expr_to_asm(rhs, None);
-                todo!();//self.emit(Sw(base.into(), self::Imm::Int(0), rhs_dst));
+                todo!(); //self.emit(Sw(base.into(), self::Imm::Int(0), rhs_dst));
             }
             Stmt::Move(Mem(lhs), rhs) => {
                 let rhs_tmp = self.expr_to_asm(rhs, None);
                 let lhs_tmp = self.expr_to_asm(*lhs, None);
-                todo!();//self.emit(Sw(lhs_tmp, self::Imm::Int(0), rhs_tmp));
+                todo!(); //self.emit(Sw(lhs_tmp, self::Imm::Int(0), rhs_tmp));
             }
 
             // tmp1 = tmp2
             Stmt::Move(Tmp(lhs), LVal(Tmp(rhs))) => {
-                todo!();//self.emit(Mv(lhs.into(), rhs.into()));
+                todo!(); //self.emit(Mv(lhs.into(), rhs.into()));
             }
 
             Stmt::Move(Tmp(lhs), Imm(canon::Imm::Int(i))) => {
-                todo!();//self.emit(Li(lhs.into(), self::Imm::Int(i as u16)));
+                todo!(); //self.emit(Li(lhs.into(), self::Imm::Int(i as u16)));
             }
 
             Stmt::Move(Tmp(lhs), rhs) => {
@@ -427,9 +415,9 @@ impl<'a> Select for AvrInstrSel<'a> {
             Stmt::Switch(expr, lbls) => todo!(),
 
             Stmt::Discard(rval) => {
-                todo!();//let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
+                todo!(); //let _ = self.expr_to_asm(rval, Stg::Reg(Zero));
             }
-            Stmt::Jmp(lbl) => todo!(),//self.emit(Instr::J(lbl)),
+            Stmt::Jmp(lbl) => todo!(), //self.emit(Instr::J(lbl)),
 
             Stmt::Br {
                 e1,
@@ -441,23 +429,23 @@ impl<'a> Select for AvrInstrSel<'a> {
                 let e2_tmp = self.expr_to_asm(e2, None);
                 let bool_tmp = names::Tmp::fresh("bool");
                 match op {
-                    ir::Relop::Eq => todo!(),//self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::Eq => todo!(), //self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     ir::Relop::LtU => {
-                        todo!();//self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
+                        todo!(); //self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
                     }
-                    ir::Relop::Lt => todo!(),//self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::Lt => todo!(), //self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
                 }
-                todo!();//self.emit(Bt(bool_tmp.into(), if_true.into()));
+                todo!(); //self.emit(Bt(bool_tmp.into(), if_true.into()));
             }
 
             Stmt::Lbl(lbl) => self.emit(Label(lbl)),
-            Stmt::Nop => todo!(),//self.emit(Nop),
+            Stmt::Nop => todo!(), //self.emit(Nop),
             Stmt::Ret(Some(rval)) => {
-                todo!();//self.expr_to_asm(rval, Stg::Reg(Rv));
-                todo!();//self.emit(Jr(Stg::from_reg(Ra)));
+                todo!(); //self.expr_to_asm(rval, Stg::Reg(Rv));
+                todo!(); //self.emit(Jr(Stg::from_reg(Ra)));
             }
-            Stmt::Ret(None) => todo!(),//self.emit(Jr(Stg::from_reg(Ra))),
+            Stmt::Ret(None) => todo!(), //self.emit(Jr(Stg::from_reg(Ra))),
         }
     }
 
@@ -475,22 +463,22 @@ impl<'a> Select for AvrInstrSel<'a> {
             Imm(imm) => match imm {
                 Byte(x) => {
                     let dst = mk_dst("li_byte");
-                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!(); //self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Nat(x) => {
                     let dst = mk_dst("li_nat");
-                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!(); //self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Int(x) => {
                     let dst = mk_dst("li_int");
-                    todo!();//self.emit(Li(dst, self::Imm::Int(x as u16)));
+                    todo!(); //self.emit(Li(dst, self::Imm::Int(x as u16)));
                     dst
                 }
                 Lbl(lbl) => {
                     let dst = mk_dst("li_lbl");
-                    todo!();//self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
+                    todo!(); //self.emit(Li(dst, self::Imm::Lbl(lbl.render().into())));
                     dst
                 }
             },
@@ -499,7 +487,7 @@ impl<'a> Select for AvrInstrSel<'a> {
                 Mem(rval) => {
                     let addr = self.expr_to_asm(*rval, None);
                     let dst = mk_dst("load");
-                    todo!();//self.emit(Lw(dst, addr, self::Imm::Int(0)));
+                    todo!(); //self.emit(Lw(dst, addr, self::Imm::Int(0)));
                     dst
                 }
             },

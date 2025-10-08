@@ -1,5 +1,7 @@
-use crate::{instr_sel::{self, Select}, names::Lbl};
-
+use crate::{
+    instr_sel::{self, Select},
+    names::Lbl,
+};
 
 pub struct I8086InstrSel;
 
@@ -39,7 +41,6 @@ pub enum Instr {
     Mov(Am, Am),
     Cmp(Am, Am),
 }
-
 
 impl Select for I8086InstrSel {
     type Register = Reg;

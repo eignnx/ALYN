@@ -148,21 +148,21 @@ impl Instr for Stmt {
         }
     }
 
-    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item=Self> {
+    fn emit_store_to_stack(addr: i32, src: Tmp) -> impl Iterator<Item = Self> {
         std::iter::once(Self::StackStore {
             addr,
             src: src.into(),
         })
     }
 
-    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item=Self> {
+    fn emit_load_from_stack(dst: Tmp, addr: i32) -> impl Iterator<Item = Self> {
         std::iter::once(Self::StackLoad {
             dst: dst.into(),
             addr,
         })
     }
 
-    fn emit_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> impl Iterator<Item=Self> {
+    fn emit_move(dst: Stg<Self::Register>, src: Stg<Self::Register>) -> impl Iterator<Item = Self> {
         std::iter::once(Self::Mov(dst, src.into()))
     }
 }

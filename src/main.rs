@@ -5,14 +5,15 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    instr_sel::{Select, Stg},
     backends::lark::LarkInstrSel,
+    instr_sel::{Select, Stg},
     names::Tmp,
     regalloc::Instr,
 };
 
 mod ast;
 mod ast_to_ir;
+mod backends;
 mod canon;
 mod frame;
 mod instr_sel;
@@ -24,7 +25,6 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
-mod backends;
 
 fn main() {
     let Some(fname) = std::env::args().nth(1) else {
@@ -100,12 +100,7 @@ where
             let asm_before_regalloc = self.instr_select.render().to_vec();
 
             let mut ralloc = regalloc::RegAlloc::<ISel::Register>::new();
-            let cfg = regalloc::cfg::Cfg::new(
-                0, // TODO: is this correct?
-                params,
-                asm_before_regalloc,
-            );
-            let reg_allocation = ralloc.allocate_registers(cfg);
+            let reg_allocation = ralloc.allocate_registers(params, asm_before_regalloc);
 
             eprintln!("ASSIGNMENTS:");
             for (tmp, reg_id) in &reg_allocation.assignments {

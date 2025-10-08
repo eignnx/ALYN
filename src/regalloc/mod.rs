@@ -13,6 +13,7 @@ use crate::{
 };
 
 pub mod cfg;
+mod color_graph;
 mod interferences;
 mod live_sets;
 mod regalloc;

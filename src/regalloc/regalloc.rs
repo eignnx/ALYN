@@ -10,117 +10,14 @@ use std::{
 use crate::{
     instr_sel::Stg,
     names::Tmp,
-    regalloc::{Cc, live_sets::LiveSets},
+    regalloc::{
+        Cc,
+        color_graph::{ColorGraph, NodeEntry},
+        live_sets::LiveSets,
+    },
 };
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
-
-type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
-
-struct ColorGraph<R> {
-    interferences: Interferences<R>,
-}
-
-impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "strict graph {{")?;
-        for (tmp, neighbors) in &self.interferences.graph {
-            let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
-            write!(f, "    {tmp} -- {{")?;
-            for n in neighbors {
-                let n = format!("{n:?}").replace('%', "").replace('.', "_");
-                write!(f, " {n}")?;
-            }
-            writeln!(f, " }}")?;
-        }
-        writeln!(f, "}}")?;
-        Ok(())
-    }
-}
-
-impl<R> From<Interferences<R>> for ColorGraph<R> {
-    fn from(interferences: Interferences<R>) -> Self {
-        Self { interferences }
-    }
-}
-
-impl<R> ColorGraph<R>
-where
-    R: fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
-{
-    pub fn new<I>(cfg: &Cfg<I>, live_sets: &LiveSets<R>) -> Self
-    where
-        I: Instr<Register = R>,
-    {
-        let mut interferences = Interferences::new();
-        interferences.compute_interferences(cfg, live_sets);
-        Self { interferences }
-    }
-
-    fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
-        self.interferences.graph.insert(n, neighbors);
-    }
-
-    /// Only count as a neighbor if the node is still in the graph. Instances of neighbors whose
-    /// node is not in `self.graph` are skipped.
-    fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
-        let Some(neighbors) = self.interferences.graph.get(n) else {
-            panic!("Unknown Stg<R>: {n:?}");
-        };
-        neighbors
-            .iter()
-            .filter(|neighbor| self.interferences.graph.contains_key(*neighbor))
-    }
-
-    #[track_caller]
-    fn degree(&self, n: &Stg<R>) -> usize {
-        self.active_neighbors_of(n).count()
-    }
-
-    #[track_caller]
-    fn is_sig_degree(&self, n: &Stg<R>) -> bool {
-        self.degree(n) >= R::N_GPRS
-    }
-
-    #[track_caller]
-    fn is_insig_degree(&self, n: &Stg<R>) -> bool {
-        self.degree(n) < R::N_GPRS
-    }
-
-    fn coalesce(&mut self, n1: &Stg<R>, n2: &Stg<R>) {
-        todo!()
-    }
-
-    fn take_node(&mut self, n: &Stg<R>) -> NodeEntry<R> {
-        let Some(entry) = self.interferences.graph.remove_entry(n) else {
-            panic!("Unknown storage node: {n:?}");
-        };
-        entry
-    }
-
-    /// Removes an arbitrary node (and its neighbor set) as long as the node has fewer than N
-    /// neighbors. Returns `None` if no such node can be found.
-    fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
-        let mut key: Option<Stg<R>> = None;
-        for n in self.interferences.graph.keys() {
-            if self.is_insig_degree(n) {
-                key = Some(n.clone());
-                break;
-            }
-        }
-        Some(self.take_node(&key?))
-    }
-
-    fn choose_node_to_spill(&mut self) -> Option<NodeEntry<R>> {
-        let max_node = self
-            .interferences
-            .graph
-            .keys()
-            .max_by_key(|n| self.degree(n))
-            .cloned()?;
-        Some(self.take_node(&max_node))
-    }
-}
 
 pub struct RegAllocation<I: Instr, R> {
     pub cfg: Cfg<I>,
@@ -149,8 +46,10 @@ where
 
     pub fn allocate_registers<I: Instr<Register = R>>(
         &mut self,
-        mut cfg: Cfg<I>,
+        params: impl IntoIterator<Item = Tmp>,
+        stmts: Vec<I>,
     ) -> RegAllocation<I, R> {
+        let mut cfg = Cfg::new(0, params, stmts);
         self.precolor(&mut cfg);
 
         for _ in 0..Self::MAX_ITERS {
@@ -193,10 +92,7 @@ where
 
     /// Computes live-sets and builds a color graph given a control-flow graph representing a
     /// program.
-    fn build_phase<I: Instr<Register = R>>(
-        &mut self,
-        cfg: &Cfg<I>,
-    ) -> ColorGraph<R> {
+    fn build_phase<I: Instr<Register = R>>(&mut self, cfg: &Cfg<I>) -> ColorGraph<R> {
         let mut live_sets = LiveSets::new();
         eprintln!("computing live sets...");
         live_sets.compute_live_ins_live_outs(cfg);
@@ -364,9 +260,8 @@ mod tests {
     fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
         crate::names::reset_name_ids();
         eprintln!("<<<<<<<<<<<<< GPRS = {:?} >>>>>>>>>>>>>", Reg::GPRS);
-        let cfg = Cfg::new(0, params, program);
         let mut ra = RegAlloc::<Reg>::new();
-        let alloc = ra.allocate_registers(cfg);
+        let alloc = ra.allocate_registers(params, program);
         eprintln!("ASSIGNMENTS:");
         for (tmp, reg_id) in &alloc.assignments {
             eprintln!("  {tmp:?} -> ${reg_id}");
