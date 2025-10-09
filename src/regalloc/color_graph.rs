@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     instr_sel::Stg,
@@ -10,29 +10,22 @@ pub type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 
 pub struct ColorGraph<R> {
     interferences: Interferences<R>,
-}
-
-impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "strict graph {{")?;
-        for (tmp, neighbors) in &self.interferences.graph {
-            let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
-            write!(f, "    {tmp} -- {{")?;
-            for n in neighbors {
-                let n = format!("{n:?}").replace('%', "").replace('.', "_");
-                write!(f, " {n}")?;
-            }
-            writeln!(f, " }}")?;
-        }
-        writeln!(f, "}}")?;
-        Ok(())
-    }
+    move_relations: BTreeMap<Move<R>, usize>,
 }
 
 impl<R> From<Interferences<R>> for ColorGraph<R> {
     fn from(interferences: Interferences<R>) -> Self {
-        Self { interferences }
+        Self {
+            interferences,
+            move_relations: Default::default(),
+        }
     }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+struct Move<R> {
+    dst: Stg<R>,
+    src: Stg<R>,
 }
 
 impl<R> ColorGraph<R>
@@ -45,7 +38,26 @@ where
     {
         let mut interferences = Interferences::new();
         interferences.compute_interferences(cfg, live_sets);
-        Self { interferences }
+
+        let mut move_relations = BTreeMap::<Move<R>, usize>::new();
+
+        for (stmt_id, stmt) in cfg.stmts.iter().enumerate() {
+            match stmt.try_as_pure_move() {
+                Some((Stg::Reg(_), Stg::Reg(_))) | None => {}
+                Some((dst, src)) => {
+                    move_relations.insert(Move { dst, src }, stmt_id);
+                }
+            }
+        }
+
+        Self {
+            interferences,
+            move_relations,
+        }
+    }
+
+    pub fn are_move_related(&self, x: Stg<R>, y: Stg<R>) -> bool {
+        self.move_relations.contains_key(&Move {src: x, dst: y}) || self.move_relations.contains_key(&Move {src: y, dst: x})
     }
 
     pub fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
@@ -112,3 +124,21 @@ where
         Some(self.take_node(&max_node))
     }
 }
+
+impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "strict graph {{")?;
+        for (tmp, neighbors) in &self.interferences.graph {
+            let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
+            write!(f, "    {tmp} -- {{")?;
+            for n in neighbors {
+                let n = format!("{n:?}").replace('%', "").replace('.', "_");
+                write!(f, " {n}")?;
+            }
+            writeln!(f, " }}")?;
+        }
+        writeln!(f, "}}")?;
+        Ok(())
+    }
+}
+

@@ -56,6 +56,8 @@ where
             eprintln!("============= Iteration #{} ============", i + 1);
             let mut color_graph = self.build_phase(&mut cfg);
             let mut node_stack = self.simplify_phase(&mut color_graph);
+            self.coalesce_phase();
+            //self.freeze_phase();
             match self.select_phase(&mut color_graph, &mut node_stack) {
                 Ok(assignments) => return RegAllocation { cfg, assignments },
                 Err(to_spill) => {
@@ -127,6 +129,10 @@ where
                 return node_stack;
             }
         }
+    }
+
+    fn coalesce_phase(&mut self) {
+
     }
 
     /// Pops Stg nodes off of the node stack and selects a color for each one. If any cannot be
