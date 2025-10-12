@@ -13,10 +13,11 @@ use crate::{
 };
 
 pub mod cfg;
-mod color_graph;
-mod interferences;
-mod live_sets;
+pub mod color_graph;
+pub mod interferences;
+pub mod live_sets;
 mod regalloc;
+mod regalloc3;
 
 pub use regalloc::*;
 

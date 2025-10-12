@@ -10,6 +10,7 @@ derive_more = { version = "2.0.1", features = [
 internment = "0.8.6"
 lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 smallvec = "1.15.1"
+priority-queue = "2.0.0"
 
 [build-dependencies]
 lalrpop = "0.22.2"
