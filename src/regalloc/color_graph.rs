@@ -57,7 +57,8 @@ where
     }
 
     pub fn are_move_related(&self, x: Stg<R>, y: Stg<R>) -> bool {
-        self.move_relations.contains_key(&Move {src: x, dst: y}) || self.move_relations.contains_key(&Move {src: y, dst: x})
+        self.move_relations.contains_key(&Move { src: x, dst: y })
+            || self.move_relations.contains_key(&Move { src: y, dst: x })
     }
 
     pub fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
@@ -141,4 +142,3 @@ impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
         Ok(())
     }
 }
-

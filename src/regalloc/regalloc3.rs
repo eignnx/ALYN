@@ -5,16 +5,18 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use priority_queue::PriorityQueue;
 
-use crate::{instr_sel::Stg, names::Tmp, regalloc::{interferences::Interferences, Cc}};
+use crate::{
+    instr_sel::Stg,
+    names::Tmp,
+    regalloc::{Cc, interferences::Interferences},
+};
 
-fn simplicial_elimination_ordering<R>(graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>) -> Vec<Stg<R>> 
-where R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash
+fn simplicial_elimination_ordering<R>(graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>) -> Vec<Stg<R>>
+where
+    R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash,
 {
     let mut ordering = Vec::new();
-    let mut weights: PriorityQueue<_, _> = graph
-        .keys()
-        .map(|&node| (node, 0usize))
-        .collect();
+    let mut weights: PriorityQueue<_, _> = graph.keys().map(|&node| (node, 0usize)).collect();
 
     let mut curr = *graph.keys().next().unwrap();
 
@@ -29,8 +31,12 @@ where R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash
     ordering
 }
 
-fn color_graph_greedily<R>(graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>, seo: Vec<Stg<R>>) -> BTreeMap<Tmp, R>
-where R: std::fmt::Debug + Copy + Eq + Ord + Cc<R> + 'static
+fn color_graph_greedily<R>(
+    graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
+    seo: Vec<Stg<R>>,
+) -> BTreeMap<Tmp, R>
+where
+    R: std::fmt::Debug + Copy + Eq + Ord + Cc<R> + 'static,
 {
     let mut assignments = BTreeMap::new();
 
@@ -42,12 +48,13 @@ where R: std::fmt::Debug + Copy + Eq + Ord + Cc<R> + 'static
         for nbr in graph.get(&Stg::Tmp(node)).unwrap() {
             match nbr {
                 Stg::Reg(reg) => _ = in_use.insert(*reg),
-                Stg::Tmp(nbr) => if let Some(reg) = assignments.get(nbr).copied() {
-                    _ = in_use.insert(reg);
+                Stg::Tmp(nbr) => {
+                    if let Some(reg) = assignments.get(nbr).copied() {
+                        _ = in_use.insert(reg);
+                    }
                 }
             }
         }
-
 
         if let Some(&reg) = R::GPRS.into_iter().find(|reg| !in_use.contains(reg)) {
             assignments.insert(node, reg);

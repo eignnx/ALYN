@@ -131,9 +131,7 @@ where
         }
     }
 
-    fn coalesce_phase(&mut self) {
-
-    }
+    fn coalesce_phase(&mut self) {}
 
     /// Pops Stg nodes off of the node stack and selects a color for each one. If any cannot be
     /// colored, returns `Err` of the problematic node.
