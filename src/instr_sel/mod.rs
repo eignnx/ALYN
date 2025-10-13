@@ -1,14 +1,16 @@
-use derive_more::{Display, From};
+use derive_more::{Display, From, Debug};
 
 use crate::{canon, ir, names::Tmp};
 
 /// A storage node
-#[derive(From, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(From, Clone, Copy, Display, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Stg<R> {
     #[display("{_0:?}")]
+    #[debug("{_0:?}")]
     #[from]
     Tmp(Tmp),
-    #[display("{_0}")]
+    #[display("${_0}")]
+    #[debug("${_0:?}")]
     Reg(R),
 }
 
@@ -28,15 +30,6 @@ impl<R> Stg<R> {
         match self {
             Self::Tmp(_) => None,
             Self::Reg(reg) => Some(reg),
-        }
-    }
-}
-
-impl<R: std::fmt::Debug> std::fmt::Debug for Stg<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Stg::Tmp(tmp) => write!(f, "{tmp:?}"),
-            Stg::Reg(reg) => write!(f, "{reg:?}"),
         }
     }
 }
