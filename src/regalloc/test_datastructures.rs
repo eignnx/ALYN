@@ -8,7 +8,7 @@ use crate::{
 
 use super::{CtrlTx, Instr};
 
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Reg {
     T0,
     T1,
