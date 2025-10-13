@@ -8,17 +8,19 @@ use super::{
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-use crate::{instr_sel::Stg, names::Tmp};
+use crate::{instr_sel::Stg, names::Tmp, regalloc::live_sets::Move};
 
 #[derive(Default)]
 pub struct Interferences<R> {
     pub(super) graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
+    move_rels: BTreeSet<Move<R>>
 }
 
 impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
     pub fn new() -> Self {
         Self {
             graph: Default::default(),
+            move_rels: Default::default(),
         }
     }
 
@@ -55,6 +57,7 @@ impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
         live_sets: &LiveSets<R>,
     ) {
         self.ensure_all_tmps_registered(live_sets);
+        self.move_rels.extend(live_sets.move_instrs().into_iter().cloned());
 
         let mut defs = BTreeSet::new();
         let mut uses = BTreeSet::new();
@@ -98,6 +101,15 @@ impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
         self.graph.entry(a).or_default().insert(b);
         self.graph.entry(b).or_default().insert(a);
     }
+
+    pub fn neighbors(&self, node: &Stg<R>) -> impl Iterator<Item=Stg<R>> {
+        self.graph
+            .get(node)
+            .map(BTreeSet::iter)
+            .into_iter()
+            .flatten()
+            .copied()
+    }
 }
 
 impl<R: Debug> Debug for Interferences<R> {
@@ -118,12 +130,16 @@ impl<R: Debug> Display for Interferences<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "strict graph {{")?;
         for (tmp, neighbors) in &self.graph {
-            write!(f, "{tmp:?} -- {{")?;
+            write!(f, "\"{tmp:?}\" -- {{")?;
             for n in neighbors {
-                write!(f, " {n:?}")?;
+                write!(f, " \"{n:?}\"")?;
             }
             write!(f, "}}")?;
         }
+        for mv in &self.move_rels {
+            writeln!(f, "\"{:?}\" -- \"{:?} [style=dashed]\"", mv.src, mv.dst)?;
+        }
+
         writeln!(f, "}}")?;
         Ok(())
     }

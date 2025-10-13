@@ -13,6 +13,14 @@ use crate::{instr_sel::Stg, names::Tmp};
 pub struct LiveSets<R> {
     live_ins: BTreeMap<NodeId, BTreeSet<Stg<R>>>,
     live_outs: BTreeMap<NodeId, BTreeSet<Stg<R>>>,
+    move_instrs: Vec<Move<R>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Move<R> {
+    pub dst: Stg<R>,
+    pub src: Stg<R>,
+    pub instr_id: usize,
 }
 
 impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
@@ -20,8 +28,11 @@ impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
         Self {
             live_ins: Default::default(),
             live_outs: Default::default(),
+            move_instrs: Default::default(),
         }
     }
+
+    const MAX_ITERS: usize = 32;
 
     pub fn compute_live_ins_live_outs<I: Instr<Register = R>>(&mut self, cfg: &Cfg<I>) {
         // All function parameters need to be marked as live-in in the entry.
@@ -31,10 +42,13 @@ impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
         let mut defs_buf = BTreeSet::new();
         let mut uses_buf = BTreeSet::new();
         let mut recompute = false;
-        loop {
+        for iteration in 0..Self::MAX_ITERS {
             for (id, stmt) in cfg.stmts.iter().enumerate().rev() {
                 self.compute_live_outs(id, cfg, &mut recompute);
                 self.compute_live_ins(id, stmt, &mut defs_buf, &mut uses_buf, &mut recompute);
+                if iteration == 0 && let Some((dst, src)) = stmt.try_as_pure_move() {
+                    self.move_instrs.push(Move { dst, src, instr_id: id });
+                }
             }
 
             if !recompute {
@@ -107,6 +121,10 @@ impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
             .into_iter()
             .flatten()
             .copied()
+    }
+
+    pub fn move_instrs(&self) -> &[Move<R>] {
+        &self.move_instrs[..]
     }
 
     pub fn all_tmps(&self) -> impl Iterator<Item = Stg<R>> {

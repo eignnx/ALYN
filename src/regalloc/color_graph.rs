@@ -1,31 +1,24 @@
-use core::fmt;
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::{BTreeMap, BTreeSet}, fmt};
 
 use crate::{
     instr_sel::Stg,
-    regalloc::{Cc, Instr, cfg::Cfg, interferences::Interferences, live_sets::LiveSets},
+    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::{LiveSets, Move}, Cc, Instr},
 };
 
 pub type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 
 pub struct ColorGraph<R> {
     interferences: Interferences<R>,
-    move_relations: BTreeMap<Move<R>, usize>,
+    move_rels: BTreeSet<Move<R>>,
 }
 
 impl<R> From<Interferences<R>> for ColorGraph<R> {
     fn from(interferences: Interferences<R>) -> Self {
         Self {
             interferences,
-            move_relations: Default::default(),
+            move_rels: Default::default(),
         }
     }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-struct Move<R> {
-    dst: Stg<R>,
-    src: Stg<R>,
 }
 
 impl<R> ColorGraph<R>
@@ -39,26 +32,26 @@ where
         let mut interferences = Interferences::new();
         interferences.compute_interferences(cfg, live_sets);
 
-        let mut move_relations = BTreeMap::<Move<R>, usize>::new();
+        let mut move_rels = BTreeSet::<Move<R>>::new();
 
         for (stmt_id, stmt) in cfg.stmts.iter().enumerate() {
             match stmt.try_as_pure_move() {
                 Some((Stg::Reg(_), Stg::Reg(_))) | None => {}
                 Some((dst, src)) => {
-                    move_relations.insert(Move { dst, src }, stmt_id);
+                    move_rels.insert(Move { dst, src, instr_id: stmt_id });
                 }
             }
         }
 
         Self {
             interferences,
-            move_relations,
+            move_rels,
         }
     }
 
     pub fn are_move_related(&self, x: Stg<R>, y: Stg<R>) -> bool {
-        self.move_relations.contains_key(&Move { src: x, dst: y })
-            || self.move_relations.contains_key(&Move { src: y, dst: x })
+        self.move_rels.iter()
+            .any(|mv| mv.dst == x && mv.src == y || mv.dst == y && mv.src == x)
     }
 
     pub fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
@@ -130,15 +123,29 @@ impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "strict graph {{")?;
         for (tmp, neighbors) in &self.interferences.graph {
-            let tmp = format!("{tmp:?}").replace('%', "").replace('.', "_");
-            write!(f, "    {tmp} -- {{")?;
+            write!(f, "    {:?} -- {{", DotEsc(tmp))?;
             for n in neighbors {
-                let n = format!("{n:?}").replace('%', "").replace('.', "_");
-                write!(f, " {n}")?;
+                write!(f, " {:?}", DotEsc(n))?;
             }
             writeln!(f, " }}")?;
         }
+
+        writeln!(f)?;
+
+        for mv in &self.move_rels {
+            writeln!(f, "    {:?} -- {:?} [style=dashed]", DotEsc(&mv.src), DotEsc(&mv.dst))?;
+        }
         writeln!(f, "}}")?;
         Ok(())
+    }
+}
+
+struct DotEsc<T: fmt::Debug>(T);
+
+impl<T: fmt::Debug> fmt::Debug for DotEsc<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = format!("{:?}", self.0);
+        let text = text.replace("%", "\\%");
+        write!(f, "\"{text}\"")
     }
 }
