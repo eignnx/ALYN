@@ -1,24 +1,24 @@
 //! Register Allocation via Coloring of Chordal Graphs
 //! by Fernando Magno Quintat˜ao Pereira and Jens Palsbe
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::{BTreeMap, BTreeSet}, marker::PhantomData};
 
 use priority_queue::PriorityQueue;
 
 use crate::{
     instr_sel::Stg,
     names::Tmp,
-    regalloc::{Cc, interferences::Interferences},
+    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::LiveSets, Cc, Instr},
 };
 
-fn simplicial_elimination_ordering<R>(graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>) -> Vec<Tmp>
+fn simplicial_elimination_ordering<R>(graph: &Interferences<R>) -> Vec<Tmp>
 where
-    R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash,
+    R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash + Cc<R> + 'static,
 {
     let mut ordering = Vec::new();
 
-    let mut curr = *graph
-        .keys()
+    let mut curr = graph
+        .all_nodes()
         .filter_map(|node| match node {
             Stg::Reg(_) => None,
             Stg::Tmp(tmp) => Some(tmp),
@@ -27,8 +27,8 @@ where
         .unwrap();
 
     let mut weights: PriorityQueue<Tmp, usize> = graph
-        .keys()
-        .filter_map(|&node| match node {
+        .all_nodes()
+        .filter_map(|node| match node {
             Stg::Tmp(tmp) => Some(tmp),
             Stg::Reg(_) => None,
         })
@@ -36,9 +36,7 @@ where
         .map(|tmp| {
             // Count precolored nodes:
             let weight = graph
-                .get(&Stg::Tmp(tmp))
-                .unwrap()
-                .iter()
+                .neighbors(&Stg::Tmp(tmp))
                 .filter(|nbr| matches!(nbr, Stg::Reg(_)))
                 .count();
             (tmp, weight)
@@ -48,9 +46,9 @@ where
 
     while !weights.is_empty() {
         ordering.push(curr);
-        for nbr in graph.get(&Stg::Tmp(curr)).unwrap() {
+        for nbr in graph.neighbors(&Stg::Tmp(curr)) {
             let Stg::Tmp(nbr) = nbr else { continue };
-            weights.change_priority_by(nbr, |w| *w += 1);
+            weights.change_priority_by(&nbr, |w| *w += 1);
         }
         (curr, _) = weights.pop().unwrap();
     }
@@ -62,7 +60,7 @@ where
 
 /// If spill is necessary, the Tmp will *not* be added to the assignments map.
 fn color_graph_greedily<R>(
-    graph: &BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
+    graph: &Interferences<R>,
     ordering: Vec<Tmp>,
 ) -> BTreeMap<Tmp, R>
 where
@@ -72,11 +70,11 @@ where
 
     for node in ordering {
         let mut in_use = BTreeSet::new();
-        for nbr in graph.get(&Stg::Tmp(node)).unwrap() {
+        for nbr in graph.neighbors(&Stg::Tmp(node)) {
             match nbr {
-                Stg::Reg(reg) => _ = in_use.insert(*reg),
+                Stg::Reg(reg) => _ = in_use.insert(reg),
                 Stg::Tmp(nbr) => {
-                    if let Some(reg) = assignments.get(nbr).copied() {
+                    if let Some(reg) = assignments.get(&nbr).copied() {
                         _ = in_use.insert(reg);
                     }
                 }
@@ -92,6 +90,80 @@ where
 
     assignments
 }
+
+pub struct RegAlloc<I, R> {
+    params: Vec<Tmp>,
+    program: Vec<I>,
+    _reg: PhantomData<R>,
+}
+
+impl<I, R> RegAlloc<I, R>
+where I: Instr<Register = R> + Clone,
+      R: Copy + Ord + Eq + std::fmt::Debug + std::hash::Hash + Cc<R> + 'static
+{
+    fn new(params: Vec<Tmp>, program: Vec<I>) -> Self {
+        Self {
+            params,
+            program,
+            _reg: PhantomData,
+        }
+    }
+
+    fn allocate_registers(&mut self) -> Allocation<I, R> {
+        let intfs = self.build();
+        let ordering = simplicial_elimination_ordering(&intfs);
+        let assignments = color_graph_greedily(&intfs, ordering);
+
+        for tmp in intfs.all_nodes().filter_map(Stg::try_as_tmp) {
+            if let Some(reg) = assignments.get(&tmp) {
+
+            } else {
+            }
+        }
+        todo!()
+    }
+
+    fn build(&mut self) -> Interferences<R> {
+        let mut cfg = Cfg::new(0, self.params.iter().copied(), self.program.iter().cloned());
+        let mut live_sets = LiveSets::new();
+        live_sets.compute_live_ins_live_outs(&cfg);
+        let mut intfs = Interferences::new();
+        intfs
+    }
+
+}
+
+pub struct Allocation<I, R> {
+    program: Vec<I>,
+    assignments: BTreeMap<Tmp, R>,
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::super::test_datastructures::{Expr as E, Expr, Reg, Stmt as S, Stmt};
+    use super::*;
+
+    fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
+        crate::names::reset_name_ids();
+        eprintln!("<<<<<<<<<<<<< GPRS = {:?} >>>>>>>>>>>>>", Reg::GPRS);
+        let mut ra = RegAlloc::new(params, program);
+        let alloc = ra.allocate_registers();
+        eprintln!("ASSIGNMENTS:");
+        for (tmp, reg_id) in &alloc.assignments {
+            eprintln!("  {tmp:?} -> ${reg_id}");
+        }
+        eprintln!("FINAL CODE:");
+        for stmt in &alloc.program {
+            let mut rendered = format!("{stmt:?}");
+            for (tmp, reg_id) in &alloc.assignments {
+                let tmp_rendered = format!("{tmp:?}");
+                let reg_rendered = format!("${reg_id}");
+                rendered = rendered.replace(&tmp_rendered, &reg_rendered);
+            }
+            eprintln!("|\t{rendered}");
+        }
+    }
 
 #[test]
 fn basic_test() {
@@ -122,9 +194,10 @@ fn basic_test() {
         entry("z", ["e", "f", "g"]),
     ]);
 
-    let seo = simplicial_elimination_ordering(&graph);
-    eprintln!("seo: {seo:?}");
+    // let seo = simplicial_elimination_ordering(&graph);
+    // eprintln!("seo: {seo:?}");
 
-    let assignments = color_graph_greedily(&graph, seo);
-    eprintln!("assignments: {assignments:#?}");
+    // let assignments = color_graph_greedily(&graph, seo);
+    // eprintln!("assignments: {assignments:#?}");
+}
 }

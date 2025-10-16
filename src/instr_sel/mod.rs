@@ -5,12 +5,12 @@ use crate::{canon, ir, names::Tmp};
 /// A storage node
 #[derive(From, Clone, Copy, Display, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Stg<R> {
-    #[display("{_0:?}")]
+    #[display("{_0}")]
     #[debug("{_0:?}")]
     #[from]
     Tmp(Tmp),
-    #[display("${_0}")]
-    #[debug("${_0:?}")]
+    #[display("{_0}")]
+    #[debug("{_0:?}")]
     Reg(R),
 }
 
@@ -45,7 +45,7 @@ pub trait Select {
         rval: canon::RVal,
         opt_dst: impl Into<Option<Stg<Self::Register>>>,
     ) -> Stg<Self::Register>;
-    fn render(&self) -> &[Self::Instruction];
+    fn render(&mut self) -> impl Iterator<Item = Self::Instruction>;
 }
 
 #[cfg(test)]

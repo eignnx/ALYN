@@ -64,7 +64,7 @@ pub trait Instr: Debug + Sized {
     }
 
     /// If this instruction has a label associated with it, return it.
-    fn get_label(&self) -> Option<Lbl>;
+    fn try_as_lbl(&self) -> Option<Lbl>;
 
     /// A `return` statement would produce `None`, a `nop` statement would produce `Some(Advance)`.
     /// Subroutine call statements should produce `Some(Advance)` since within the subroutine it

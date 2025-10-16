@@ -7,7 +7,7 @@ use super::{
     Instr,
     cfg::{Cfg, NodeId},
 };
-use crate::{instr_sel::Stg, names::Tmp};
+use crate::{instr_sel::Stg, names::Tmp, regalloc::Cc};
 
 #[derive(Debug, Default)]
 pub struct LiveSets<R> {
@@ -23,7 +23,7 @@ pub struct Move<R> {
     pub instr_id: usize,
 }
 
-impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
+impl<R: Copy + Eq + Ord + Debug + Cc<R> + 'static> LiveSets<R> {
     pub fn new() -> Self {
         Self {
             live_ins: Default::default(),
@@ -35,9 +35,22 @@ impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
     const MAX_ITERS: usize = 32;
 
     pub fn compute_live_ins_live_outs<I: Instr<Register = R>>(&mut self, cfg: &Cfg<I>) {
-        // All function parameters need to be marked as live-in in the entry.
-        let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
-        entry_live_ins.extend(cfg.params.iter().copied().map(Stg::Tmp));
+        //// All function parameters need to be marked as live-in in the entry.
+        //let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
+        //entry_live_ins.extend(cfg.params.iter().copied().map(Stg::Tmp));
+
+        // All callee-save (saved) registers need to be marked live-out on exit.
+        let saved_regs = R::GPR_SAVED_REGS
+            .iter()
+            .copied()
+            .map(Stg::Reg);
+        for &exit_id in &cfg.exits {
+            self
+                .live_outs
+                .entry(exit_id)
+                .or_default()
+                .extend(saved_regs.clone());
+        }
 
         let mut defs_buf = BTreeSet::new();
         let mut uses_buf = BTreeSet::new();
@@ -94,7 +107,7 @@ impl<R: Copy + Eq + Ord + Debug> LiveSets<R> {
         let live_ins = self.live_ins.entry(id).or_default();
         let old_len = live_ins.len();
         live_ins.extend(uses.iter().copied());
-        for live_out in self.live_outs.entry(id).or_default().iter().copied() {
+        for &live_out in self.live_outs.entry(id).or_default().iter() {
             if !defs.contains(&live_out) {
                 live_ins.insert(live_out);
             }
@@ -151,19 +164,21 @@ struct DisplayLiveSets<'a, I, R> {
     stmts: &'a [I],
 }
 
-impl<'a, I: Debug, R: Copy + Eq + Ord + Debug> Display for DisplayLiveSets<'a, I, R> {
+impl<'a, I: Debug, R: Copy + Eq + Ord + Debug + Cc<R> + 'static> Display for DisplayLiveSets<'a, I, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, stmt) in self.stmts.iter().enumerate() {
-            // Write stmt
-            write!(f, "|\t{:<40} ", format!("{stmt:?}"))?;
-            // Write live-ins
-            write!(f, "{{")?;
-            for live_in in self.live_sets.get_live_ins(i) {
-                write!(f, " {live_in:?}")?;
+            if i == 0 {
+                // Write live-ins
+                write!(f, "        {{")?;
+                for live_in in self.live_sets.get_live_ins(i) {
+                    write!(f, " {live_in:?}")?;
+                }
+                writeln!(f, " }}")?;
             }
-            write!(f, " }} -> ")?;
+            // Write stmt
+            writeln!(f, "{i:02}: {}", format!("{stmt:?}"))?;
             // Write live-outs
-            write!(f, "{{")?;
+            write!(f, "        {{")?;
             for live_out in self.live_sets.get_live_outs(i) {
                 write!(f, " {live_out:?}")?;
             }

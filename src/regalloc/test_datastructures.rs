@@ -10,18 +10,39 @@ use super::{CtrlTx, Instr};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Reg {
+    /// First argument register / return value register
     T0,
+    /// Second argument register
     T1,
+    /// Third argument register
     T2,
+    /// First saved register
     S0,
+    /// Second saved register
     S1,
+    /// Return address register
+    Ra,
 }
 
 impl Cc<Reg> for Reg {
-    const GPRS: &[Self] = &[Reg::T0, Reg::T1, Reg::T2, Reg::S0, Reg::S1];
+    const GPRS: &[Self] = &[Reg::T0, Reg::T1, Reg::T2, Reg::S0, Reg::S1, Reg::Ra];
     const GPR_ARG_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
     const GPR_TEMP_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
-    const GPR_SAVED_REGS: &'static [Reg] = &[Reg::S0, Reg::S1];
+    const GPR_SAVED_REGS: &'static [Reg] = &[Reg::Ra, Reg::S0, Reg::S1];
+}
+
+// TODO: consider adding to Cc<R>
+fn all_regs() -> impl Iterator<Item=Reg> {
+    Reg::GPR_ARG_REGS.iter()
+        .chain(Reg::GPR_TEMP_REGS.iter())
+        .chain(Reg::GPR_SAVED_REGS.iter()).copied()
+        .collect::<std::collections::BTreeSet<_>>().into_iter()
+}
+
+impl From<Reg> for Stg<Reg> {
+    fn from(reg: Reg) -> Self {
+        Stg::Reg(reg)
+    }
 }
 
 #[derive(Clone, From)]
@@ -43,11 +64,12 @@ pub(super) enum Stmt {
         dst: Stg<Reg>,
         addr: i32,
     },
+    Call(Lbl),
     Br(Expr, Lbl),
     Jmp(Lbl),
     #[from(Lbl, &str)]
     Lbl(Lbl),
-    Ret(Option<Expr>),
+    Ret,
 }
 
 impl Instr for Stmt {
@@ -73,9 +95,14 @@ impl Instr for Stmt {
             Stmt::StackLoad { dst, addr } => {
                 defs.extend([*dst]);
             }
+            Stmt::Call(lbl) => {
+                defs.extend(Reg::GPR_TEMP_REGS.iter().copied().map(Stg::Reg));
+            }
             Stmt::Br(expr, _lbl) => expr.defs_uses(defs, uses),
-            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
-            Stmt::Ret(Some(expr)) => expr.defs_uses(defs, uses),
+            Stmt::Jmp(_) | Stmt::Lbl(_) => {}
+            Stmt::Ret => {
+                defs.extend(Reg::GPR_SAVED_REGS.iter().copied().map(Stg::Reg));
+            }
         }
     }
 
@@ -102,8 +129,7 @@ impl Instr for Stmt {
                 }
             }
             Stmt::Br(expr, _lbl) => {}
-            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
-            Stmt::Ret(Some(expr)) => {}
+            Stmt::Call(_) | Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret => {}
         }
     }
 
@@ -121,12 +147,12 @@ impl Instr for Stmt {
             }
             Stmt::Load { dst, addr } => addr.replace_use_occurrances(old, new),
             Stmt::StackLoad { dst, addr } => {}
-            Stmt::Ret(Some(expr)) | Stmt::Br(expr, ..) => expr.replace_use_occurrances(old, new),
-            Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret(None) => {}
+            Stmt::Br(expr, ..) => expr.replace_use_occurrances(old, new),
+            Stmt::Call(_) | Stmt::Jmp(_) | Stmt::Lbl(_) | Stmt::Ret => {}
         }
     }
 
-    fn get_label(&self) -> Option<Lbl> {
+    fn try_as_lbl(&self) -> Option<Lbl> {
         if let Self::Lbl(lbl) = self {
             Some(*lbl)
         } else {
@@ -141,10 +167,11 @@ impl Instr for Stmt {
             | Stmt::StackStore { .. }
             | Stmt::Load { .. }
             | Stmt::StackLoad { .. }
+            | Stmt::Call(_)
             | Stmt::Lbl(_) => Some(CtrlTx::Advance),
             Stmt::Br(_, lbl) => Some(CtrlTx::Branch(*lbl)),
             Stmt::Jmp(lbl) => Some(CtrlTx::Jump(*lbl)),
-            Stmt::Ret(_) => None,
+            Stmt::Ret => None,
         }
     }
 
@@ -176,10 +203,6 @@ impl Stmt {
         Self::Br(expr.into(), offset.into())
     }
 
-    pub(super) fn ret(maybe_value: impl Into<Expr>) -> Self {
-        Self::Ret(Some(maybe_value.into()))
-    }
-
     pub(super) fn jmp(lbl: impl Into<Lbl>) -> Self {
         Self::Jmp(lbl.into())
     }
@@ -193,11 +216,11 @@ impl std::fmt::Debug for Stmt {
             Self::StackStore { addr, src } => write!(f, "stack_store STACK[{addr}] <- {src:?}"),
             Self::Load { dst, addr } => write!(f, "load {dst:?} <- MEM[{addr:?}]"),
             Self::StackLoad { dst, addr } => write!(f, "stack_load {dst:?} <- STACK[{addr:?}]"),
+            Self::Call(lbl) => write!(f, "call {lbl:?}"),
             Self::Br(expr, lbl) => write!(f, "branch if {expr:?} to {lbl:?}"),
             Self::Jmp(lbl) => write!(f, "jump to {lbl:?}"),
             Self::Lbl(lbl) => write!(f, "label {lbl:?}:"),
-            Self::Ret(None) => write!(f, "ret"),
-            Self::Ret(Some(expr)) => write!(f, "ret {expr:?}"),
+            Self::Ret => write!(f, "ret"),
         }
     }
 }
@@ -285,6 +308,7 @@ fn test() {
         S::mov(Tmp::from("c"), E::binop("c", "b")),
         S::mov(Tmp::from("a"), E::binop("b", 2)),
         S::br(E::binop("a", 100), "L1"),
-        S::ret("c"),
+        S::mov(Reg::T0, "c"),
+        S::Ret,
     ];
 }

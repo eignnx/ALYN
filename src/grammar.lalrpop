@@ -7,6 +7,14 @@ use crate::{
 
 grammar(filename: &str);
 
+match {
+    r"\s*" => { }, // The default whitespace skipping is disabled if an `ignore pattern` is specified
+    r"//[^\n\r]*[\n\r]*" => { }, // Skip `// comments`
+    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },  // Skip `/* comments */`
+} else {
+    _
+}
+
 Spanned<T>: Ann<T> = <start: @L> <t: T> <end: @R> => t.with_span(start..end);
 
 BinopExpr<Lhs, Op, Rhs>: RVal = {

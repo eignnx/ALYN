@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[rustfmt::skip]
-#[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum Reg {
     #[display("$zero")] Zero,
     #[display("$rv")] Rv, #[display("$ra")] Ra,
@@ -24,6 +24,12 @@ pub enum Reg {
     #[display("$t0")] T0, #[display("$t1")] T1, #[display("$t2")] T2,
     #[display("$k0")] K0, #[display("$k1")] K1,
     #[display("$gp")] Gp, #[display("$sp")] Sp
+}
+
+impl std::fmt::Debug for Reg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
 }
 
 impl From<Reg> for crate::Stg<Reg> {
@@ -35,10 +41,10 @@ impl From<Reg> for crate::Stg<Reg> {
 impl Cc<Reg> for Reg {
     #[rustfmt::skip]
     const GPRS: &'static [Reg] = &[
-        Rv, Ra,
-        A0, A1, A2,
-        S0, S1, S2,
         T0, T1, T2,
+        A0, A1, A2,
+        Rv, Ra,
+        S0, S1, S2,
     ];
 
     #[rustfmt::skip]
@@ -50,7 +56,7 @@ impl Cc<Reg> for Reg {
 
     #[rustfmt::skip]
     const GPR_SAVED_REGS: &'static [Reg] = &[
-        S0, S1, S2, Ra,
+        Ra, S0, S1, S2
     ];
 
     #[rustfmt::skip]
@@ -62,7 +68,7 @@ impl Cc<Reg> for Reg {
 #[derive(Debug, Clone, Display)]
 #[display("{self:?}")]
 pub enum Imm {
-    #[debug(":{_0}")]
+    #[debug("{_0}")]
     Lbl(Intern<String>),
     #[debug("{_0}")]
     Int(u16),
@@ -86,7 +92,7 @@ type Stg = crate::Stg<Reg>;
 
 #[derive(Debug, Clone)]
 pub enum Instr {
-    #[debug("{_0:?}:")]
+    #[debug("{_0}:")]
     Label(Lbl),
 
     #[debug("mv {_0}, {_1}")]
@@ -116,9 +122,9 @@ pub enum Instr {
     #[debug("sw [{_0} + {_1}], {_2}]")]
     Sw(Stg, Imm, Stg),
 
-    #[debug("j {_0:?}")]
+    #[debug("j {_0}")]
     J(Lbl),
-    #[debug("jal {_0}, {_1:?}")]
+    #[debug("jal {_0}, {_1}")]
     Jal(Stg, Lbl),
 
     #[debug("tlt {_0}, {_1}, {_2}")]
@@ -134,9 +140,9 @@ pub enum Instr {
     #[debug("tgeu {_0}, {_1}, {_2}")]
     Tgeu(Stg, Stg, Stg),
 
-    #[debug("bf {_0}, {_1:?}")]
+    #[debug("bf {_0}, {_1}")]
     Bf(Stg, Lbl),
-    #[debug("bt {_0}, {_1:?}")]
+    #[debug("bt {_0}, {_1}")]
     Bt(Stg, Lbl),
 }
 
@@ -158,7 +164,11 @@ impl crate::regalloc::Instr for Instr {
                 defs.extend([*dst]);
                 uses.extend([*src1]);
             }
-            Jr(stg) => uses.extend([*stg]),
+            Jr(stg) => {
+                uses.extend([*stg]);
+                // Assuming this is a `ret` instruction only:
+                uses.extend(Reg::GPR_SAVED_REGS.iter().copied().map(Stg::Reg));
+            }
             Nop => {}
             Li(stg, imm) => defs.extend([*stg]),
             Lw(dst, base, imm) => {
@@ -169,7 +179,11 @@ impl crate::regalloc::Instr for Instr {
                 uses.extend([*base, *src].into_iter());
             }
             J(lbl) => {}
-            Jal(stg, lbl) => defs.extend([*stg]),
+            Jal(stg, lbl) => {
+                defs.extend([*stg]);
+                // Assuming this is is used as a `call` instruction only:
+                defs.extend(Reg::GPR_TEMP_REGS.iter().copied().map(Stg::Reg));
+            }
             Tlt(dst, src1, src2)
             | Tge(dst, src1, src2)
             | Teq(dst, src1, src2)
@@ -260,7 +274,7 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
-    fn get_label(&self) -> Option<Lbl> {
+    fn try_as_lbl(&self) -> Option<Lbl> {
         if let Self::Label(lbl) = self {
             Some(*lbl)
         } else {
@@ -319,20 +333,6 @@ pub struct LarkInstrSel<'a> {
 }
 
 impl<'a> LarkInstrSel<'a> {
-    #[rustfmt::skip]
-    const GPR_TEMP_REGS: &'static [Reg] = &[
-        T0, T1, T2,
-        A0, A1, A2,
-    ];
-    #[rustfmt::skip]
-    const GPR_SAVED_REGS: &'static [Reg] = &[
-        S0, S1, S2,
-    ];
-    #[rustfmt::skip]
-    const GPR_ARG_REGS: &'static [Reg] = &[
-        A0, A1, A2
-    ];
-
     pub fn new(out: &'a mut Vec<Instr>) -> Self {
         Self {
             out,
@@ -450,8 +450,9 @@ impl<'a> Select for LarkInstrSel<'a> {
             }
 
             Stmt::Call(opt_dst, func, args) => {
-                for (arg, reg) in args.into_iter().zip(Self::GPR_ARG_REGS) {
-                    self.expr_to_asm(arg, Stg::Reg(*reg));
+                for (arg, &reg) in args.into_iter().zip(Reg::GPR_ARG_REGS) {
+                    let tmp = self.expr_to_asm(arg, None);
+                    self.emit(Mv(reg.into(), tmp));
                 }
                 self.emit(Jal(Ra.into(), func));
                 if let Some(dst) = opt_dst {
@@ -480,6 +481,9 @@ impl<'a> Select for LarkInstrSel<'a> {
                     ir::Relop::Eq => self.emit(Teq(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     ir::Relop::LtU => {
                         self.emit(Tltu(bool_tmp.into(), e1_tmp.into(), e2_tmp.into()))
+                    }
+                    ir::Relop::LteU => {
+                        self.emit(Tgeu(bool_tmp.into(), e2_tmp.into(), e1_tmp.into()))
                     }
                     ir::Relop::Lt => self.emit(Tlt(bool_tmp.into(), e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
@@ -551,7 +555,7 @@ impl<'a> Select for LarkInstrSel<'a> {
         }
     }
 
-    fn render(&self) -> &[Instr] {
-        &self.out[..]
+    fn render(&mut self) -> impl Iterator<Item = Instr> {
+        self.out.drain(..)
     }
 }

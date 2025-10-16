@@ -59,7 +59,9 @@ impl Select for I8086InstrSel {
         todo!()
     }
 
-    fn render(&self) -> &[Self::Instruction] {
-        todo!()
+    fn render(&mut self) -> impl Iterator<Item = Instr> {
+        // self.out.drain(..)
+        todo!();
+        [].into_iter()
     }
 }

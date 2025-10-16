@@ -20,6 +20,13 @@ pub mod flatten {
                 let rval = flatten_rval(rval, out);
                 out.push(Stmt::Move(lval, rval));
             }
+            Stmt::RVal(RVal::Call(func @ RVal::Lbl(_), args)) => {
+                let mut new_args = Vec::new();
+                for arg in args {
+                    new_args.push(Box::new(flatten_rval(*arg, out)));
+                }
+                out.push(Stmt::RVal(RVal::Call(func, new_args)));
+            }
             Stmt::RVal(rval) => {
                 let rval = flatten_rval(rval, out);
                 out.push(Stmt::RVal(rval));

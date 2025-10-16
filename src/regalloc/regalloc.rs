@@ -20,9 +20,34 @@ use crate::{
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
 pub struct RegAllocation<I: Instr, R> {
-    pub cfg: Cfg<I>,
+    pub program: Vec<I>,
     pub assignments: BTreeMap<Tmp, R>,
 }
+
+impl<I, R> RegAllocation<I, R> 
+where I: Instr<Register=R>, R: Eq + Copy
+{
+    pub fn new(cfg: Cfg<I>, assignments: BTreeMap<Tmp, R>) -> Self {
+        let mut program = vec![];
+        for (i, mut instr) in cfg.stmts.into_iter().enumerate() {
+            for (tmp, reg) in &assignments {
+                instr.replace_occurrances(*tmp, Stg::Reg(*reg));
+            }
+            if let Some((dst, src)) = instr.try_as_pure_move() && dst == src {
+                eprintln!("-- {i}: {instr:?} # Eliminating redundant move");
+                continue;
+            } else {
+                program.push(instr);
+            }
+        }
+
+        Self {
+            program,
+            assignments,
+        }
+    }
+}
+
 
 /// Register Allocator
 pub struct RegAlloc<R> {
@@ -44,13 +69,12 @@ where
 
     pub const MAX_ITERS: usize = 16;
 
-    pub fn allocate_registers<I: Instr<Register = R>>(
+    pub fn allocate_registers<I: Instr<Register = R> + Clone>(
         &mut self,
         params: impl IntoIterator<Item = Tmp>,
         stmts: Vec<I>,
     ) -> RegAllocation<I, R> {
-        let mut cfg = Cfg::new(0, params, stmts);
-        self.precolor(&mut cfg);
+        let mut cfg = self.precolor(Cfg::new(0, params, stmts));
 
         for i in 0..Self::MAX_ITERS {
             eprintln!("============= Iteration #{} ============", i + 1);
@@ -59,7 +83,7 @@ where
             self.coalesce_phase();
             //self.freeze_phase();
             match self.select_phase(&mut color_graph, &mut node_stack) {
-                Ok(assignments) => return RegAllocation { cfg, assignments },
+                Ok(assignments) => return RegAllocation::new(cfg, assignments),
                 Err(to_spill) => {
                     eprintln!("Perform Spill");
                     cfg = self.spill_and_rewrite(cfg, to_spill);
@@ -72,23 +96,42 @@ where
         );
     }
 
-    fn precolor<I: Instr<Register = R>>(&mut self, cfg: &mut Cfg<I>) {
-        let mut prologue = vec![];
+    fn precolor<I: Instr<Register = R> + Clone>(&mut self, mut cfg: Cfg<I>) -> Cfg<I> {
+        let mut prologue: Vec<I> = vec![];
+        let mut epilogue = vec![];
+
+        //// All saved registers need to be saved to their own temporaries (hopefully to be coalesced
+        //// away later).
+        //let mut tmps = vec![];
+        //for &reg in R::GPR_SAVED_REGS {
+        //    let fresh_tmp = Tmp::fresh(format!("saved<{reg:?}>").as_str()).into();
+        //    tmps.push((fresh_tmp, reg));
+        //    prologue.extend(I::emit_move(fresh_tmp, Stg::Reg(reg)));
+        //}
+        //for (tmp, reg) in tmps.into_iter().rev() {
+        //    epilogue.extend(I::emit_move(Stg::Reg(reg), tmp));
+        //}
 
         // Move values in arg registers into the temporaries representing parameters.
         for (&param, &reg) in cfg.params.iter().zip(R::GPR_ARG_REGS) {
             prologue.extend(I::emit_move(param.into(), Stg::Reg(reg)));
         }
 
-        // All saved registers need to be saved to their own temporaries (hopefully to be coalesced
-        // away later).
-        for &reg in R::GPR_SAVED_REGS {
-            let fresh_tmp = Tmp::fresh(format!("saved<{reg:?}>").as_str());
-            prologue.extend(I::emit_move(fresh_tmp.into(), Stg::Reg(reg)));
+
+        let mut new_stmts = vec![];
+        new_stmts.push(cfg.stmts.first().expect("first instr will be subr name").clone());
+        new_stmts.extend(prologue);
+
+        // Skip subr label
+        for (id, instr) in cfg.stmts.drain(..).enumerate().skip(1) {
+            if cfg.exits.contains(&id) {
+                new_stmts.extend(epilogue.iter().cloned());
+            }
+            new_stmts.push(instr);
         }
 
-        prologue.extend(cfg.stmts.drain(..));
-        std::mem::replace(&mut cfg.stmts, prologue);
+        // Need to rebuild CFG so that jump indices are up to date with added prologue/epilogues.
+        Cfg::new(cfg.entry, cfg.params, new_stmts)
     }
 
     /// Computes live-sets and builds a color graph given a control-flow graph representing a
@@ -143,11 +186,11 @@ where
         let mut assignments = BTreeMap::new();
 
         while let Some((stg, neighbors)) = node_stack.pop() {
-            color_graph.insert(stg.clone(), neighbors.clone());
+            color_graph.insert(stg, neighbors);
             let Stg::Tmp(tmp) = stg else {
                 continue;
             };
-            let Some(reg) = self.select_once(color_graph, &assignments, stg.clone()) else {
+            let Some(reg) = self.select_once(color_graph, &assignments, tmp) else {
                 // Return the problematic node for rewriting in the caller.
                 eprintln!("  * STOP! SPILL NEEDED FOR: {tmp:?}");
                 return Err(tmp);
@@ -159,17 +202,17 @@ where
     }
 
     /// Given the current color-graph and the current assignments of nodes, chooses a color
-    /// (register) for the given node.
+    /// (register) for the given temporary.
     fn select_once(
         &mut self,
         color_graph: &mut ColorGraph<R>,
         assignments: &BTreeMap<Tmp, R>,
-        stg: Stg<R>,
+        tmp: Tmp,
     ) -> Option<R> {
         let mut regs_in_use = BTreeSet::<R>::new();
 
-        // Collect all neighbors of `stg` in the color-graph.
-        for neighbor in color_graph.active_neighbors_of(&stg) {
+        // Collect all neighbors of `tmp` in the color-graph.
+        for neighbor in color_graph.active_neighbors_of(tmp) {
             match neighbor {
                 Stg::Tmp(tmp) => {
                     // If the neighbor is a Tmp that has already been assigned, its assigned
@@ -179,7 +222,7 @@ where
                     }
                     // If the Tmp hasn't been assigned a register, skip.
                 }
-                // A Reg as a neighbor is obviously "in use" because `stg` cannot be assigned that
+                // A Reg as a neighbor is obviously "in use" because `tmp` cannot be assigned that
                 // register since it conflicts.
                 Stg::Reg(reg) => {
                     regs_in_use.insert(reg.clone());
@@ -187,10 +230,23 @@ where
             }
         }
 
-        // Find the first general-purpose register that's not in use.
+        eprintln!("!!!!!!!!!!!!!!!!!!! {tmp}: in_use = {regs_in_use:?}");
+
+        // First try coalescing:
+        if let Some(chosen) = R::GPRS
+            .into_iter()
+            .copied()
+            .filter(|gpr| color_graph.are_move_related(tmp.into(), Stg::Reg(*gpr)))
+            .find(|gpr| !regs_in_use.contains(gpr)) {
+                eprintln!("~ coalescing {tmp:?} and {chosen:?}");
+                return Some(chosen);
+        }
+
+        // Otherwise just find the first GPR that's not in use.
         R::GPRS
             .into_iter()
             .find(|gpr| !regs_in_use.contains(*gpr))
+            .inspect(|gpr| eprintln!("* assigning  {tmp:?} --> {gpr:?}"))
             .cloned()
     }
 
@@ -220,9 +276,13 @@ where
             let mut insert_after = Vec::new();
             let mut changed = false;
 
+            let mk_fresh = || {
+                Tmp::fresh(&format!("spilled<{to_spill:?}>"))
+            };
+
             let mut new_tmp = None;
             if uses.contains(&to_spill.into()) {
-                let dst = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
+                let dst = *new_tmp.get_or_insert_with(mk_fresh);
                 new_stmts.extend(I::emit_load_from_stack(dst, slot_addr).inspect(|new_stmt| {
                     eprintln!("++ inserting stmt:\t{new_stmt:?}");
                 }));
@@ -230,7 +290,7 @@ where
                 changed = true;
             }
             if defs.contains(&to_spill.into()) {
-                let src = *new_tmp.get_or_insert_with(|| Tmp::fresh(to_spill.as_str()));
+                let src = *new_tmp.get_or_insert_with(mk_fresh);
                 stmt_ref.replace_def_occurrances(to_spill, src.into());
                 insert_after.extend(I::emit_store_to_stack(slot_addr, src));
                 changed = true;
@@ -259,27 +319,25 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::names::Lbl;
+    use crate::utils::current_revision_summary;
+
     use super::super::test_datastructures::{Expr as E, Expr, Reg, Stmt as S, Stmt};
     use super::*;
 
     fn compute_assignments(params: Vec<Tmp>, program: Vec<Stmt>) {
         crate::names::reset_name_ids();
-        eprintln!("<<<<<<<<<<<<< GPRS = {:?} >>>>>>>>>>>>>", Reg::GPRS);
+        eprintln!("{}", current_revision_summary());
+        eprintln!("GPRS = {:?}", Reg::GPRS);
         let mut ra = RegAlloc::<Reg>::new();
-        let alloc = ra.allocate_registers(params, program);
+        let mut alloc = ra.allocate_registers(params, program);
         eprintln!("ASSIGNMENTS:");
         for (tmp, reg_id) in &alloc.assignments {
             eprintln!("  {tmp:?} -> ${reg_id}");
         }
         eprintln!("FINAL CODE:");
-        for stmt in &alloc.cfg.stmts {
-            let mut rendered = format!("{stmt:?}");
-            for (tmp, reg_id) in &alloc.assignments {
-                let tmp_rendered = format!("{tmp:?}");
-                let reg_rendered = format!("${reg_id}");
-                rendered = rendered.replace(&tmp_rendered, &reg_rendered);
-            }
-            eprintln!("|\t{rendered}");
+        for stmt in alloc.program {
+            eprintln!("|\t{stmt:?}");
         }
     }
 
@@ -304,14 +362,17 @@ mod tests {
         // ret p;
         #[rustfmt::skip]
         let program = vec![
+            Lbl::subr("power").into(),
             S::mov(Tmp::from("p"), 1),
             S::mov(Tmp::from("i"), 1),
             "loop_cond".into(),
                 S::Br(E::binop("i", "n"), "loop_end".into()),
                 S::mov(Tmp::from("p"), E::binop("p", "base")),
                 S::mov(Tmp::from("i"), E::binop("i", 1)),
+                S::jmp("loop_cond"),
             "loop_end".into(),
-            S::ret("p"),
+            S::mov(Reg::T0, "p"),
+            S::Ret
         ];
 
         compute_assignments(vec!["base".into(), "n".into()], program.clone());
@@ -358,26 +419,28 @@ mod tests {
         //
         #[rustfmt::skip]
         let program = vec![
-            "binsearch".into(),
+            Lbl::subr("binsearch").into(),
             S::mov(Tmp::from("low"), 0),
             S::mov(Tmp::from("high"), E::binop("n", 1)),
             S::jmp("loop_cond"),
             "loop_top".into(),
-                 S::mov(Tmp::from("mid"), E::binop(E::binop("low", "high"), 2)),
-                 S::Load { dst: Tmp::from("elem").into(), addr: E::binop("v", "mid") },
-                 S::Br(E::binop("x", "elem"),  "else_if".into()),
-                     S::mov(Tmp::from("high"), E::binop("mid", 1)),
-                     S::jmp("end_if"),
-                 "else_if".into(),
-                 S::Br(E::binop("x", "elem"), "else".into()),
-                     S::mov(Tmp::from("low"), E::binop("mid", 1)),
-                     S::jmp("end_if"),
-                 "else".into(),
-                     S::ret("mid"),
-                 "end_if".into(),
+                S::mov(Tmp::from("mid"), E::binop(E::binop("low", "high"), 2)),
+                S::Load { dst: Tmp::from("elem").into(), addr: E::binop("v", "mid") },
+                S::Br(E::binop("x", "elem"),  "else_if".into()),
+                    S::mov(Tmp::from("high"), E::binop("mid", 1)),
+                    S::jmp("end_if"),
+                "else_if".into(),
+                S::Br(E::binop("x", "elem"), "else".into()),
+                    S::mov(Tmp::from("low"), E::binop("mid", 1)),
+                    S::jmp("end_if"),
+                "else".into(),
+                    S::mov(Reg::T0, "mid"),
+                    S::Ret,
+                "end_if".into(),
             "loop_cond".into(),
-                 S::Br(E::binop("low", "high"), "loop_top".into()),
-            S::ret(-1),
+                S::Br(E::binop("low", "high"), "loop_top".into()),
+            S::mov(Reg::T0, -1),
+            S::Ret,
         ];
         compute_assignments(vec!["x".into(), "v".into(), "n".into()], program.clone());
     }

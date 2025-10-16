@@ -14,7 +14,7 @@ pub struct Cfg<I> {
     pub stmts: Vec<I>,
     pub edges: Vec<(NodeId, NodeId)>,
     pub entry: NodeId,
-    pub exits: Vec<NodeId>,
+    pub exits: BTreeSet<NodeId>,
     labels: HashMap<Lbl, NodeId>,
     live_ins_on_entry: BTreeSet<Tmp>,
 }
@@ -55,7 +55,7 @@ impl<I: Instr> Cfg<I> {
 
     fn discover_labels(&mut self) {
         for (id, stmt) in self.stmts.iter().enumerate() {
-            if let Some(lbl) = stmt.get_label() {
+            if let Some(lbl) = stmt.try_as_lbl() {
                 self.labels.insert(lbl, id);
             }
         }
@@ -77,6 +77,8 @@ impl<I: Instr> Cfg<I> {
                         }
                     }
                 }
+            } else {
+                self.exits.insert(id);
             }
         }
     }
@@ -91,5 +93,11 @@ impl<I: Instr> Cfg<I> {
         self.edges
             .iter()
             .filter_map(move |(from, to)| (*to == node_id).then_some(*from))
+    }
+
+    pub fn exits(&self) -> impl Iterator<Item = &I> {
+        self.iter_stmts()
+            .enumerate()
+            .filter_map(|(id, stmt)| self.exits.contains(&id).then_some(stmt))
     }
 }

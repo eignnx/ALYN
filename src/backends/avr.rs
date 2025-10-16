@@ -244,7 +244,7 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
-    fn get_label(&self) -> Option<Lbl> {
+    fn try_as_lbl(&self) -> Option<Lbl> {
         if let Label(lbl) = self {
             Some(*lbl)
         } else {
@@ -503,7 +503,7 @@ impl<'a> Select for AvrInstrSel<'a> {
         }
     }
 
-    fn render(&self) -> &[Instr] {
-        &self.out[..]
+    fn render(&mut self) -> impl Iterator<Item = Instr> {
+        self.out.drain(..)
     }
 }

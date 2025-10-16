@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use crate::{
     backends::lark::LarkInstrSel,
     instr_sel::{Select, Stg},
-    names::Tmp,
-    regalloc::Instr,
+    names::{Lbl, Tmp},
+    regalloc::Instr, utils::current_revision_summary,
 };
 
 mod ast;
@@ -25,6 +25,7 @@ mod sym;
 mod tcx;
 mod ty;
 mod tyck;
+mod utils;
 
 fn main() {
     let Some(fname) = std::env::args().nth(1) else {
@@ -55,6 +56,8 @@ where
     }
 
     pub fn compile(&mut self, fname: &str, src: &str) {
+        eprintln!("{}", current_revision_summary());
+
         let mut module = match parse::ModuleParser::new().parse(&fname[..], &src[..]) {
             Ok(m) => m,
             Err(e) => panic!("parse error: {e:?}"),
@@ -97,23 +100,28 @@ where
                 eprintln!("|   {stmt:?}");
                 self.instr_select.stmt_to_asm(stmt);
             }
-            let asm_before_regalloc = self.instr_select.render().to_vec();
+
+            let asm_before_regalloc = self.instr_select.render().collect();
 
             let mut ralloc = regalloc::RegAlloc::<ISel::Register>::new();
             let reg_allocation = ralloc.allocate_registers(params, asm_before_regalloc);
 
             eprintln!("ASSIGNMENTS:");
             for (tmp, reg_id) in &reg_allocation.assignments {
-                eprintln!("  {tmp:?} -> ${reg_id:?}");
+                eprintln!("  {tmp:?} -> {reg_id:?}");
             }
 
             println!("\n;;; SUBROUTINE");
-            for tgt_lang_stmt in reg_allocation.cfg.iter_stmts() {
-                let mut stmt = tgt_lang_stmt.clone();
-                for (tmp, reg) in reg_allocation.assignments.iter() {
-                    stmt.replace_occurrances(*tmp, Stg::Reg(*reg));
+            for stmt in reg_allocation.program {
+
+                if let Some(lbl) = stmt.try_as_lbl() {
+                    if let Lbl::SubrStart(_) = lbl {
+                        println!();
+                    }
+                    println!("{stmt:?}");
+                } else {
+                    println!("    {stmt:?}");
                 }
-                println!("{stmt:?}");
             }
         }
     }

@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, BTreeSet}, fmt};
 
 use crate::{
     instr_sel::Stg,
-    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::{LiveSets, Move}, Cc, Instr},
+    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::{LiveSets, Move}, Cc, Instr}, utils::current_revision_summary,
 };
 
 pub type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
@@ -60,8 +60,9 @@ where
 
     /// Only count as a neighbor if the node is still in the graph. Instances of neighbors whose
     /// node is not in `self.graph` are skipped.
-    pub fn active_neighbors_of(&self, n: &Stg<R>) -> impl Iterator<Item = &Stg<R>> {
-        let Some(neighbors) = self.interferences.graph.get(n) else {
+    pub fn active_neighbors_of(&self, n: impl Into<Stg<R>>) -> impl Iterator<Item = &Stg<R>> {
+        let n = n.into();
+        let Some(neighbors) = self.interferences.graph.get(&n) else {
             panic!("Unknown Stg<R>: {n:?}");
         };
         neighbors
@@ -70,17 +71,17 @@ where
     }
 
     #[track_caller]
-    pub fn degree(&self, n: &Stg<R>) -> usize {
-        self.active_neighbors_of(n).count()
+    pub fn degree(&self, n: impl Into<Stg<R>>) -> usize {
+        self.active_neighbors_of(n.into()).count()
     }
 
     #[track_caller]
-    pub fn is_sig_degree(&self, n: &Stg<R>) -> bool {
+    pub fn is_sig_degree(&self, n: impl Into<Stg<R>>) -> bool {
         self.degree(n) >= R::N_GPRS
     }
 
     #[track_caller]
-    pub fn is_insig_degree(&self, n: &Stg<R>) -> bool {
+    pub fn is_insig_degree(&self, n: impl Into<Stg<R>>) -> bool {
         self.degree(n) < R::N_GPRS
     }
 
@@ -100,7 +101,7 @@ where
     pub fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
         let mut key: Option<Stg<R>> = None;
         for n in self.interferences.graph.keys() {
-            if self.is_insig_degree(n) {
+            if self.is_insig_degree(*n) {
                 key = Some(n.clone());
                 break;
             }
@@ -113,28 +114,52 @@ where
             .interferences
             .graph
             .keys()
-            .max_by_key(|n| self.degree(n))
+            .max_by_key(|n| self.degree(**n))
             .cloned()?;
         Some(self.take_node(&max_node))
     }
+
+    pub fn interferes_with(&self, x: impl Into<Stg<R>>, y: impl Into<Stg<R>>) -> bool {
+        self.interferences.interferes_with(x.into(), y.into())
+    }
 }
 
-impl<R: fmt::Debug> fmt::Debug for ColorGraph<R> {
+impl<R: fmt::Debug + Clone + Copy + Ord + Cc<R> + 'static> fmt::Debug for ColorGraph<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "strict graph {{")?;
-        for (tmp, neighbors) in &self.interferences.graph {
-            write!(f, "    {:?} -- {{", DotEsc(tmp))?;
-            for n in neighbors {
-                write!(f, " {:?}", DotEsc(n))?;
+        writeln!(f, "    concentrate=true")?;
+        writeln!(f, r##"    label="{}""##, current_revision_summary())?;
+
+        writeln!(f)?;
+
+        writeln!(f, "    subgraph GPRS {{")?;
+        writeln!(f, r##"        node [shape=circle fontsize="20pt" style=filled fillcolor="#eee" penwidth="2"]"##)?;
+        for gpr in R::GPRS {
+            writeln!(f, "        {:?}", DotEsc(Stg::Reg(*gpr)))?;
+        }
+        writeln!(f, "    }}")?;
+
+        writeln!(f)?;
+
+        writeln!(f, r##"    node [fontname="Arial:bold" fontsize="15pt"]"##)?;
+        writeln!(f, r##"    node [shape=rect]"##)?;
+        for &node in self.interferences.graph.keys() {
+            write!(f, "    {:?} -- {{", DotEsc(node))?;
+            for nbr in self.active_neighbors_of(node) {
+                if node.try_as_reg().is_some() && nbr.try_as_reg().is_some() { continue }
+                write!(f, " {:?}", DotEsc(nbr))?;
             }
             writeln!(f, " }}")?;
         }
 
         writeln!(f)?;
 
+        writeln!(f, "    subgraph MoveRelations {{")?;
+        writeln!(f, r##"        edge [style=dashed penwidth="2" color="#999"]"##)?;
         for mv in &self.move_rels {
-            writeln!(f, "    {:?} -- {:?} [style=dashed]", DotEsc(&mv.src), DotEsc(&mv.dst))?;
+            writeln!(f, "        {:?} -- {:?}", DotEsc(&mv.src), DotEsc(&mv.dst))?;
         }
+        writeln!(f, "    }}")?;
         writeln!(f, "}}")?;
         Ok(())
     }

@@ -17,6 +17,10 @@ impl From<&str> for Lbl {
 }
 
 impl Lbl {
+    pub fn subr(name: &str) -> Self {
+        Self::SubrStart(Intern::from_ref(name))
+    }
+
     pub fn render(&self) -> String {
         match self {
             Lbl::SubrStart(name) => format!("subr__{name}"),
@@ -49,7 +53,7 @@ pub fn reset_lbl_id() {
 impl Lbl {
     pub fn fresh(base_name: impl AsRef<str>) -> Self {
         let id = LBL_ID.with(|id| id.fetch_add(1, Ordering::SeqCst));
-        Self::ControlFlow(Intern::new(format!("{}#{id}", base_name.as_ref())))
+        Self::ControlFlow(Intern::new(format!("{}.{id}", base_name.as_ref())))
     }
 }
 
@@ -60,6 +64,12 @@ impl std::fmt::Debug for Lbl {
             Self::Global(name) => write!(f, "glbl<{name}>"),
             Self::ControlFlow(name) => write!(f, "local<{name}>"),
         }
+    }
+}
+
+impl std::fmt::Display for Lbl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.render())
     }
 }
 
@@ -92,6 +102,12 @@ impl Tmp {
 }
 
 impl std::fmt::Debug for Tmp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "%{}", self.0)
+    }
+}
+
+impl std::fmt::Display for Tmp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "%{}", self.0)
     }

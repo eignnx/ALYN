@@ -8,7 +8,7 @@ use super::{
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-use crate::{instr_sel::Stg, names::Tmp, regalloc::live_sets::Move};
+use crate::{instr_sel::Stg, names::Tmp, regalloc::{live_sets::Move, Cc}};
 
 #[derive(Default)]
 pub struct Interferences<R> {
@@ -16,7 +16,7 @@ pub struct Interferences<R> {
     move_rels: BTreeSet<Move<R>>
 }
 
-impl<R: Debug + Copy + Eq + Ord> Interferences<R> {
+impl<R: Debug + Copy + Eq + Ord + Cc<R> + 'static> Interferences<R> {
     pub fn new() -> Self {
         Self {
             graph: Default::default(),

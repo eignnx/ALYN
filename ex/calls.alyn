@@ -1,22 +1,18 @@
-subr shazam(x: nat, y: nat) nat {
-    ret 123;
-}
-
-subr print(i: int) {
+subr print(n: nat) {
     ret;
 }
 
+subr shazam(x: nat, y: nat) nat {
+    print(x);
+    print(y);
+    ret 123;
+}
+
+
 subr abracadabra(x: nat) nat {
-    let x_original = x;
-    let z = 100;
-    x = x + 1;
-    let q = 0;
-    let y = x + x;
-    while z > 0 {
-        q = shazam(x, y) + q;
-        x = y - z + q;
-        z = z - y - 32;
-    }
-    ret y + x_original;
+    let y = x - 99;
+    let q = shazam(x, y);
+    q = q + 77;
+    ret q;
 }
 
