@@ -1,1 +1,1 @@
-pub struct ColorGraph<R>;
+//pub struct ColorGraph<R>;

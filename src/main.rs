@@ -48,7 +48,7 @@ pub struct Compiler<ISel: Select> {
 
 impl<ISel: Select> Compiler<ISel>
 where
-    ISel::Register: Ord + Eq + Copy + regalloc::Cc<ISel::Register> + 'static,
+    ISel::Register: regalloc::Cc,
     ISel::Instruction: Instr<Register = ISel::Register>,
 {
     pub fn new(instr_select: ISel) -> Self {

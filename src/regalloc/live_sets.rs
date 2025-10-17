@@ -23,7 +23,7 @@ pub struct Move<R> {
     pub instr_id: usize,
 }
 
-impl<R: Copy + Eq + Ord + Debug + Cc<R> + 'static> LiveSets<R> {
+impl<R: Cc> LiveSets<R> {
     pub fn new() -> Self {
         Self {
             live_ins: Default::default(),
@@ -164,7 +164,7 @@ struct DisplayLiveSets<'a, I, R> {
     stmts: &'a [I],
 }
 
-impl<'a, I: Debug, R: Copy + Eq + Ord + Debug + Cc<R> + 'static> Display for DisplayLiveSets<'a, I, R> {
+impl<'a, I: Debug, R: Cc> Display for DisplayLiveSets<'a, I, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (i, stmt) in self.stmts.iter().enumerate() {
             if i == 0 {

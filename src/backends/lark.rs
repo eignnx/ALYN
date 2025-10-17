@@ -15,7 +15,7 @@ use crate::{
 };
 
 #[rustfmt::skip]
-#[derive(Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Reg {
     #[display("$zero")] Zero,
     #[display("$rv")] Rv, #[display("$ra")] Ra,
@@ -38,7 +38,7 @@ impl From<Reg> for crate::Stg<Reg> {
     }
 }
 
-impl Cc<Reg> for Reg {
+impl Cc for Reg {
     #[rustfmt::skip]
     const GPRS: &'static [Reg] = &[
         T0, T1, T2,

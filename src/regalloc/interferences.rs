@@ -16,7 +16,7 @@ pub struct Interferences<R> {
     move_rels: BTreeSet<Move<R>>
 }
 
-impl<R: Debug + Copy + Eq + Ord + Cc<R> + 'static> Interferences<R> {
+impl<R: Cc> Interferences<R> {
     pub fn new() -> Self {
         Self {
             graph: Default::default(),

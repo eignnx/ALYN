@@ -6,26 +6,26 @@ Ok(
     [
         %low <- 0,
         %high <- (%n - 1),
-        jmp local<while_cond#0>;
-        :local<while_body#1>;
+        jmp local<while_cond.0>;
+        :local<while_body.1>;
         %mid <- ((%low + %high) >> 1);
         %elem <- M[(%v + %mid)];
-        if %x < %elem then local<if_true#6> else local<if_false#7>;
-        :local<if_true#6>;
+        if %x < %elem then local<if_true.6> else local<if_false.7>;
+        :local<if_true.6>;
         %high <- (%mid - 1);
-        jmp local<end_if#8>;
-        :local<if_false#7>;
-        :local<end_if#8>;
-        if %x > %elem then local<if_true#3> else local<if_false#4>;
-        :local<if_true#3>;
+        jmp local<end_if.8>;
+        :local<if_false.7>;
+        :local<end_if.8>;
+        if %x > %elem then local<if_true.3> else local<if_false.4>;
+        :local<if_true.3>;
         %low <- (%mid + 1);
-        jmp local<end_if#5>;
-        :local<if_false#4>;
+        jmp local<end_if.5>;
+        :local<if_false.4>;
         ret bitcast{int}(%mid);
-        :local<end_if#5>;
-        :local<while_cond#0>;
-        if %low u(<=) %high then local<while_body#1> else local<end_while#2>;
-        :local<end_while#2>,
+        :local<end_if.5>;
+        :local<while_cond.0>;
+        if %low u(<=) %high then local<while_body.1> else local<end_while.2>;
+        :local<end_while.2>,
         ret -1,
     ],
 )

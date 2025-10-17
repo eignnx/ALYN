@@ -44,7 +44,7 @@ pub enum CtrlTx {
     Branch(Lbl),
 }
 
-pub trait Instr: Debug + Sized {
+pub trait Instr: Debug + Sized + Clone {
     type Register: Copy + Debug;
 
     fn add_defs_uses(
@@ -78,12 +78,12 @@ pub trait Instr: Debug + Sized {
 }
 
 /// Calling convention
-pub trait Cc<R: 'static + Clone> {
+pub trait Cc: std::fmt::Debug + Clone + Copy + Ord + Eq + std::hash::Hash + 'static {
     /// A list of all the available general-purpose registers.
-    const GPRS: &'static [R];
+    const GPRS: &'static [Self];
     const N_GPRS: usize = Self::GPRS.len();
 
-    const GPR_SAVED_REGS: &'static [R];
-    const GPR_TEMP_REGS: &'static [R];
-    const GPR_ARG_REGS: &'static [R];
+    const GPR_SAVED_REGS: &'static [Self];
+    const GPR_TEMP_REGS: &'static [Self];
+    const GPR_ARG_REGS: &'static [Self];
 }

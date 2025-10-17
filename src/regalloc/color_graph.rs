@@ -23,10 +23,7 @@ impl<R> From<Interferences<R>> for ColorGraph<R> {
     }
 }
 
-impl<R> ColorGraph<R>
-where
-    R: fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
-{
+impl<R: Cc> ColorGraph<R> {
     pub fn new<I>(cfg: &Cfg<I>, live_sets: &LiveSets<R>) -> Self
     where
         I: Instr<Register = R>,
@@ -171,7 +168,7 @@ where
     }
 }
 
-impl<R: fmt::Debug + Clone + Copy + Ord + Cc<R> + 'static> fmt::Debug for ColorGraph<R> {
+impl<R: Cc> fmt::Debug for ColorGraph<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "strict graph {{")?;
         writeln!(f, "    concentrate=true")?;

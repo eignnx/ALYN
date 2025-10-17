@@ -56,10 +56,7 @@ pub struct RegAlloc<R> {
     _phantom: PhantomData<R>,
 }
 
-impl<R> RegAlloc<R>
-where
-    R: fmt::Debug + Ord + Eq + Copy + Cc<R> + 'static,
-{
+impl<R: Cc> RegAlloc<R> {
     pub fn new() -> Self {
         Self {
             stack_slots_allocated: Default::default(),
@@ -69,7 +66,7 @@ where
 
     pub const MAX_ITERS: usize = 16;
 
-    pub fn allocate_registers<I: Instr<Register = R> + Clone>(
+    pub fn allocate_registers<I: Instr<Register = R>>(
         &mut self,
         params: impl IntoIterator<Item = Tmp>,
         stmts: Vec<I>,
@@ -80,7 +77,7 @@ where
             eprintln!("============= Iteration #{} ============", i + 1);
             let mut color_graph = self.build_phase(&mut cfg);
             let mut node_stack = self.simplify_phase(&mut color_graph);
-            self.coalesce_phase();
+            self.coalesce_phase(&mut color_graph);
             //self.freeze_phase();
             match self.select_phase(&mut color_graph, &mut node_stack) {
                 Ok(assignments) => return RegAllocation::new(cfg, assignments),
@@ -96,7 +93,7 @@ where
         );
     }
 
-    fn precolor<I: Instr<Register = R> + Clone>(&mut self, mut cfg: Cfg<I>) -> Cfg<I> {
+    fn precolor<I: Instr<Register = R>>(&mut self, mut cfg: Cfg<I>) -> Cfg<I> {
         let mut prologue: Vec<I> = vec![];
         let mut epilogue = vec![];
 
@@ -175,12 +172,13 @@ where
     }
 
     fn coalesce_phase(&mut self, color_graph: &mut ColorGraph<R>) -> bool {
-        for mv in color_graph.move_rels() {
-            if color_graph.safe_to_coalesce(mv) {
-                color_graph.coalesce(&mv.dst, &mv.src);
-                return true;
-            }
-        }
+        //for mv in color_graph.move_rels() {
+        //    let mv = mv.clone();
+        //    if color_graph.safe_to_coalesce(&mv.dst, &mv.src) {
+        //        color_graph.coalesce(&mv.dst, &mv.src);
+        //        return true;
+        //    }
+        //}
         return false;
     }
 

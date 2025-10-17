@@ -4,34 +4,34 @@ expression: "parse_and_convert(\"\n            subr shiftmul(x: int, n: int) int
 ---
 Ok(
     [
-        if %n < +0 then local<if_true#0> else local<if_false#1>;
-        :local<if_true#0>;
+        if %n < +0 then local<if_true.0> else local<if_false.1>;
+        :local<if_true.0>;
         %x <- (- %x);
         %n <- (- %n);
-        jmp local<end_if#2>;
-        :local<if_false#1>;
-        :local<end_if#2>,
-        if %n == +0 then local<if_true#3> else local<if_false#4>;
-        :local<if_true#3>;
+        jmp local<end_if.2>;
+        :local<if_false.1>;
+        :local<end_if.2>,
+        if %n == +0 then local<if_true.3> else local<if_false.4>;
+        :local<if_true.3>;
         ret +0;
-        jmp local<end_if#5>;
-        :local<if_false#4>;
-        :local<end_if#5>,
+        jmp local<end_if.5>;
+        :local<if_false.4>;
+        :local<end_if.5>,
         %acc <- +0,
-        jmp local<while_cond#6>;
-        :local<while_body#7>;
-        if (%n & +1) == +1 then local<if_true#9> else local<if_false#10>;
-        :local<if_true#9>;
+        jmp local<while_cond.6>;
+        :local<while_body.7>;
+        if (%n & +1) == +1 then local<if_true.9> else local<if_false.10>;
+        :local<if_true.9>;
         %acc <- (%acc + %x);
         %n <- (%n - +1);
-        jmp local<end_if#11>;
-        :local<if_false#10>;
-        :local<end_if#11>;
+        jmp local<end_if.11>;
+        :local<if_false.10>;
+        :local<end_if.11>;
         %x <- (%x + %x);
         %n <- (%n >> +1);
-        :local<while_cond#6>;
-        if %n > +1 then local<while_body#7> else local<end_while#8>;
-        :local<end_while#8>,
+        :local<while_cond.6>;
+        if %n > +1 then local<while_body.7> else local<end_while.8>;
+        :local<end_while.8>,
         ret (%x + %acc),
     ],
 )

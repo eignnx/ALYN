@@ -78,7 +78,7 @@ mod tests {
                 be.stmt_to_asm(stmt);
             }
         }
-        be.render().to_vec()
+        be.render().collect()
     }
 
     #[test]

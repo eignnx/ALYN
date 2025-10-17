@@ -15,7 +15,7 @@ use crate::{
 use crate::instr_sel::Select;
 
 #[rustfmt::skip]
-#[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Debug, Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum Reg {
     #[display("$r0")] R0,
     #[display("$r1")] R1,
@@ -60,7 +60,7 @@ impl From<Reg> for instr_sel::Stg<Reg> {
     }
 }
 
-impl Cc<Reg> for Reg {
+impl Cc for Reg {
     #[rustfmt::skip]
     const GPRS: &'static [Reg] = &[
         // R0,  R1,  R2,  R3,  R4,  R5,  R6,  R7,  R8,  R9,  R10, R11, R12, R13, R14, R15,

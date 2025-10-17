@@ -24,19 +24,11 @@ pub enum Reg {
     Ra,
 }
 
-impl Cc<Reg> for Reg {
+impl Cc for Reg {
     const GPRS: &[Self] = &[Reg::T0, Reg::T1, Reg::T2, Reg::S0, Reg::S1, Reg::Ra];
     const GPR_ARG_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
     const GPR_TEMP_REGS: &'static [Reg] = &[Reg::T0, Reg::T1, Reg::T2];
     const GPR_SAVED_REGS: &'static [Reg] = &[Reg::Ra, Reg::S0, Reg::S1];
-}
-
-// TODO: consider adding to Cc<R>
-fn all_regs() -> impl Iterator<Item=Reg> {
-    Reg::GPR_ARG_REGS.iter()
-        .chain(Reg::GPR_TEMP_REGS.iter())
-        .chain(Reg::GPR_SAVED_REGS.iter()).copied()
-        .collect::<std::collections::BTreeSet<_>>().into_iter()
 }
 
 impl From<Reg> for Stg<Reg> {

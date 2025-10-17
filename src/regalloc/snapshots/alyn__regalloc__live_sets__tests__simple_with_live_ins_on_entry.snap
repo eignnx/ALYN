@@ -2,5 +2,8 @@
 source: src/regalloc/live_sets.rs
 expression: live_sets.display(&cfg.stmts)
 ---
-|	move %x <- 123                           { %arg } -> { %arg %x }
-|	move %y <- (%x op %arg)                  { %arg %x } -> { }
+        { %arg }
+00: move %x <- 123
+        { %arg %x }
+01: move %y <- (%x op %arg)
+        { }

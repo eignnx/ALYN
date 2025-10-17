@@ -11,10 +11,7 @@ use crate::{
     regalloc::{cfg::Cfg, interferences::Interferences, live_sets::LiveSets, Cc, Instr},
 };
 
-fn simplicial_elimination_ordering<R>(graph: &Interferences<R>) -> Vec<Tmp>
-where
-    R: std::fmt::Debug + Copy + Eq + Ord + std::hash::Hash + Cc<R> + 'static,
-{
+fn simplicial_elimination_ordering<R: Cc>(graph: &Interferences<R>) -> Vec<Tmp> {
     let mut ordering = Vec::new();
 
     let mut curr = graph
@@ -59,13 +56,10 @@ where
 }
 
 /// If spill is necessary, the Tmp will *not* be added to the assignments map.
-fn color_graph_greedily<R>(
+fn color_graph_greedily<R: Cc>(
     graph: &Interferences<R>,
     ordering: Vec<Tmp>,
-) -> BTreeMap<Tmp, R>
-where
-    R: std::fmt::Debug + Copy + Eq + Ord + Cc<R> + 'static,
-{
+) -> BTreeMap<Tmp, R> {
     let mut assignments = BTreeMap::new();
 
     for node in ordering {
@@ -97,9 +91,8 @@ pub struct RegAlloc<I, R> {
     _reg: PhantomData<R>,
 }
 
-impl<I, R> RegAlloc<I, R>
-where I: Instr<Register = R> + Clone,
-      R: Copy + Ord + Eq + std::fmt::Debug + std::hash::Hash + Cc<R> + 'static
+impl<I, R: Cc> RegAlloc<I, R>
+where I: Instr<Register = R>,
 {
     fn new(params: Vec<Tmp>, program: Vec<I>) -> Self {
         Self {
@@ -170,7 +163,7 @@ fn basic_test() {
     #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
     enum Reg { R, G, B }
 
-    impl Cc<Reg> for Reg {
+    impl Cc for Reg {
         const GPRS: &'static [Reg] = &[Reg::R, Reg::G, Reg::B];
         const GPR_SAVED_REGS: &'static [Reg] = &[Reg::B];
         const GPR_TEMP_REGS: &'static [Reg] = &[Reg::G];
