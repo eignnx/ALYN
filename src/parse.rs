@@ -89,13 +89,13 @@ mod test {
 
     #[test]
     fn simple_subr() {
-        test_parse!(SubrDeclParser, "subr blah() { ret; }");
+        test_parse!(SubrDefnParser, "subr blah() { ret; }");
     }
 
     #[test]
     fn sumfac() {
         test_parse!(
-            SubrDeclParser,
+            SubrDefnParser,
             "
             subr sumfac(n: nat) nat {
                 ret n + sumfac(n - 1);
@@ -106,13 +106,13 @@ mod test {
 
     #[test]
     fn main_with_args() {
-        test_parse!(SubrDeclParser, "subr main(args: **byte) { ret; }");
+        test_parse!(SubrDefnParser, "subr main(args: **byte) { ret; }");
     }
 
     #[test]
     fn min_subr() {
         test_parse!(
-            SubrDeclParser,
+            SubrDefnParser,
             "
             subr min(a: int, b: int) int {
                 if a > b {

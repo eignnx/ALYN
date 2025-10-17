@@ -49,18 +49,18 @@ impl From<std::ops::Range<usize>> for Span {
 #[derive(Debug)]
 pub struct Module {
     pub filename: String,
-    pub decls: Vec<Ann<SubrDecl>>,
+    pub decls: Vec<Ann<SubrDefn>>,
 }
 
 #[derive(Debug, Clone)]
-pub struct SubrDecl {
+pub struct SubrDefn {
     pub name: Intern<String>,
     pub params: Vec<Ann<Param>>,
     pub ret_ty: Ty,
     pub body: Vec<Ann<Stmt>>,
 }
 
-impl SubrDecl {
+impl SubrDefn {
     pub fn subr_ty(&self) -> Ty {
         let mut param_tys = vec![];
         for param in &self.params {

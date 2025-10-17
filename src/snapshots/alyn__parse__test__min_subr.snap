@@ -1,9 +1,9 @@
 ---
 source: src/parse.rs
-expression: "grammar :: SubrDeclParser ::\nnew().parse(\"<test>\",\n\"\n            subr min(a: int, b: int) int {\n                if a > b {\n                    ret b;\n                } else {\n                    ret a;\n                }\n            }\n        \")"
+expression: "grammar :: SubrDefnParser ::\nnew().parse(\"<test>\",\n\"\n            subr min(a: int, b: int) int {\n                if a > b {\n                    ret b;\n                } else {\n                    ret a;\n                }\n            }\n        \")"
 ---
 Ok(
-    SubrDecl {
+    SubrDefn {
         name: "min",
         params: [
             Param { name: "a", ty: Int },

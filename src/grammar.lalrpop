@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use internment::Intern;
 use crate::{
-    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDecl, Module, MakeAnn, Span, Ann, Param},
+    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDefn, Module, MakeAnn, Span, Ann, Param},
     ty::Ty,
 };
 
@@ -128,12 +128,12 @@ CommaListCParen<P>: Vec<P> = {
     },
 };
 
-pub SubrDecl: SubrDecl = {
+pub SubrDefn: SubrDefn = {
     "subr"
     <name: NameOParen>
     <params: CommaListCParen<Spanned<Param>>>
     <ret_ty: Ty?>
-    "{" <body: Stmts> "}" => SubrDecl {
+    "{" <body: Stmts> "}" => SubrDefn {
         name,
         params,
         ret_ty: ret_ty.unwrap_or(Ty::Void),
@@ -162,4 +162,4 @@ pub Module: Module = <items: Spanned<Item>*> => Module {
     decls: items,
 };
 
-Item: SubrDecl = { SubrDecl };
+Item: SubrDefn = { SubrDefn };

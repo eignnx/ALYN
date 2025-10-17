@@ -1,9 +1,9 @@
 ---
 source: src/parse.rs
-expression: "grammar :: SubrDeclParser ::\nnew().parse(\"<test>\", \"subr main(args: **byte) { ret; }\")"
+expression: "grammar :: SubrDefnParser ::\nnew().parse(\"<test>\", \"subr main(args: **byte) { ret; }\")"
 ---
 Ok(
-    SubrDecl {
+    SubrDefn {
         name: "main",
         params: [
             Param { name: "args", ty: Ptr(Ptr(Byte)) },

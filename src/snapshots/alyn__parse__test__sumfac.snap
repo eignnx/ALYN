@@ -1,9 +1,9 @@
 ---
 source: src/parse.rs
-expression: "grammar :: SubrDeclParser ::\nnew().parse(\"<test>\",\n\"\n            subr sumfac(n: nat) nat {\n                ret n + sumfac(n - 1);\n            }\n        \")"
+expression: "grammar :: SubrDefnParser ::\nnew().parse(\"<test>\",\n\"\n            subr sumfac(n: nat) nat {\n                ret n + sumfac(n - 1);\n            }\n        \")"
 ---
 Ok(
-    SubrDecl {
+    SubrDefn {
         name: "sumfac",
         params: [
             Param { name: "n", ty: Nat },

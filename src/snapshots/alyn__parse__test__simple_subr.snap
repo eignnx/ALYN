@@ -1,9 +1,9 @@
 ---
 source: src/parse.rs
-expression: "grammar :: SubrDeclParser :: new().parse(\"<test>\", \"subr blah() { ret; }\")"
+expression: "grammar :: SubrDefnParser :: new().parse(\"<test>\", \"subr blah() { ret; }\")"
 ---
 Ok(
-    SubrDecl {
+    SubrDefn {
         name: "blah",
         params: [],
         ret_ty: Void,

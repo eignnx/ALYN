@@ -180,7 +180,7 @@ impl Ann<ast::Stmt> {
     }
 }
 
-impl ast::SubrDecl {
+impl ast::SubrDefn {
     pub fn to_ir(self) -> Vec<IrWrap> {
         let mut ir = vec![];
         for stmt in self.body {
@@ -204,7 +204,7 @@ mod test {
 
     fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
         crate::names::reset_name_ids();
-        let decl = parse::SubrDeclParser::new()
+        let decl = parse::SubrDefnParser::new()
             .parse("<test>", src)
             .map_err(dyn_debug)?;
         let mut decl = decl.with_span(0..100);

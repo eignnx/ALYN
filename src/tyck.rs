@@ -400,7 +400,7 @@ impl Ann<Stmt> {
     }
 }
 
-impl Ann<SubrDecl> {
+impl Ann<SubrDefn> {
     fn register_in_tcx(&self, tcx: &mut Tcx) -> Option<SymData> {
         tcx.insert(
             self.value.name.clone(),
