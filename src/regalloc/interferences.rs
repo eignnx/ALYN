@@ -88,6 +88,9 @@ impl<R: Debug + Copy + Eq + Ord + Cc<R> + 'static> Interferences<R> {
     }
 
     pub fn interferes_with(&self, a: Stg<R>, b: Stg<R>) -> bool {
+        if matches!((a, b), (Stg::Reg(_), Stg::Reg(_))) {
+            return true;
+        }
         let Some(neighbors) = self.graph.get(&a) else {
             panic!("Tmp not in interference graph: {a:?}");
         };

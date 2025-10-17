@@ -10,6 +10,7 @@ pub type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
 pub struct ColorGraph<R> {
     interferences: Interferences<R>,
     move_rels: BTreeSet<Move<R>>,
+    coalescence_map: BTreeMap<Stg<R>, Stg<R>>,
 }
 
 impl<R> From<Interferences<R>> for ColorGraph<R> {
@@ -17,6 +18,7 @@ impl<R> From<Interferences<R>> for ColorGraph<R> {
         Self {
             interferences,
             move_rels: Default::default(),
+            coalescence_map: Default::default(),
         }
     }
 }
@@ -46,12 +48,21 @@ where
         Self {
             interferences,
             move_rels,
+            coalescence_map: Default::default(),
         }
     }
 
     pub fn are_move_related(&self, x: Stg<R>, y: Stg<R>) -> bool {
         self.move_rels.iter()
             .any(|mv| mv.dst == x && mv.src == y || mv.dst == y && mv.src == x)
+    }
+
+    pub fn move_rels(&self) -> impl Iterator<Item=&Move<R>> {
+        self.move_rels.iter()
+    }
+
+    pub fn freeze_some_move_rel(&mut self) -> Option<Move<R>> {
+        self.move_rels.pop_first()
     }
 
     pub fn insert(&mut self, n: Stg<R>, neighbors: BTreeSet<Stg<R>>) {
@@ -86,7 +97,43 @@ where
     }
 
     pub fn coalesce(&mut self, n1: &Stg<R>, n2: &Stg<R>) {
-        todo!()
+        match (*n1, *n2) {
+            (t1 @ Stg::Tmp(_), t2 @ Stg::Tmp(_)) => {
+                self.coalescence_map.insert(t1, t2);
+            }
+            (tmp @ Stg::Tmp(_), reg @ Stg::Reg(_)) | (reg @ Stg::Reg(_), tmp @ Stg::Tmp(_)) => {
+                self.coalescence_map.insert(tmp, reg);
+            }
+            (Stg::Reg(_), Stg::Reg(_)) => unreachable!(),
+        }
+    }
+
+    pub fn safe_to_coalesce(&self, n1: &Stg<R>, n2: &Stg<R>) -> bool {
+        !self.interferes_with(*n1, *n2) && (
+            self.safe_by_briggs_test(n1, n2) || self.safe_by_georges_test(n1, n2)
+        )
+    }
+
+    /// Nodes `a` and `b` can be coalesced if the resulting node `ab` will have fewer than K neighbors of
+    /// significant degree (i.e. having >= K edges).
+    fn safe_by_briggs_test(&self, n1: &Stg<R>, n2: &Stg<R>) -> bool {
+        let mut combined_neighbors = BTreeSet::<&Stg<R>>::new();
+        combined_neighbors.extend(self.active_neighbors_of(*n1));
+        combined_neighbors.extend(self.active_neighbors_of(*n2));
+        let n_sig_deg_nbrs = combined_neighbors
+            .into_iter()
+            .filter(|nbr| self.degree(**nbr) - 1 >= R::N_GPRS) // since n1 and n2 merge, subtract 1
+            .count();
+        n_sig_deg_nbrs < R::N_GPRS
+    }
+
+    /// Nodes `a` and `b` can be coalesced if, for every neighbor `t` of `a`, either:
+    ///   - `t` already interferese with `b` or
+    ///   - `t` is of insignificant degree.
+    fn safe_by_georges_test(&self, n1: &Stg<R>, n2: &Stg<R>) -> bool {
+        self.active_neighbors_of(*n1).all(|&n1_nbr| {
+            self.interferes_with(n1_nbr, *n2) || self.is_insig_degree(n1_nbr)
+        })
     }
 
     pub fn take_node(&mut self, n: &Stg<R>) -> NodeEntry<R> {

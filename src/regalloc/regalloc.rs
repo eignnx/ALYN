@@ -174,7 +174,15 @@ where
         }
     }
 
-    fn coalesce_phase(&mut self) {}
+    fn coalesce_phase(&mut self, color_graph: &mut ColorGraph<R>) -> bool {
+        for mv in color_graph.move_rels() {
+            if color_graph.safe_to_coalesce(mv) {
+                color_graph.coalesce(&mv.dst, &mv.src);
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// Pops Stg nodes off of the node stack and selects a color for each one. If any cannot be
     /// colored, returns `Err` of the problematic node.
