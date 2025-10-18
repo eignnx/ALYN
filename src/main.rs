@@ -70,11 +70,11 @@ where
             };
         }
 
-        for decl in module.decls {
+        for subr in module.subr_defns() {
             eprintln!("========================================");
-            eprintln!("           Item `{}`", decl.value.name);
+            eprintln!("           Item `{}`", subr.value.name);
             eprintln!("========================================");
-            let decl = decl.value;
+            let decl = subr.value.clone();
             let subr_name = names::Lbl::SubrStart(decl.name);
 
             let params: Vec<_> = decl

@@ -50,7 +50,7 @@ pub trait Select {
 
 #[cfg(test)]
 mod tests {
-    use crate::backends::lark;
+    use crate::{ast::Item, backends::lark};
 
     use super::*;
     use insta::assert_debug_snapshot;
@@ -64,10 +64,11 @@ mod tests {
 
         let mut out = vec![];
         let mut be = lark::LarkInstrSel::new(&mut out);
-        for decl in mod_ast.decls {
-            let subr_lbl = crate::names::Lbl::SubrStart(decl.value.name);
-            let ir_stmts = decl
+        for subr in mod_ast.subr_defns() {
+            let subr_lbl = crate::names::Lbl::SubrStart(subr.value.name);
+            let ir_stmts = subr
                 .value
+                .clone()
                 .to_ir()
                 .into_iter()
                 .map(|w| w.as_stmt())

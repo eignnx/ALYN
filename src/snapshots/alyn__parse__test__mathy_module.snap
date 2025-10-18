@@ -6,16 +6,20 @@ Ok(
     Module {
         filename: "mathy.alyn",
         decls: [
-            SubrDefn { name: "min", params: [Param { name: "a", ty: Int }, Param { name: "b", ty: Int }], ret_ty: Int, body: [if (a > b) {
-                ret b;
-            } else {
-                ret a;
-            }] },
-            SubrDefn { name: "fib", params: [Param { name: "n", ty: Nat }], ret_ty: Nat, body: [if (n < 2) {
-                ret 1;
-            } else {
-                ret (fib((n - 1)) + fib((n - 2)));
-            }] },
+            SubrDefn(
+                SubrDefn { name: "min", params: [Param { name: "a", ty: Int }, Param { name: "b", ty: Int }], ret_ty: Int, body: [if (a > b) {
+                    ret b;
+                } else {
+                    ret a;
+                }] },
+            ),
+            SubrDefn(
+                SubrDefn { name: "fib", params: [Param { name: "n", ty: Nat }], ret_ty: Nat, body: [if (n < 2) {
+                    ret 1;
+                } else {
+                    ret (fib((n - 1)) + fib((n - 2)));
+                }] },
+            ),
         ],
     },
 )

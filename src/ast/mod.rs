@@ -49,7 +49,20 @@ impl From<std::ops::Range<usize>> for Span {
 #[derive(Debug)]
 pub struct Module {
     pub filename: String,
-    pub decls: Vec<Ann<SubrDefn>>,
+    pub decls: Vec<Item>,
+}
+
+impl Module {
+    pub fn subr_defns(&self) -> impl Iterator<Item=&Ann<SubrDefn>> {
+        self.decls.iter().filter_map(|decl| match decl {
+            Item::SubrDefn(subr) => Some(subr),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Item {
+    SubrDefn(Ann<SubrDefn>),
 }
 
 #[derive(Debug, Clone)]

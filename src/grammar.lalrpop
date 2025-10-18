@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use internment::Intern;
 use crate::{
-    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDefn, Module, MakeAnn, Span, Ann, Param},
+    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDefn, Module, MakeAnn, Span, Ann, Param, Item},
     ty::Ty,
 };
 
@@ -157,9 +157,12 @@ Param: Param = {
     <name: Name> ":" <ty: Ty> => Param { name, ty },
 };
 
-pub Module: Module = <items: Spanned<Item>*> => Module {
+pub Module: Module = <items: Item*> => Module {
     filename: filename.to_string(),
     decls: items,
 };
 
-Item: SubrDefn = { SubrDefn };
+Item: Item = { 
+    Spanned<SubrDefn> => Item::SubrDefn(<>),
+};
+

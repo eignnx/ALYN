@@ -437,23 +437,35 @@ impl Ann<SubrDefn> {
     }
 }
 
+impl Item {
+    pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
+        match self {
+            Item::SubrDefn(subr) => subr.check_ty(tcx),
+        }
+    }
+}
+
 impl Module {
     pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
         // First read all subr decl types and put them in the tcx to allow for
         // mutual recursion.
-        for subr in &mut self.decls {
-            let subr_ty = subr.value.subr_ty();
-            if let Some(_) = subr.register_in_tcx(tcx) {
-                return Err(TyckErr::ShadowedVarName {
-                    span: subr.span.clone(),
-                    varname: subr.value.name.clone(),
-                });
+        for item in &mut self.decls {
+            match item {
+                Item::SubrDefn(subr) => {
+                    let subr_ty = subr.value.subr_ty();
+                    if let Some(_) = subr.register_in_tcx(tcx) {
+                        return Err(TyckErr::ShadowedVarName {
+                            span: subr.span.clone(),
+                            varname: subr.value.name.clone(),
+                        });
+                    }
+                }
             }
         }
 
         // Then type check all decls.
-        for subr in &mut self.decls {
-            subr.check_ty(tcx)?;
+        for item in &mut self.decls {
+            item.check_ty(tcx)?;
         }
 
         Ok(())
