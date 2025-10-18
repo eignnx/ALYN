@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use internment::Intern;
 use crate::{
-    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDefn, Module, MakeAnn, Span, Ann, Param, Item},
+    ast::{RVal, LVal, Binop, Unop, Stmt, SubrDefn, Module, MakeAnn, Span, Ann, Param, Item, ExternSubr},
     ty::Ty,
 };
 
@@ -157,6 +157,16 @@ Param: Param = {
     <name: Name> ":" <ty: Ty> => Param { name, ty },
 };
 
+ExternSubr: ExternSubr = {
+    "extern" "subr" <name: NameOParen>
+    <params: CommaListCParen<Spanned<Param>>>
+    <ret_ty: Ty?> ";" => ExternSubr {
+        name,
+        params,
+        ret_ty: ret_ty.unwrap_or(Ty::Void),
+    }
+};
+
 pub Module: Module = <items: Item*> => Module {
     filename: filename.to_string(),
     decls: items,
@@ -164,5 +174,6 @@ pub Module: Module = <items: Item*> => Module {
 
 Item: Item = { 
     Spanned<SubrDefn> => Item::SubrDefn(<>),
+    Spanned<ExternSubr> => Item::ExternSubr(<>),
 };
 

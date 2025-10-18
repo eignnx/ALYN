@@ -64,10 +64,8 @@ where
         };
 
         let mut tcx = tcx::Tcx::new(ty::Ty::Void);
-        for mut decl in &mut module.decls {
-            if let Err(e) = decl.check_ty(&mut tcx) {
-                panic!("type error: {e:?}");
-            };
+        if let Err(e) = module.check_ty(&mut tcx) {
+            panic!("type error: {e:?}");
         }
 
         for subr in module.subr_defns() {

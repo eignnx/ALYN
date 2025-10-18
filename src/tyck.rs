@@ -400,20 +400,16 @@ impl Ann<Stmt> {
     }
 }
 
-impl Ann<SubrDefn> {
-    fn register_in_tcx(&self, tcx: &mut Tcx) -> Option<SymData> {
-        tcx.insert(
-            self.value.name.clone(),
-            SymData {
-                ty: self.value.subr_ty(),
-                sym_kind: IdentKind::Subr,
-            },
-        )
+impl Tcx {
+    fn register_subr_decl(&mut self, name: Intern<String>, ty: Ty) -> Option<SymData> {
+        self.insert(name, SymData { ty, sym_kind: IdentKind::Subr })
     }
+}
 
+impl Ann<SubrDefn> {
     pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
         // Ensure self is defined so recursive calls type check.
-        self.register_in_tcx(tcx);
+        tcx.register_subr_decl(self.value.name.clone(), self.value.subr_ty());
 
         tcx.enter_scope();
         tcx.set_subr_ret_ty(self.value.ret_ty.clone());
@@ -441,6 +437,7 @@ impl Item {
     pub fn check_ty(&mut self, tcx: &mut Tcx) -> TyckResult<()> {
         match self {
             Item::SubrDefn(subr) => subr.check_ty(tcx),
+            Item::ExternSubr(ex) => Ok(()), // No type checking needed.
         }
     }
 }
@@ -451,9 +448,18 @@ impl Module {
         // mutual recursion.
         for item in &mut self.decls {
             match item {
+                Item::ExternSubr(ex) => {
+                    let subr_ty = ex.value.subr_ty();
+                    if let Some(_) = tcx.register_subr_decl(ex.value.name.clone(), ex.value.subr_ty()) {
+                        return Err(TyckErr::ShadowedVarName {
+                            span: ex.span.clone(),
+                            varname: ex.value.name.clone(),
+                        });
+                    }
+                }
                 Item::SubrDefn(subr) => {
                     let subr_ty = subr.value.subr_ty();
-                    if let Some(_) = subr.register_in_tcx(tcx) {
+                    if let Some(_) = tcx.register_subr_decl(subr.value.name.clone(), subr.value.subr_ty()) {
                         return Err(TyckErr::ShadowedVarName {
                             span: subr.span.clone(),
                             varname: subr.value.name.clone(),

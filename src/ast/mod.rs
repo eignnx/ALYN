@@ -56,6 +56,14 @@ impl Module {
     pub fn subr_defns(&self) -> impl Iterator<Item=&Ann<SubrDefn>> {
         self.decls.iter().filter_map(|decl| match decl {
             Item::SubrDefn(subr) => Some(subr),
+            _ => None,
+        })
+    }
+
+    pub fn extern_subrs(&self) -> impl Iterator<Item=&Ann<ExternSubr>> {
+        self.decls.iter().filter_map(|decl| match decl {
+            Item::ExternSubr(ex) => Some(ex),
+            _ => None,
         })
     }
 }
@@ -63,6 +71,7 @@ impl Module {
 #[derive(Debug, Clone)]
 pub enum Item {
     SubrDefn(Ann<SubrDefn>),
+    ExternSubr(Ann<ExternSubr>),
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +152,23 @@ pub enum Binop {
 #[derive(Debug, Clone, Copy)]
 pub enum Unop {
     Neg,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternSubr {
+    pub name: Intern<String>,
+    pub params: Vec<Ann<Param>>,
+    pub ret_ty: Ty,
+}
+
+impl ExternSubr {
+    pub fn subr_ty(&self) -> Ty {
+        let mut param_tys = vec![];
+        for param in &self.params {
+            param_tys.push(param.value.ty.clone());
+        }
+        Ty::Subr(param_tys, Box::new(self.ret_ty.clone()))
+    }
 }
 
 #[test]

@@ -1,0 +1,5 @@
+subr swap(arr: *int, i: nat, j: nat) {
+    let tmp = *(arr + i);
+    *(arr + i) = *(arr + j);
+    *(arr + j) = tmp;
+}

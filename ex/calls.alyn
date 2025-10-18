@@ -1,18 +1,8 @@
-subr print(n: nat) {
-    ret;
-}
-
 subr shazam(x: nat, y: nat) nat {
     print(x);
     print(y);
     ret 123;
 }
 
-
-subr abracadabra(x: nat) nat {
-    let y = x - 99;
-    let q = shazam(x, y);
-    q = q + 77;
-    ret q;
-}
+extern subr print(n: nat);
 
