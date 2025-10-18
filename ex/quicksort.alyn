@@ -19,21 +19,4 @@ subr quicksort_impl(arr: *int, lo: nat, hi: nat) {
 }
 
 extern subr swap(arr: *int, i: nat, j: nat);
-
-subr partition(arr: *int, lo: nat, hi: nat, pivot: int) nat {
-    // [pivot, unknown, unknown, unknown, ...]
-    //  ^last  ^idx
-
-    // [pivot, smaller, smaller, larger, larger, unknown, unknown, ...]
-    //                  ^last                    ^idx
-    let last = lo;
-    let idx = lo + 1; // skip pivot
-    while idx < hi {
-        if *(arr + idx) < pivot {
-            last = last + 1;
-            swap(arr, last, idx);
-        }
-        idx = idx + 1;
-    }
-    swap(arr, lo, last); // swap pivot back into middle
-}
+extern subr partition(arr: *int, lo: nat, hi: nat, pivot: int) nat;
