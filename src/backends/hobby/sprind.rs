@@ -168,15 +168,15 @@ pub enum Instr {
 
 use Instr::*;
 
-pub struct SprindInstrSel<'a> {
-    out: &'a mut Vec<Instr>,
+pub struct SprindInstrSel {
+    out: Vec<Instr>,
     current_subr_params: BTreeMap<u8, Tmp>,
 }
 
-impl<'a> SprindInstrSel<'a> {
-    pub fn new(out: &'a mut Vec<Instr>) -> Self {
+impl SprindInstrSel {
+    pub fn new() -> Self {
         Self {
-            out,
+            out: Vec::new(),
             current_subr_params: Default::default(),
         }
     }
@@ -185,7 +185,7 @@ impl<'a> SprindInstrSel<'a> {
         self.out.push(instr);
     }
 
-    fn with_dst(&mut self, src_dst: Stg, dst: Option<Stg>, mut code: impl FnOnce(&mut SprindInstrSel<'a>, Stg)) -> Stg {
+    fn with_dst(&mut self, src_dst: Stg, dst: Option<Stg>, mut code: impl FnOnce(&mut SprindInstrSel, Stg)) -> Stg {
         code(self, src_dst);
         if let Some(dst) = dst && dst != src_dst {
             self.emit(MOV(dst, src_dst));
@@ -253,7 +253,7 @@ impl<'a> SprindInstrSel<'a> {
     }
 }
 
-impl<'a> Select for SprindInstrSel<'a> {
+impl Select for SprindInstrSel {
     type Register = Reg;
 
     type Instruction = Instr;

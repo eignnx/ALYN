@@ -146,6 +146,12 @@ pub enum Instr {
     Bt(Stg, Lbl),
 }
 
+impl std::fmt::Display for Instr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 impl crate::regalloc::Instr for Instr {
     type Register = Reg;
 
@@ -327,15 +333,15 @@ impl crate::regalloc::Instr for Instr {
 use Instr::*;
 use Reg::*;
 
-pub struct LarkInstrSel<'a> {
-    out: &'a mut Vec<Instr>,
+pub struct LarkInstrSel {
+    out: Vec<Instr>,
     current_subr_params: BTreeMap<u8, Tmp>,
 }
 
-impl<'a> LarkInstrSel<'a> {
-    pub fn new(out: &'a mut Vec<Instr>) -> Self {
+impl LarkInstrSel {
+    pub fn new() -> Self {
         Self {
-            out,
+            out: Vec::new(),
             current_subr_params: Default::default(),
         }
     }
@@ -406,7 +412,7 @@ impl<'a> LarkInstrSel<'a> {
     }
 }
 
-impl<'a> Select for LarkInstrSel<'a> {
+impl Select for LarkInstrSel {
     type Register = Reg;
 
     type Instruction = Instr;

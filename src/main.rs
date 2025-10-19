@@ -4,6 +4,8 @@
 
 use std::path::{Path, PathBuf};
 
+use clap::Parser;
+
 use crate::{
     instr_sel::{Select, Stg},
     names::{Lbl, Tmp},
@@ -25,37 +27,37 @@ mod tcx;
 mod ty;
 mod tyck;
 mod utils;
+mod cli_args;
 
 fn main() {
-    let Some(fname) = std::env::args().nth(1) else {
-        panic!("Please provide a filename");
+    let opts = cli_args::CliArgs::parse();
+
+    let fname = opts.src_file;
+
+    let Ok(src) = std::fs::read_to_string(&fname) else {
+        panic!("Could not read file `{}`", fname.display());
     };
 
-    let Ok(src) = std::fs::read_to_string(PathBuf::from(&fname[..])) else {
-        panic!("Could not read file `{fname}`");
-    };
-
-    let mut out = Vec::new();
-    let instr_select = backends::hobby::lark::LarkInstrSel::new(&mut out);
-    let mut compiler = Compiler::new(instr_select);
-    compiler.compile(&fname[..], &src[..]);
+    let mut backend = opts.target_arch.instantiate();
+    backend.compile(&fname, &src[..]);
 }
 
-pub struct Compiler<ISel: Select> {
-    instr_select: ISel,
+pub struct Compiler<'a, ISel: Select> {
+    instr_select: &'a mut ISel,
 }
 
-impl<ISel: Select> Compiler<ISel>
+impl<'a, ISel: Select> Compiler<'a, ISel>
 where
     ISel::Register: regalloc::Cc,
     ISel::Instruction: Instr<Register = ISel::Register>,
 {
-    pub fn new(instr_select: ISel) -> Self {
+    pub fn new(instr_select: &'a mut ISel) -> Self {
         Self { instr_select }
     }
 
-    pub fn compile(&mut self, fname: &str, src: &str) {
+    pub fn compile(&mut self, fname: &Path, src: &str) {
         eprintln!("{}", current_revision_summary());
+        let fname = fname.display().to_string();
 
         let mut module = match parse::ModuleParser::new().parse(&fname[..], &src[..]) {
             Ok(m) => m,

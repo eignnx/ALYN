@@ -11,6 +11,7 @@ internment = "0.8.6"
 lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
 smallvec = "1.15.1"
 priority-queue = "2.0.0"
+clap = { version = "4.5.49", features = ["derive"] }
 
 [build-dependencies]
 lalrpop = "0.22.2"
@@ -20,4 +21,3 @@ insta = { version = "1.43.1", features = ["filters"] }
 
 [profile.dev.package]
 insta.opt-level = 3
-similar.opt-level = 3
