@@ -5,7 +5,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    backends::lark::LarkInstrSel,
     instr_sel::{Select, Stg},
     names::{Lbl, Tmp},
     regalloc::Instr, utils::current_revision_summary,
@@ -37,7 +36,7 @@ fn main() {
     };
 
     let mut out = Vec::new();
-    let instr_select = LarkInstrSel::new(&mut out);
+    let instr_select = backends::hobby::lark::LarkInstrSel::new(&mut out);
     let mut compiler = Compiler::new(instr_select);
     compiler.compile(&fname[..], &src[..]);
 }

@@ -50,7 +50,7 @@ pub trait Select {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::Item, backends::lark};
+    use crate::{ast::Item, backends::hobby::lark};
 
     use super::*;
     use insta::assert_debug_snapshot;
