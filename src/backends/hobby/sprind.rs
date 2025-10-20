@@ -445,7 +445,6 @@ impl crate::regalloc::Instr for Instr {
                 uses.extend([*base, *src].into_iter());
             }
             CALL(lbl) => {
-                // Assuming this is is used as a `call` instruction only:
                 defs.extend(Reg::GPR_TEMP_REGS.iter().copied().map(Stg::Reg));
             }
             TL(src1, src2)
@@ -465,6 +464,10 @@ impl crate::regalloc::Instr for Instr {
             Self::MOV(lhs, stg) => Some((*lhs, *stg)),
             _ => None,
         }
+    }
+
+    fn is_subr_call(&self) -> bool {
+        matches!(self, CALL(_))
     }
 
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {

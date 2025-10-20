@@ -67,6 +67,8 @@ pub trait Instr: Debug + Sized + Clone {
     /// If this instruction has a label associated with it, return it.
     fn try_as_lbl(&self) -> Option<Lbl>;
 
+    fn is_subr_call(&self) -> bool;
+
     /// A `return` statement would produce `None`, a `nop` statement would produce `Some(Advance)`.
     /// Subroutine call statements should produce `Some(Advance)` since within the subroutine it
     /// wouldn't seem like any jump has happened.

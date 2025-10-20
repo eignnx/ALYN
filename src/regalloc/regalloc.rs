@@ -99,15 +99,15 @@ impl<R: Cc> RegAlloc<R> {
 
         //// All saved registers need to be saved to their own temporaries (hopefully to be coalesced
         //// away later).
-        //let mut tmps = vec![];
-        //for &reg in R::GPR_SAVED_REGS {
-        //    let fresh_tmp = Tmp::fresh(format!("saved<{reg:?}>").as_str()).into();
-        //    tmps.push((fresh_tmp, reg));
-        //    prologue.extend(I::emit_move(fresh_tmp, Stg::Reg(reg)));
-        //}
-        //for (tmp, reg) in tmps.into_iter().rev() {
-        //    epilogue.extend(I::emit_move(Stg::Reg(reg), tmp));
-        //}
+        let mut tmps = vec![];
+        for &reg in R::GPR_SAVED_REGS {
+            let fresh_tmp = Tmp::fresh(format!("save<{reg:?}>").as_str()).into();
+            tmps.push((fresh_tmp, reg));
+            prologue.extend(I::emit_move(fresh_tmp, Stg::Reg(reg)));
+        }
+        for (tmp, reg) in tmps.iter().rev() {
+            epilogue.extend(I::emit_move(Stg::Reg(*reg), *tmp));
+        }
 
         // Move values in arg registers into the temporaries representing parameters.
         for (&param, &reg) in cfg.params.iter().zip(R::GPR_ARG_REGS) {
@@ -124,7 +124,27 @@ impl<R: Cc> RegAlloc<R> {
             if cfg.exits.contains(&id) {
                 new_stmts.extend(epilogue.iter().cloned());
             }
-            new_stmts.push(instr);
+
+            if instr.is_subr_call() {
+                let mut tmps = Vec::new();
+                // Save all caller-save regs:
+                for &reg in R::GPR_TEMP_REGS {
+                    let tmp = Tmp::fresh(&format!("save<{reg:?}>"));
+                    tmps.push(tmp);
+                    new_stmts.extend(I::emit_move(tmp.into(), Stg::Reg(reg)));
+                }
+
+                // Emit the call instruction:
+                new_stmts.push(instr);
+
+                // Restore all caller-save regs:
+                for (i, &reg) in R::GPR_TEMP_REGS.iter().enumerate().rev() {
+                    let tmp = tmps[i];
+                    new_stmts.extend(I::emit_move(Stg::Reg(reg), tmp.into()));
+                }
+            } else {
+                new_stmts.push(instr);
+            }
         }
 
         // Need to rebuild CFG so that jump indices are up to date with added prologue/epilogues.
@@ -236,8 +256,6 @@ impl<R: Cc> RegAlloc<R> {
             }
         }
 
-        eprintln!("!!!!!!!!!!!!!!!!!!! {tmp}: in_use = {regs_in_use:?}");
-
         // First try coalescing:
         if let Some(chosen) = R::GPRS
             .into_iter()
@@ -283,7 +301,7 @@ impl<R: Cc> RegAlloc<R> {
             let mut changed = false;
 
             let mk_fresh = || {
-                Tmp::fresh(&format!("spilled<{to_spill:?}>"))
+                Tmp::fresh(&format!("spill<{to_spill:?}>"))
             };
 
             let mut new_tmp = None;

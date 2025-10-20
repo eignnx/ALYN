@@ -210,6 +210,10 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
+    fn is_subr_call(&self) -> bool {
+        matches!(self, Jal(..))
+    }
+
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
             Li(stg, _)

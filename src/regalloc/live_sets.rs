@@ -176,9 +176,9 @@ impl<'a, I: Debug, R: Cc> Display for DisplayLiveSets<'a, I, R> {
                 writeln!(f, " }}")?;
             }
             // Write stmt
-            writeln!(f, "{i:02}: {}", format!("{stmt:?}"))?;
+            write!(f, "{i:02}: {:40}", format!("{stmt:?}"))?;
             // Write live-outs
-            write!(f, "        {{")?;
+            write!(f, "{{")?;
             for live_out in self.live_sets.get_live_outs(i) {
                 write!(f, " {live_out:?}")?;
             }

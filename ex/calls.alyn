@@ -1,6 +1,6 @@
-subr shazam(x: nat, y: nat) nat {
-    print(x);
-    print(y);
+subr shazam(first: nat, second: nat) nat {
+    print(first);
+    print(second);
     ret 123;
 }
 

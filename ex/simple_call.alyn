@@ -1,0 +1,6 @@
+extern subr foo();
+
+subr bar(qwerty: nat) nat {
+    foo();
+    ret qwerty;
+}

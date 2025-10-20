@@ -80,7 +80,12 @@ impl<R: Cc> ColorGraph<R> {
 
     #[track_caller]
     pub fn degree(&self, n: impl Into<Stg<R>>) -> usize {
-        self.active_neighbors_of(n.into()).count()
+        let n = n.into();
+        if let Stg::Reg(_) = n {
+            return 1_000_000;
+        } else {
+            self.active_neighbors_of(n).filter(|x| matches!(x, Stg::Tmp(_))).count()
+        }
     }
 
     #[track_caller]
@@ -143,14 +148,21 @@ impl<R: Cc> ColorGraph<R> {
     /// Removes an arbitrary node (and its neighbor set) as long as the node has fewer than N
     /// neighbors. Returns `None` if no such node can be found.
     pub fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
-        let mut key: Option<Stg<R>> = None;
-        for n in self.interferences.graph.keys() {
-            if self.is_insig_degree(*n) {
-                key = Some(n.clone());
-                break;
-            }
-        }
-        Some(self.take_node(&key?))
+        let key = self.interferences.graph.keys()
+            .filter(|n| matches!(n, Stg::Tmp(_)))
+            .filter(|n| self.is_insig_degree(**n))
+            .max_by_key(|n| self.degree(**n))
+            .copied()?;
+        Some(self.take_node(&key))
+
+        //let mut key: Option<Stg<R>> = None;
+        //for n in self.interferences.graph.keys() {
+        //    if self.is_insig_degree(*n) && matches!(*n, Stg::Tmp(_)) {
+        //        key = Some(n.clone());
+        //        break;
+        //    }
+        //}
+        //Some(self.take_node(&key?))
     }
 
     pub fn choose_node_to_spill(&mut self) -> Option<NodeEntry<R>> {

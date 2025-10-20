@@ -189,6 +189,10 @@ impl crate::regalloc::Instr for Instr {
         }
     }
 
+    fn is_subr_call(&self) -> bool {
+        todo!();
+    }
+
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg) {
         match self {
             Label(..) | Jmp(..) | Brne(..) | Sts(..) => {}
