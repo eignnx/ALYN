@@ -17,7 +17,8 @@ pub mod color_graph;
 pub mod interferences;
 pub mod live_sets;
 mod regalloc;
-mod regalloc3;
+mod regalloc_state_machine;
+mod regalloc_chordal;
 mod color_graph2;
 
 pub use regalloc::*;
