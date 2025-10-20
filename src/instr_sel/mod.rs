@@ -62,8 +62,7 @@ mod tests {
         let mut tcx = crate::tcx::Tcx::new(Ty::Void);
         mod_ast.check_ty(&mut tcx);
 
-        let mut out = vec![];
-        let mut be = lark::LarkInstrSel::new(&mut out);
+        let mut be = lark::LarkInstrSel::new();
         for subr in mod_ast.subr_defns() {
             let subr_lbl = crate::names::Lbl::SubrStart(subr.value.name);
             let ir_stmts = subr

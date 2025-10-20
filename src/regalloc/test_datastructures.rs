@@ -106,6 +106,10 @@ impl Instr for Stmt {
         }
     }
 
+    fn is_subr_call(&self) -> bool {
+        matches!(self, Self::Call(..))
+    }
+
     fn replace_def_occurrances(&mut self, old: Tmp, new: Stg<Reg>) {
         match self {
             Stmt::Mov(dst, expr) => {
