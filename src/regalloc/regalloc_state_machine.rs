@@ -1,18 +1,34 @@
-use std::{cmp::Ordering, collections::{BTreeSet, HashMap, HashSet}};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeSet, HashMap, HashSet},
+};
 
-use crate::{instr_sel::Stg, names::Tmp, regalloc::{cfg::Cfg, interferences::Interferences, live_sets::LiveSets, Cc, Instr}};
-
+use crate::{
+    instr_sel::Stg,
+    regalloc::{Cc, Instr, cfg::Cfg, interferences::Interferences, live_sets::LiveSets},
+};
+use alyn_common::names::Tmp;
 
 struct ColorGraph<R> {
     interferences: HashMap<Tmp, HashSet<Tmp>>,
     moves: HashMap<Tmp, BTreeSet<Stg<R>>>,
 }
 
-impl<R> ColorGraph<R> where R: Cc {
-    fn new<I>(cfg: &Cfg<I>, live_sets: &LiveSets<R>) -> Self where I: Instr<Register = R>, R: Cc {
+impl<R> ColorGraph<R>
+where
+    R: Cc,
+{
+    fn new<I>(cfg: &Cfg<I>, live_sets: &LiveSets<R>) -> Self
+    where
+        I: Instr<Register = R>,
+        R: Cc,
+    {
         let mut intfs = Interferences::new();
         intfs.compute_interferences(cfg, live_sets);
-        let mut this = Self { interferences: Default::default(), moves: Default::default() };
+        let mut this = Self {
+            interferences: Default::default(),
+            moves: Default::default(),
+        };
         for (stg, nbrs) in intfs.graph {
             let Stg::Tmp(tmp) = stg else { continue };
             for nbr in nbrs {
@@ -55,7 +71,7 @@ impl<R> ColorGraph<R> where R: Cc {
         self.moves[&a].contains(&b)
     }
 
-    fn move_relations(&self, a: Tmp) -> impl Iterator<Item=Stg<R>> {
+    fn move_relations(&self, a: Tmp) -> impl Iterator<Item = Stg<R>> {
         self.moves[&a].iter().copied()
     }
 
@@ -72,7 +88,8 @@ impl<R> ColorGraph<R> where R: Cc {
     }
 
     fn select_some_insig_node(&self) -> Option<Tmp> {
-        self.interferences.keys()
+        self.interferences
+            .keys()
             .filter(|tmp| !self.moves.contains_key(*tmp))
             .filter(|tmp| self.degree(**tmp) < R::N_GPRS)
             .max_by_key(|tmp| self.degree(**tmp))
@@ -145,35 +162,42 @@ enum RegAllocState<I, R> {
     Done {
         program: Vec<I>,
         assignments: HashMap<Tmp, R>,
-    }
+    },
 }
 
 pub const MAX_REGALLOC_ITERS: usize = 16;
 
 pub fn allocate_registers<I, R>(params: Vec<Tmp>, program: Vec<I>) -> (Vec<I>, HashMap<Tmp, R>)
-    where I: Instr<Register = R>, R: Cc
+where
+    I: Instr<Register = R>,
+    R: Cc,
 {
     let mut state = RegAllocState::Setup { program, params };
     for _ in 0..MAX_REGALLOC_ITERS {
         state = state.step();
-        if let RegAllocState::Done { program, assignments } = state {
+        if let RegAllocState::Done {
+            program,
+            assignments,
+        } = state
+        {
             return (program, assignments);
         }
     }
     panic!("regalloc: max regalloc iterations exceeded: {MAX_REGALLOC_ITERS}");
 }
 
-impl<I, R> RegAllocState<I, R> 
-    where I: Instr<Register = R>, R: Cc
+impl<I, R> RegAllocState<I, R>
+where
+    I: Instr<Register = R>,
+    R: Cc,
 {
-
     pub fn step(self) -> Self {
         match self {
             Self::Setup { program, params } => {
                 let cfg = Cfg::new(0, params, program);
                 let cfg = Self::precolor(cfg);
                 Self::Build { cfg }
-            },
+            }
 
             Self::Build { cfg } => {
                 let mut live_sets = LiveSets::new();
@@ -187,44 +211,72 @@ impl<I, R> RegAllocState<I, R>
                     node_stack,
                     assignments,
                 }
-            },
+            }
 
-            Self::GraphSimplifyStep { cfg, mut graph, mut node_stack, assignments } => {
+            Self::GraphSimplifyStep {
+                cfg,
+                mut graph,
+                mut node_stack,
+                assignments,
+            } => {
                 if let Some(entry) = graph.take_some_insig_node() {
                     node_stack.push(entry);
                     todo!()
                 } else {
                     todo!()
                 }
-            },
+            }
 
-            Self::Coalesce { cfg, graph, node_stack, assignments } => {
+            Self::Coalesce {
+                cfg,
+                graph,
+                node_stack,
+                assignments,
+            } => {
                 todo!()
-            },
+            }
 
-            Self::Freeze { cfg, graph, node_stack, assignments } => {
+            Self::Freeze {
+                cfg,
+                graph,
+                node_stack,
+                assignments,
+            } => {
                 todo!()
-            },
+            }
 
-            Self::ChoosePotentialSpill { cfg, graph, node_stack, assignments } => {
+            Self::ChoosePotentialSpill {
+                cfg,
+                graph,
+                node_stack,
+                assignments,
+            } => {
                 todo!()
-            },
+            }
 
-            Self::PopAndAssign { cfg, graph, node_stack, assignments } => {
+            Self::PopAndAssign {
+                cfg,
+                graph,
+                node_stack,
+                assignments,
+            } => {
                 todo!()
-            },
+            }
 
             Self::SpillAndRewrite { cfg, to_spill } => {
                 todo!()
-            },
+            }
 
-            Self::Done { program, assignments } => {
+            Self::Done {
+                program,
+                assignments,
+            } => {
                 todo!()
-            },
+            }
         }
     }
 
-    fn precolor<>(cfg: Cfg<I>) -> Cfg<I> {
+    fn precolor(cfg: Cfg<I>) -> Cfg<I> {
         todo!()
     }
 }

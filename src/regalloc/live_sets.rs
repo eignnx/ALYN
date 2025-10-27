@@ -7,7 +7,8 @@ use super::{
     Instr,
     cfg::{Cfg, NodeId},
 };
-use crate::{instr_sel::Stg, names::Tmp, regalloc::Cc};
+use crate::{instr_sel::Stg, regalloc::Cc};
+use alyn_common::names::{Lbl, Tmp};
 
 #[derive(Debug, Default)]
 pub struct LiveSets<R> {
@@ -40,13 +41,9 @@ impl<R: Cc> LiveSets<R> {
         //entry_live_ins.extend(cfg.params.iter().copied().map(Stg::Tmp));
 
         // All callee-save (saved) registers need to be marked live-out on exit.
-        let saved_regs = R::GPR_SAVED_REGS
-            .iter()
-            .copied()
-            .map(Stg::Reg);
+        let saved_regs = R::GPR_SAVED_REGS.iter().copied().map(Stg::Reg);
         for &exit_id in &cfg.exits {
-            self
-                .live_outs
+            self.live_outs
                 .entry(exit_id)
                 .or_default()
                 .extend(saved_regs.clone());
@@ -59,8 +56,14 @@ impl<R: Cc> LiveSets<R> {
             for (id, stmt) in cfg.stmts.iter().enumerate().rev() {
                 self.compute_live_outs(id, cfg, &mut recompute);
                 self.compute_live_ins(id, stmt, &mut defs_buf, &mut uses_buf, &mut recompute);
-                if iteration == 0 && let Some((dst, src)) = stmt.try_as_pure_move() {
-                    self.move_instrs.push(Move { dst, src, instr_id: id });
+                if iteration == 0
+                    && let Some((dst, src)) = stmt.try_as_pure_move()
+                {
+                    self.move_instrs.push(Move {
+                        dst,
+                        src,
+                        instr_id: id,
+                    });
                 }
             }
 

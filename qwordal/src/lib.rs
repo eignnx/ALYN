@@ -2,7 +2,8 @@
 
 use std::{fmt::Debug, hash::Hash};
 
-use crate::common::{Stg, Tmp};
+use alyn_common::names::{Tmp};
+use crate::common::{Stg};
 
 mod alloc;
 mod cfg;

@@ -8,12 +8,16 @@ use super::{
     cfg::{Cfg, NodeId},
     live_sets::LiveSets,
 };
-use crate::{instr_sel::Stg, names::Tmp, regalloc::{live_sets::Move, Cc}};
+use crate::{
+    instr_sel::Stg,
+    regalloc::{Cc, live_sets::Move},
+};
+use alyn_common::names::Tmp;
 
 #[derive(Default)]
 pub struct Interferences<R> {
     pub(super) graph: BTreeMap<Stg<R>, BTreeSet<Stg<R>>>,
-    move_rels: BTreeSet<Move<R>>
+    move_rels: BTreeSet<Move<R>>,
 }
 
 impl<R: Cc> Interferences<R> {
@@ -57,7 +61,8 @@ impl<R: Cc> Interferences<R> {
         live_sets: &LiveSets<R>,
     ) {
         self.ensure_all_tmps_registered(live_sets);
-        self.move_rels.extend(live_sets.move_instrs().into_iter().cloned());
+        self.move_rels
+            .extend(live_sets.move_instrs().into_iter().cloned());
 
         let mut defs = BTreeSet::new();
         let mut uses = BTreeSet::new();
@@ -105,7 +110,7 @@ impl<R: Cc> Interferences<R> {
         self.graph.entry(b).or_default().insert(a);
     }
 
-    pub fn neighbors(&self, node: &Stg<R>) -> impl Iterator<Item=Stg<R>> {
+    pub fn neighbors(&self, node: &Stg<R>) -> impl Iterator<Item = Stg<R>> {
         self.graph
             .get(node)
             .map(BTreeSet::iter)

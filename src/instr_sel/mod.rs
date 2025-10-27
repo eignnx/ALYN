@@ -1,6 +1,7 @@
-use derive_more::{Display, From, Debug};
+use derive_more::{Debug, Display, From};
 
-use crate::{canon, ir, names::Tmp};
+use crate::{canon, ir};
+use alyn_common::names::Tmp;
 
 /// A storage node
 #[derive(From, Clone, Copy, Display, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -1,10 +1,10 @@
 use crate::{
     ast::{self, Ann},
     ir::{self, IrWrap, Relop},
-    names::{self, Lbl},
     sym::IdentKind,
     ty::Ty,
 };
+use alyn_common::names::{self, Lbl};
 
 impl Ann<ast::RVal> {
     fn to_ir(self) -> IrWrap {
@@ -203,7 +203,7 @@ mod test {
     }
 
     fn parse_and_convert(src: &str) -> Result<Vec<ir::Stmt>, impl std::fmt::Debug> {
-        crate::names::reset_name_ids();
+        alyn_common::names::reset_name_ids();
         let decl = parse::SubrDefnParser::new()
             .parse("<test>", src)
             .map_err(dyn_debug)?;

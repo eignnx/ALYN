@@ -53,14 +53,14 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn subr_defns(&self) -> impl Iterator<Item=&Ann<SubrDefn>> {
+    pub fn subr_defns(&self) -> impl Iterator<Item = &Ann<SubrDefn>> {
         self.decls.iter().filter_map(|decl| match decl {
             Item::SubrDefn(subr) => Some(subr),
             _ => None,
         })
     }
 
-    pub fn extern_subrs(&self) -> impl Iterator<Item=&Ann<ExternSubr>> {
+    pub fn extern_subrs(&self) -> impl Iterator<Item = &Ann<ExternSubr>> {
         self.decls.iter().filter_map(|decl| match decl {
             Item::ExternSubr(ex) => Some(ex),
             _ => None,

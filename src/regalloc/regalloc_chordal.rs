@@ -1,15 +1,18 @@
 //! Register Allocation via Coloring of Chordal Graphs
 //! by Fernando Magno Quintat˜ao Pereira and Jens Palsbe
 
-use std::{collections::{BTreeMap, BTreeSet}, marker::PhantomData};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    marker::PhantomData,
+};
 
 use priority_queue::PriorityQueue;
 
 use crate::{
     instr_sel::Stg,
-    names::Tmp,
-    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::LiveSets, Cc, Instr},
+    regalloc::{Cc, Instr, cfg::Cfg, interferences::Interferences, live_sets::LiveSets},
 };
+use alyn_common::names::Tmp;
 
 fn simplicial_elimination_ordering<R: Cc>(graph: &Interferences<R>) -> Vec<Tmp> {
     let mut ordering = Vec::new();
@@ -36,7 +39,6 @@ fn simplicial_elimination_ordering<R: Cc>(graph: &Interferences<R>) -> Vec<Tmp> 
             (tmp, weight)
         })
         .collect();
-
 
     while !weights.is_empty() {
         ordering.push(curr);
@@ -126,7 +128,8 @@ pub struct RegAlloc<I, R, S: SlotAllocator> {
 }
 
 impl<I, R: Cc, S: SlotAllocator> RegAlloc<I, R, S>
-where I: Instr<Register = R>,
+where
+    I: Instr<Register = R>,
 {
     fn new(params: Vec<Tmp>, program: Vec<I>, slot_alloc: S) -> Self {
         Self {
@@ -200,7 +203,6 @@ pub struct Allocation<I, R> {
     assignments: BTreeMap<Tmp, R>,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::super::test_datastructures::{Expr as E, Expr, Reg, Stmt as S, Stmt};
@@ -227,39 +229,42 @@ mod tests {
         }
     }
 
-#[test]
-fn basic_test() {
-    #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-    enum Reg { R, G, B }
+    #[test]
+    fn basic_test() {
+        #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+        enum Reg {
+            R,
+            G,
+            B,
+        }
 
-    impl Cc for Reg {
-        const GPRS: &'static [Reg] = &[Reg::R, Reg::G, Reg::B];
-        const GPR_SAVED_REGS: &'static [Reg] = &[Reg::B];
-        const GPR_TEMP_REGS: &'static [Reg] = &[Reg::G];
-        const GPR_ARG_REGS: &'static [Reg] = &[Reg::R];
+        impl Cc for Reg {
+            const GPRS: &'static [Reg] = &[Reg::R, Reg::G, Reg::B];
+            const GPR_SAVED_REGS: &'static [Reg] = &[Reg::B];
+            const GPR_TEMP_REGS: &'static [Reg] = &[Reg::G];
+            const GPR_ARG_REGS: &'static [Reg] = &[Reg::R];
+        }
+
+        fn entry<const N: usize>(node: &str, nbrs: [&str; N]) -> (Stg<Reg>, BTreeSet<Stg<Reg>>) {
+            let node = Stg::Tmp(node.into());
+            let nbrs = nbrs.into_iter().map(|name| Stg::Tmp(name.into())).collect();
+            (node, nbrs)
+        }
+
+        let graph = BTreeMap::<Stg<Reg>, BTreeSet<Stg<Reg>>>::from_iter([
+            entry("a", ["c", "b"]),
+            entry("c", ["a", "b"]),
+            entry("b", ["a", "c", "e", "f"]),
+            entry("e", ["b", "f", "g"]),
+            entry("f", ["b", "e", "g"]),
+            entry("g", ["e", "f"]),
+            entry("z", ["e", "f", "g"]),
+        ]);
+
+        // let seo = simplicial_elimination_ordering(&graph);
+        // eprintln!("seo: {seo:?}");
+
+        // let assignments = color_graph_greedily(&graph, seo);
+        // eprintln!("assignments: {assignments:#?}");
     }
-
-    fn entry<const N: usize>(node: &str, nbrs: [&str; N]) -> (Stg<Reg>, BTreeSet<Stg<Reg>>) {
-        let node = Stg::Tmp(node.into());
-        let nbrs = nbrs.into_iter().map(|name| Stg::Tmp(name.into())).collect();
-        (node, nbrs)
-    }
-
-    let graph = BTreeMap::<Stg<Reg>, BTreeSet<Stg<Reg>>>::from_iter([
-        entry("a", ["c", "b"]),
-        entry("c", ["a", "b"]),
-        entry("b", ["a", "c", "e", "f"]),
-        entry("e", ["b", "f", "g"]),
-        entry("f", ["b", "e", "g"]),
-        entry("g", ["e", "f"]),
-
-        entry("z", ["e", "f", "g"]),
-    ]);
-
-    // let seo = simplicial_elimination_ordering(&graph);
-    // eprintln!("seo: {seo:?}");
-
-    // let assignments = color_graph_greedily(&graph, seo);
-    // eprintln!("assignments: {assignments:#?}");
-}
 }

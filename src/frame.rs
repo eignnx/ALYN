@@ -2,7 +2,7 @@
 
 //! Stack frame interface
 
-use crate::names::{Lbl, Tmp};
+use alyn_common::names::{Lbl, Tmp};
 
 pub enum Escape {
     Escapes,

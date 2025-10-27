@@ -10,9 +10,9 @@ use crate::{
     canon,
     instr_sel::Select,
     ir,
-    names::{self, Lbl, Tmp},
     regalloc::{Cc, CtrlTx},
 };
+use alyn_common::names::{self, Lbl, Tmp};
 
 #[rustfmt::skip]
 #[derive(Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
@@ -48,7 +48,10 @@ impl From<Reg> for crate::Stg<Reg> {
 }
 
 mod _scope_use {
-    use super::{Cc, Reg::{self, *}};
+    use super::{
+        Cc,
+        Reg::{self, *},
+    };
 
     impl Cc for Reg {
         #[rustfmt::skip]
@@ -123,8 +126,6 @@ pub enum Instr {
     #[debug("ori {_0}, {_1}")]
     ORI(Stg, Imm),
 
-
-
     #[debug("lsr {_0}, {_1}")]
     LSR(Stg, Imm),
 
@@ -142,7 +143,6 @@ pub enum Instr {
     CALL(Lbl),
     #[debug("ret")]
     RET,
-
 
     #[debug("teq {_0}, {_1}")]
     TEQ(Stg, Stg),
@@ -165,7 +165,6 @@ pub enum Instr {
     BT(Lbl),
 }
 
-
 use Instr::*;
 
 pub struct SprindInstrSel {
@@ -185,9 +184,16 @@ impl SprindInstrSel {
         self.out.push(instr);
     }
 
-    fn with_dst(&mut self, src_dst: Stg, dst: Option<Stg>, mut code: impl FnOnce(&mut SprindInstrSel, Stg)) -> Stg {
+    fn with_dst(
+        &mut self,
+        src_dst: Stg,
+        dst: Option<Stg>,
+        mut code: impl FnOnce(&mut SprindInstrSel, Stg),
+    ) -> Stg {
         code(self, src_dst);
-        if let Some(dst) = dst && dst != src_dst {
+        if let Some(dst) = dst
+            && dst != src_dst
+        {
             self.emit(MOV(dst, src_dst));
             dst
         } else {
@@ -291,7 +297,6 @@ impl Select for SprindInstrSel {
             //Stmt::Move(Tmp(lhs), Imm(canon::Imm::Int(i))) => {
             //    self.emit(LI(lhs.into(), self::Imm::Int(i as u16)));
             //}
-
             Stmt::Move(Tmp(lhs), rhs) => {
                 let _ = self.expr_to_asm(rhs, Stg::Tmp(lhs));
             }
@@ -326,12 +331,8 @@ impl Select for SprindInstrSel {
                 let e2_tmp = self.expr_to_asm(e2, None);
                 match op {
                     ir::Relop::Eq => self.emit(TEQ(e1_tmp.into(), e2_tmp.into())),
-                    ir::Relop::LtU => {
-                        self.emit(TB(e1_tmp.into(), e2_tmp.into()))
-                    }
-                    ir::Relop::LteU => {
-                        self.emit(TGE(e2_tmp.into(), e1_tmp.into()))
-                    }
+                    ir::Relop::LtU => self.emit(TB(e1_tmp.into(), e2_tmp.into())),
+                    ir::Relop::LteU => self.emit(TGE(e2_tmp.into(), e1_tmp.into())),
                     ir::Relop::Lt => self.emit(TL(e1_tmp.into(), e2_tmp.into())),
                     _ => todo!("impl relop: {op:?}"),
                 }
@@ -482,22 +483,26 @@ impl crate::regalloc::Instr for Instr {
             | SUBI(stg, _)
             | ORI(stg, _)
             | LSR(stg, _)
-            | SZI(stg, _)
-            => {
+            | SZI(stg, _) => {
                 if let Stg::Tmp(tmp) = stg {
                     if *tmp == old {
                         *stg = new;
                     }
                 }
             }
-            | TL(_, _)
+            TL(_, _)
             | TGE(_, _)
             | TEQ(_, _)
             | TNE(_, _)
             | TB(_, _)
-            | TAE(_, _) 
+            | TAE(_, _)
             | CALL(_)
-            | Label(..) | RET | SW(..) | Instr::B(..) | BF(..) | BT(..) => {}
+            | Label(..)
+            | RET
+            | SW(..)
+            | Instr::B(..)
+            | BF(..)
+            | BT(..) => {}
         }
     }
 
@@ -559,11 +564,9 @@ impl crate::regalloc::Instr for Instr {
             // Subr call jumps out, then comes back like nothing happened.
             CALL(lbl) => Some(CtrlTx::Advance),
 
-            OR(..) | ORI(..) | SZI(..) |
-            LI(..) | LW(..) | SW(..) | Label(..) | MOV(..) | ADD(..) | ADDI(..) | SUB(..)
-            | SUBI(..) | LSR(..) | TL(..) | TGE(..) | TEQ(..) | TNE(..) | TB(..) | TAE(..) => {
-                Some(CtrlTx::Advance)
-            }
+            OR(..) | ORI(..) | SZI(..) | LI(..) | LW(..) | SW(..) | Label(..) | MOV(..)
+            | ADD(..) | ADDI(..) | SUB(..) | SUBI(..) | LSR(..) | TL(..) | TGE(..) | TEQ(..)
+            | TNE(..) | TB(..) | TAE(..) => Some(CtrlTx::Advance),
 
             BF(lbl) | BT(lbl) => Some(CtrlTx::Branch(*lbl)),
         }

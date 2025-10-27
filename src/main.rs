@@ -8,18 +8,19 @@ use clap::Parser;
 
 use crate::{
     instr_sel::{Select, Stg},
-    names::{Lbl, Tmp},
-    regalloc::Instr, utils::current_revision_summary,
+    regalloc::Instr,
+    utils::current_revision_summary,
 };
+use alyn_common::names::{self, Lbl, Tmp};
 
 mod ast;
 mod ast_to_ir;
 mod backends;
 mod canon;
+mod cli_args;
 mod frame;
 mod instr_sel;
 mod ir;
-mod names;
 mod parse;
 mod regalloc;
 mod sym;
@@ -27,7 +28,6 @@ mod tcx;
 mod ty;
 mod tyck;
 mod utils;
-mod cli_args;
 
 fn main() {
     let opts = cli_args::CliArgs::parse();
@@ -112,7 +112,6 @@ where
 
             println!("\n;;; SUBROUTINE");
             for stmt in reg_allocation.program {
-
                 if let Some(lbl) = stmt.try_as_lbl() {
                     if let Lbl::SubrStart(_) = lbl {
                         println!();

@@ -1,9 +1,10 @@
 use std::fmt::{self, Debug};
 
+use alyn_common::names::{Lbl, Tmp};
 use crate::{
     DefsUses, Instruction,
     cfg::{ControlFlow, CtrlTx},
-    common::{Lbl, Stg, Tmp},
+    common::{Stg},
 };
 
 /// Wrapper around instruction so that `I` doesn't need to have it's own `Label` variant.

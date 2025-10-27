@@ -1,7 +1,5 @@
-use crate::{
-    names::Tmp,
-    regalloc::{CtrlTx, Lbl},
-};
+use crate::regalloc::CtrlTx;
+use alyn_common::names::{Lbl, Tmp};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::Instr;

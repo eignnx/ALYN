@@ -10,6 +10,6 @@ pub struct CliArgs {
     pub src_file: PathBuf,
 
     /// The target architecture in which assembly will be produced.
-    #[arg(short, long, default_value="lark")]
-    pub target_arch: crate::backends::BackendArch
+    #[arg(short, long, default_value = "lark")]
+    pub target_arch: crate::backends::BackendArch,
 }

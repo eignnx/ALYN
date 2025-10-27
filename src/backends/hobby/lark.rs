@@ -10,9 +10,9 @@ use crate::{
     canon,
     instr_sel::Select,
     ir,
-    names::{self, Lbl, Tmp},
     regalloc::{Cc, CtrlTx},
 };
+use alyn_common::names::{self, Lbl, Tmp};
 
 #[rustfmt::skip]
 #[derive(Display, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]

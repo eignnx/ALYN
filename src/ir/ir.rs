@@ -5,10 +5,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use derive_more::From;
 use internment::Intern;
 
-use crate::{
-    names::{Lbl, Tmp},
-    ty::Ty,
-};
+use crate::ty::Ty;
+use alyn_common::names::{Lbl, Tmp};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Binop {

@@ -1,7 +1,5 @@
-use crate::{
-    instr_sel::{self, Select},
-    names::Lbl,
-};
+use crate::instr_sel::{self, Select};
+use alyn_common::names::Lbl;
 
 pub struct I8086InstrSel;
 

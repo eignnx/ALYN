@@ -21,6 +21,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 name = "alyn"
 version = "0.1.0"
 dependencies = [
+ "alyn_common",
  "clap",
  "derive_more",
  "insta",
@@ -29,6 +30,14 @@ dependencies = [
  "lalrpop-util 0.21.0",
  "priority-queue",
  "smallvec",
+]
+
+[[package]]
+name = "alyn_common"
+version = "0.1.0"
+dependencies = [
+ "derive_more",
+ "internment",
 ]
 
 [[package]]

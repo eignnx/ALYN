@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use alyn_common::names::{Lbl, Tmp};
 use crate::{
     Instruction,
-    common::{Lbl, Stg, Stmt, Tmp},
+    common::{Stg, Stmt},
 };
 
 #[derive(Debug, Clone)]
@@ -73,7 +74,7 @@ impl<R, I: Instruction<Reg = R> + ControlFlow> Cfg<R, I> {
         for (idx, stmt) in self.stmts.iter().enumerate() {
             match stmt {
                 Stmt::Label(lbl) => {
-                    self.labels.insert(lbl, idx);
+                    self.labels.insert(*lbl, idx);
                 }
                 Stmt::Instr(instr) => {
                     if let Some((dst, src)) = instr.try_as_pure_move() {
@@ -92,7 +93,7 @@ impl<R, I: Instruction<Reg = R> + ControlFlow> Cfg<R, I> {
         for (idx, stmt) in self.stmts.iter().enumerate() {
             match stmt {
                 Stmt::Label(lbl) => {
-                    self.labels.insert(lbl, idx);
+                    self.labels.insert(*lbl, idx);
                 }
                 Stmt::Instr(instr) => match instr.ctrl_tx() {
                     CtrlTx::Exit => self.exits.push(idx),
@@ -104,7 +105,7 @@ impl<R, I: Instruction<Reg = R> + ControlFlow> Cfg<R, I> {
                     }
                     CtrlTx::Switch(lbls) => {
                         for lbl in &lbls {
-                            self.edges.push((idx, self.label_to_stmt_idx(lbl)));
+                            self.edges.push((idx, self.label_to_stmt_idx(*lbl)));
                         }
                     }
                 },

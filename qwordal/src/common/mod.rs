@@ -2,13 +2,8 @@ use std::fmt::Debug;
 
 mod stmt;
 
+use alyn_common::names::{Tmp};
 pub use stmt::*;
-
-// TODO
-pub type Tmp = &'static str;
-
-// TODO
-pub type Lbl = &'static str;
 
 /// "Storage"
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash)]

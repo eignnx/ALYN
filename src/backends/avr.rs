@@ -8,9 +8,9 @@ use internment::Intern;
 
 use crate::{
     canon, instr_sel, ir,
-    names::{self, Lbl, Tmp},
     regalloc::{Cc, CtrlTx},
 };
+use alyn_common::names::{self, Lbl, Tmp};
 
 use crate::instr_sel::Select;
 

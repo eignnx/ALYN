@@ -2,11 +2,11 @@ use std::path::Path;
 
 use clap::ValueEnum;
 
-use crate::{instr_sel::Select, Compiler};
+use crate::{Compiler, instr_sel::Select};
 
 pub mod avr;
-pub mod i8086;
 pub mod hobby;
+pub mod i8086;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum BackendArch {
@@ -38,6 +38,3 @@ impl Backend for hobby::sprind::SprindInstrSel {
         Compiler::new(self).compile(fname, src);
     }
 }
-
-
-

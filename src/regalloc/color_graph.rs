@@ -1,8 +1,17 @@
-use std::{collections::{BTreeMap, BTreeSet}, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
 use crate::{
     instr_sel::Stg,
-    regalloc::{cfg::Cfg, interferences::Interferences, live_sets::{LiveSets, Move}, Cc, Instr}, utils::current_revision_summary,
+    regalloc::{
+        Cc, Instr,
+        cfg::Cfg,
+        interferences::Interferences,
+        live_sets::{LiveSets, Move},
+    },
+    utils::current_revision_summary,
 };
 
 pub type NodeEntry<R> = (Stg<R>, BTreeSet<Stg<R>>);
@@ -37,7 +46,11 @@ impl<R: Cc> ColorGraph<R> {
             match stmt.try_as_pure_move() {
                 Some((Stg::Reg(_), Stg::Reg(_))) | None => {}
                 Some((dst, src)) => {
-                    move_rels.insert(Move { dst, src, instr_id: stmt_id });
+                    move_rels.insert(Move {
+                        dst,
+                        src,
+                        instr_id: stmt_id,
+                    });
                 }
             }
         }
@@ -50,11 +63,12 @@ impl<R: Cc> ColorGraph<R> {
     }
 
     pub fn are_move_related(&self, x: Stg<R>, y: Stg<R>) -> bool {
-        self.move_rels.iter()
+        self.move_rels
+            .iter()
             .any(|mv| mv.dst == x && mv.src == y || mv.dst == y && mv.src == x)
     }
 
-    pub fn move_rels(&self) -> impl Iterator<Item=&Move<R>> {
+    pub fn move_rels(&self) -> impl Iterator<Item = &Move<R>> {
         self.move_rels.iter()
     }
 
@@ -84,7 +98,9 @@ impl<R: Cc> ColorGraph<R> {
         if let Stg::Reg(_) = n {
             return 1_000_000;
         } else {
-            self.active_neighbors_of(n).filter(|x| matches!(x, Stg::Tmp(_))).count()
+            self.active_neighbors_of(n)
+                .filter(|x| matches!(x, Stg::Tmp(_)))
+                .count()
         }
     }
 
@@ -111,9 +127,8 @@ impl<R: Cc> ColorGraph<R> {
     }
 
     pub fn safe_to_coalesce(&self, n1: &Stg<R>, n2: &Stg<R>) -> bool {
-        !self.interferes_with(*n1, *n2) && (
-            self.safe_by_briggs_test(n1, n2) || self.safe_by_georges_test(n1, n2)
-        )
+        !self.interferes_with(*n1, *n2)
+            && (self.safe_by_briggs_test(n1, n2) || self.safe_by_georges_test(n1, n2))
     }
 
     /// Nodes `a` and `b` can be coalesced if the resulting node `ab` will have fewer than K neighbors of
@@ -133,9 +148,8 @@ impl<R: Cc> ColorGraph<R> {
     ///   - `t` already interferese with `b` or
     ///   - `t` is of insignificant degree.
     fn safe_by_georges_test(&self, n1: &Stg<R>, n2: &Stg<R>) -> bool {
-        self.active_neighbors_of(*n1).all(|&n1_nbr| {
-            self.interferes_with(n1_nbr, *n2) || self.is_insig_degree(n1_nbr)
-        })
+        self.active_neighbors_of(*n1)
+            .all(|&n1_nbr| self.interferes_with(n1_nbr, *n2) || self.is_insig_degree(n1_nbr))
     }
 
     pub fn take_node(&mut self, n: &Stg<R>) -> NodeEntry<R> {
@@ -148,7 +162,10 @@ impl<R: Cc> ColorGraph<R> {
     /// Removes an arbitrary node (and its neighbor set) as long as the node has fewer than N
     /// neighbors. Returns `None` if no such node can be found.
     pub fn take_some_insig_node(&mut self) -> Option<NodeEntry<R>> {
-        let key = self.interferences.graph.keys()
+        let key = self
+            .interferences
+            .graph
+            .keys()
             .filter(|n| matches!(n, Stg::Tmp(_)))
             .filter(|n| self.is_insig_degree(**n))
             .max_by_key(|n| self.degree(**n))
@@ -189,7 +206,10 @@ impl<R: Cc> fmt::Debug for ColorGraph<R> {
         writeln!(f)?;
 
         writeln!(f, "    subgraph GPRS {{")?;
-        writeln!(f, r##"        node [shape=circle fontsize="20pt" style=filled fillcolor="#eee" penwidth="2"]"##)?;
+        writeln!(
+            f,
+            r##"        node [shape=circle fontsize="20pt" style=filled fillcolor="#eee" penwidth="2"]"##
+        )?;
         for gpr in R::GPRS {
             writeln!(f, "        {:?}", DotEsc(Stg::Reg(*gpr)))?;
         }
@@ -202,7 +222,9 @@ impl<R: Cc> fmt::Debug for ColorGraph<R> {
         for &node in self.interferences.graph.keys() {
             write!(f, "    {:?} -- {{", DotEsc(node))?;
             for nbr in self.active_neighbors_of(node) {
-                if node.try_as_reg().is_some() && nbr.try_as_reg().is_some() { continue }
+                if node.try_as_reg().is_some() && nbr.try_as_reg().is_some() {
+                    continue;
+                }
                 write!(f, " {:?}", DotEsc(nbr))?;
             }
             writeln!(f, " }}")?;
@@ -211,7 +233,10 @@ impl<R: Cc> fmt::Debug for ColorGraph<R> {
         writeln!(f)?;
 
         writeln!(f, "    subgraph MoveRelations {{")?;
-        writeln!(f, r##"        edge [style=dashed penwidth="2" color="#999"]"##)?;
+        writeln!(
+            f,
+            r##"        edge [style=dashed penwidth="2" color="#999"]"##
+        )?;
         for mv in &self.move_rels {
             writeln!(f, "        {:?} -- {:?}", DotEsc(&mv.src), DotEsc(&mv.dst))?;
         }

@@ -9,13 +9,13 @@ use std::{
 
 use crate::{
     instr_sel::Stg,
-    names::Tmp,
     regalloc::{
         Cc,
         color_graph::{ColorGraph, NodeEntry},
         live_sets::LiveSets,
     },
 };
+use alyn_common::names::Tmp;
 
 use super::{Instr, cfg::Cfg, interferences::Interferences};
 
@@ -24,8 +24,10 @@ pub struct RegAllocation<I: Instr, R> {
     pub assignments: BTreeMap<Tmp, R>,
 }
 
-impl<I, R> RegAllocation<I, R> 
-where I: Instr<Register=R>, R: Eq + Copy
+impl<I, R> RegAllocation<I, R>
+where
+    I: Instr<Register = R>,
+    R: Eq + Copy,
 {
     pub fn new(cfg: Cfg<I>, assignments: BTreeMap<Tmp, R>) -> Self {
         let mut program = vec![];
@@ -33,7 +35,9 @@ where I: Instr<Register=R>, R: Eq + Copy
             for (tmp, reg) in &assignments {
                 instr.replace_occurrances(*tmp, Stg::Reg(*reg));
             }
-            if let Some((dst, src)) = instr.try_as_pure_move() && dst == src {
+            if let Some((dst, src)) = instr.try_as_pure_move()
+                && dst == src
+            {
                 eprintln!("-- {i}: {instr:?} # Eliminating redundant move");
                 continue;
             } else {
@@ -47,7 +51,6 @@ where I: Instr<Register=R>, R: Eq + Copy
         }
     }
 }
-
 
 /// Register Allocator
 pub struct RegAlloc<R> {
@@ -114,9 +117,13 @@ impl<R: Cc> RegAlloc<R> {
             prologue.extend(I::emit_move(param.into(), Stg::Reg(reg)));
         }
 
-
         let mut new_stmts = vec![];
-        new_stmts.push(cfg.stmts.first().expect("first instr will be subr name").clone());
+        new_stmts.push(
+            cfg.stmts
+                .first()
+                .expect("first instr will be subr name")
+                .clone(),
+        );
         new_stmts.extend(prologue);
 
         // Skip subr label
@@ -261,9 +268,10 @@ impl<R: Cc> RegAlloc<R> {
             .into_iter()
             .copied()
             .filter(|gpr| color_graph.are_move_related(tmp.into(), Stg::Reg(*gpr)))
-            .find(|gpr| !regs_in_use.contains(gpr)) {
-                eprintln!("~ coalescing {tmp:?} and {chosen:?}");
-                return Some(chosen);
+            .find(|gpr| !regs_in_use.contains(gpr))
+        {
+            eprintln!("~ coalescing {tmp:?} and {chosen:?}");
+            return Some(chosen);
         }
 
         // Otherwise just find the first GPR that's not in use.
@@ -300,9 +308,7 @@ impl<R: Cc> RegAlloc<R> {
             let mut insert_after = Vec::new();
             let mut changed = false;
 
-            let mk_fresh = || {
-                Tmp::fresh(&format!("spill<{to_spill:?}>"))
-            };
+            let mk_fresh = || Tmp::fresh(&format!("spill<{to_spill:?}>"));
 
             let mut new_tmp = None;
             if uses.contains(&to_spill.into()) {

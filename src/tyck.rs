@@ -402,7 +402,13 @@ impl Ann<Stmt> {
 
 impl Tcx {
     fn register_subr_decl(&mut self, name: Intern<String>, ty: Ty) -> Option<SymData> {
-        self.insert(name, SymData { ty, sym_kind: IdentKind::Subr })
+        self.insert(
+            name,
+            SymData {
+                ty,
+                sym_kind: IdentKind::Subr,
+            },
+        )
     }
 }
 
@@ -450,7 +456,9 @@ impl Module {
             match item {
                 Item::ExternSubr(ex) => {
                     let subr_ty = ex.value.subr_ty();
-                    if let Some(_) = tcx.register_subr_decl(ex.value.name.clone(), ex.value.subr_ty()) {
+                    if let Some(_) =
+                        tcx.register_subr_decl(ex.value.name.clone(), ex.value.subr_ty())
+                    {
                         return Err(TyckErr::ShadowedVarName {
                             span: ex.span.clone(),
                             varname: ex.value.name.clone(),
@@ -459,7 +467,9 @@ impl Module {
                 }
                 Item::SubrDefn(subr) => {
                     let subr_ty = subr.value.subr_ty();
-                    if let Some(_) = tcx.register_subr_decl(subr.value.name.clone(), subr.value.subr_ty()) {
+                    if let Some(_) =
+                        tcx.register_subr_decl(subr.value.name.clone(), subr.value.subr_ty())
+                    {
                         return Err(TyckErr::ShadowedVarName {
                             span: subr.span.clone(),
                             varname: subr.value.name.clone(),

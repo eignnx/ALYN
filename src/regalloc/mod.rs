@@ -7,19 +7,17 @@ use derive_more::From;
 use internment::Intern;
 use smallvec::SmallVec;
 
-use crate::{
-    instr_sel::Stg,
-    names::{Lbl, Tmp},
-};
+use crate::instr_sel::Stg;
+use alyn_common::names::{Lbl, Tmp};
 
 pub mod cfg;
 pub mod color_graph;
+mod color_graph2;
 pub mod interferences;
 pub mod live_sets;
 mod regalloc;
-mod regalloc_state_machine;
 mod regalloc_chordal;
-mod color_graph2;
+mod regalloc_state_machine;
 
 pub use regalloc::*;
 

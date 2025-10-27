@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use crate::ir::{Binop, LVal, RVal, Relop, Stmt};
-use crate::names::{Lbl, Tmp};
+use alyn_common::names::{Lbl, Tmp};
 
 /// AKA: `exp`
 pub enum IrWrap {

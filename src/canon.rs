@@ -1,6 +1,7 @@
 //! Canonicalize IR
 
-use crate::{ir, names::Lbl};
+use crate::ir;
+use alyn_common::names::{Lbl, Tmp};
 
 /// # Goals
 /// - Flatten RVal::Seq and Stmt::Seq terms into a linear vector of statements.
@@ -8,10 +9,8 @@ use crate::{ir, names::Lbl};
 ///     + Either Stmt::RVal(RVal::Call(..)),
 ///     + or Stmt::Move(Tmp(..), RVal::Call(..))
 pub mod flatten {
-    use crate::{
-        ir::{LVal, RVal, Stmt},
-        names::Tmp,
-    };
+    use crate::ir::{LVal, RVal, Stmt};
+    use alyn_common::names::{Lbl, Tmp};
 
     pub fn flatten_stmt(stmt: Stmt, out: &mut Vec<Stmt>) {
         match stmt {
@@ -114,10 +113,8 @@ pub mod flatten {
 pub mod basic_blocks {
     use std::{collections::BTreeMap, mem};
 
-    use crate::{
-        ir::{LVal, RVal, Relop, Stmt},
-        names::{Lbl, Tmp},
-    };
+    use crate::ir::{LVal, RVal, Relop, Stmt};
+    use alyn_common::names::{Lbl, Tmp};
 
     // Basic Block
     #[derive(Debug, Clone, PartialEq)]
@@ -362,7 +359,9 @@ pub mod basic_blocks {
 /// false label, and jumps followed by their target (if possible).
 mod trace {
     use super::basic_blocks::{Bb, Bbs};
-    use crate::{ir::Stmt, names::Lbl};
+
+    use crate::ir::Stmt;
+    use alyn_common::names::Lbl;
     use std::collections::BTreeSet;
 
     struct TraceScheduler {
@@ -501,10 +500,9 @@ mod trace {
 mod post_process {
 
     use super::basic_blocks::Bb;
-    use crate::{
-        ir::{RVal, Relop, Stmt},
-        names::Lbl,
-    };
+
+    use crate::ir::{RVal, Relop, Stmt};
+    use alyn_common::names::Lbl;
 
     pub fn post_process(schedule: Vec<Bb>) -> Vec<Stmt> {
         let mut output = Vec::new();
@@ -675,11 +673,8 @@ pub mod canon_ir {
     use smallvec::SmallVec;
 
     pub use crate::ir::{Binop, Relop, Unop};
-    use crate::{
-        ir,
-        names::{Lbl, Tmp},
-        ty::Ty,
-    };
+    use crate::{ir, ty::Ty};
+    use alyn_common::names::{Lbl, Tmp};
 
     #[derive(Debug)]
     pub enum Stmt {
