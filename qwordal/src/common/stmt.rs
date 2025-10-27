@@ -1,11 +1,15 @@
-use std::fmt::{self, Debug};
-
-use alyn_common::names::{Lbl, Tmp};
-use crate::{
-    DefsUses, Instruction,
-    cfg::{ControlFlow, CtrlTx},
-    common::{Stg},
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::{self, Debug},
 };
+
+use crate::{
+    DefOrUse, DefsUses, Instruction,
+    alloc::Asn,
+    cfg::{ControlFlow, CtrlTx},
+    common::Stg,
+};
+use alyn_common::names::{Lbl, Tmp};
 
 /// Wrapper around instruction so that `I` doesn't need to have it's own `Label` variant.
 #[derive(Clone)]
@@ -41,16 +45,20 @@ impl<I: ControlFlow> ControlFlow for Stmt<I> {
     }
 }
 
-impl<I: Instruction + DefsUses> DefsUses for Stmt<I> {
+impl<I: DefsUses> DefsUses for Stmt<I> {
     fn add_defs_uses<E: Extend<Stg<Self::Reg>>>(&self, defs: &mut E, uses: &mut E) {
         if let Self::Instr(instr) = self {
             instr.add_defs_uses(defs, uses);
         }
     }
 
-    fn substitute_tmp_for_reg(&mut self, old: Tmp, new: Self::Reg) {
+    fn substitute_tmp_for_reg(
+        &mut self,
+        assignments: &HashMap<Tmp, Asn<Self::Reg>>,
+        spills: &mut BTreeSet<DefOrUse>,
+    ) {
         if let Self::Instr(instr) = self {
-            instr.substitute_tmp_for_reg(old, new);
+            instr.substitute_tmp_for_reg(assignments, spills);
         }
     }
 }

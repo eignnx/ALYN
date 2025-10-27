@@ -1,19 +1,6 @@
 use crate::{
-    Instruction,
-    common::{Stg, Stmt},
+    common::{SlotId, Stg, Stmt}, Instruction
 };
-
-#[derive(Debug, Clone, Copy)]
-pub struct SlotId(pub usize);
-
-/// "Assignment"
-/// The thing to which a temporary is assigned by the end of regalloc.
-#[derive(Clone, Copy)]
-pub enum Asn<R> {
-    Reg(R),
-    /// A location on the stack relative to the base pointer.
-    Slot(SlotId),
-}
 
 pub trait SlotAllocator {
     fn get_or_alloc_slot(&mut self, slot_id: SlotId) -> i32;

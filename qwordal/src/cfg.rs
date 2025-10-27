@@ -1,33 +1,9 @@
 use std::collections::HashMap;
 
-use alyn_common::names::{Lbl, Tmp};
 use crate::{
-    Instruction,
-    common::{Stg, Stmt},
+    common::{CtrlFlow, CtrlTx, Stg, Stmt}, Instruction
 };
-
-#[derive(Debug, Clone)]
-pub enum CtrlTx {
-    /// Exit the current subroutine. Either a return statement, a tail-call, or maybe
-    /// `system_exit`.
-    Exit,
-
-    /// Just advance to the next instruction: `$PC <- $PC + 1`
-    Advance,
-
-    /// Unconditional jump to given label.
-    Jump(Lbl),
-
-    /// Jump to one of the given labels, like in a switch statement.
-    Switch(Vec<Lbl>),
-
-    /// Either fallthrough (which would be the same as `Advance`) or branch to the given label.
-    Branch(Lbl),
-}
-
-pub trait ControlFlow {
-    fn ctrl_tx(&self) -> CtrlTx;
-}
+use alyn_common::names::{Lbl, Tmp};
 
 pub type StmtIdx = usize;
 
@@ -38,7 +14,7 @@ pub struct Move<R> {
     pub stmt_idx: StmtIdx,
 }
 
-pub struct Cfg<R, I: ControlFlow> {
+pub struct Cfg<R, I: CtrlFlow> {
     stmts: Vec<Stmt<I>>,
     pub entry: usize,
     exits: Vec<StmtIdx>,
@@ -48,7 +24,7 @@ pub struct Cfg<R, I: ControlFlow> {
     move_stmts: Vec<Move<R>>,
 }
 
-impl<R, I: Instruction<Reg = R> + ControlFlow> Cfg<R, I> {
+impl<R, I: Instruction<Reg = R> + CtrlFlow> Cfg<R, I> {
     pub fn new(
         entry: StmtIdx,
         params: impl IntoIterator<Item = Tmp>,
