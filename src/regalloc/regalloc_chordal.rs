@@ -16,10 +16,7 @@ fn simplicial_elimination_ordering<R: Cc>(graph: &Interferences<R>) -> Vec<Tmp> 
 
     let mut curr = graph
         .all_nodes()
-        .filter_map(|node| match node {
-            Stg::Reg(_) => None,
-            Stg::Tmp(tmp) => Some(tmp),
-        })
+        .filter_map(Stg::try_as_tmp)
         .next()
         .unwrap();
 
@@ -55,65 +52,89 @@ fn simplicial_elimination_ordering<R: Cc>(graph: &Interferences<R>) -> Vec<Tmp> 
     ordering
 }
 
-/// If spill is necessary, the Tmp will *not* be added to the assignments map.
+/// An Assignment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Asn<R> {
+    /// The value will live the given register.
+    Reg(R),
+    /// The value will live on the stack. It's location on the stack will be decided upon later.
+    /// For now, it has a unique ID only.
+    Slot(usize),
+}
+
+fn iter_slots<R>() -> impl Iterator<Item = Asn<R>> {
+    let mut i = 0;
+    std::iter::from_fn(move || {
+        let current = i;
+        i += 1;
+        Some(Asn::Slot(current))
+    })
+}
+
+fn iter_choices<R: Cc>() -> impl Iterator<Item = Asn<R>> {
+    R::GPRS
+        .into_iter()
+        .copied()
+        .map(Asn::Reg)
+        .chain(iter_slots())
+}
+
+fn select_assignment<R: Cc>(in_use: &BTreeSet<Asn<R>>) -> Asn<R> {
+    let Some(choice) = iter_choices().find(|choice| !in_use.contains(choice)) else {
+        unreachable!("Should always find an available stack slot");
+    };
+    choice
+}
+
 fn color_graph_greedily<R: Cc>(
     graph: &Interferences<R>,
     ordering: Vec<Tmp>,
-) -> BTreeMap<Tmp, R> {
+) -> BTreeMap<Tmp, Asn<R>> {
     let mut assignments = BTreeMap::new();
+    let mut in_use: BTreeSet<Asn<R>> = BTreeSet::new();
 
     for node in ordering {
-        let mut in_use = BTreeSet::new();
+        in_use.clear();
         for nbr in graph.neighbors(&Stg::Tmp(node)) {
             match nbr {
-                Stg::Reg(reg) => _ = in_use.insert(reg),
+                Stg::Reg(reg) => {
+                    in_use.insert(Asn::Reg(reg));
+                }
                 Stg::Tmp(nbr) => {
-                    if let Some(reg) = assignments.get(&nbr).copied() {
-                        _ = in_use.insert(reg);
+                    if let Some(a) = assignments.get(&nbr).copied() {
+                        _ = in_use.insert(a);
                     }
                 }
             }
         }
 
-        if let Some(&reg) = R::GPRS.into_iter().find(|reg| !in_use.contains(reg)) {
-            assignments.insert(node, reg);
-        } else {
-            eprintln!("Spill needed for {node:?}");
-        }
+        assignments.insert(node, select_assignment(&in_use));
     }
 
     assignments
 }
 
-pub struct RegAlloc<I, R> {
+pub trait SlotAllocator {
+    fn get_or_choose_bp_offset_for_slot_id(&mut self, slot_id: usize) -> i32;
+}
+
+pub struct RegAlloc<I, R, S: SlotAllocator> {
     params: Vec<Tmp>,
     program: Vec<I>,
+    slot_alloc: S,
     _reg: PhantomData<R>,
 }
 
-impl<I, R: Cc> RegAlloc<I, R>
+impl<I, R: Cc, S: SlotAllocator> RegAlloc<I, R, S>
 where I: Instr<Register = R>,
 {
-    fn new(params: Vec<Tmp>, program: Vec<I>) -> Self {
+    fn new(params: Vec<Tmp>, program: Vec<I>, slot_alloc: S) -> Self {
         Self {
             params,
             program,
+            slot_alloc,
             _reg: PhantomData,
         }
-    }
-
-    fn allocate_registers(&mut self) -> Allocation<I, R> {
-        let intfs = self.build();
-        let ordering = simplicial_elimination_ordering(&intfs);
-        let assignments = color_graph_greedily(&intfs, ordering);
-
-        for tmp in intfs.all_nodes().filter_map(Stg::try_as_tmp) {
-            if let Some(reg) = assignments.get(&tmp) {
-
-            } else {
-            }
-        }
-        todo!()
     }
 
     fn build(&mut self) -> Interferences<R> {
@@ -124,6 +145,54 @@ where I: Instr<Register = R>,
         intfs
     }
 
+    pub fn allocate_registers(&mut self) -> Allocation<I, R> {
+        let intfs = self.build();
+        let ordering = simplicial_elimination_ordering(&intfs);
+        let assignments = color_graph_greedily(&intfs, ordering);
+
+        let mut new_program = Vec::<I>::new();
+
+        for mut instr in self.program.drain(..) {
+            if let Some((lhs, rhs)) = instr.try_as_pure_move() {
+                let lhs = get_assignment_for(lhs, &assignments);
+                let rhs = get_assignment_for(rhs, &assignments);
+                if lhs == rhs {
+                    continue;
+                }
+            }
+
+            let mut defs = BTreeSet::new();
+            let mut uses = BTreeSet::new();
+            instr.add_defs_uses(&mut defs, &mut uses);
+
+            let mut write_backs = Vec::new();
+
+            for d in defs {
+                let Stg::Tmp(tmp) = d else { continue };
+                match get_assignment_for(d, &assignments) {
+                    Asn::Reg(reg) => {
+                        instr.replace_def_occurrances(tmp, Stg::Reg(reg));
+                    }
+                    Asn::Slot(id) => {
+                        let addr = self.slot_alloc.get_or_choose_bp_offset_for_slot_id(id);
+                        write_backs.extend(I::emit_store_to_stack(addr, tmp));
+                    }
+                }
+            }
+
+            new_program.push(instr);
+            new_program.extend(write_backs);
+        }
+
+        todo!()
+    }
+}
+
+fn get_assignment_for<R: Cc>(stg: Stg<R>, assignments: &BTreeMap<Tmp, Asn<R>>) -> Asn<R> {
+    match stg {
+        Stg::Reg(reg) => Asn::Reg(reg),
+        Stg::Tmp(tmp) => assignments[&tmp],
+    }
 }
 
 pub struct Allocation<I, R> {
