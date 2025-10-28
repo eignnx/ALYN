@@ -1,9 +1,11 @@
-use std::fmt::Debug;
+use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
 
 mod stmt;
 
 use alyn_common::names::{Lbl, Tmp};
 pub use stmt::*;
+
+use crate::{Register, ToSpill};
 
 /// "Storage"
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash)]
@@ -12,11 +14,34 @@ pub enum Stg<R> {
     Reg(R),
 }
 
+impl<R: Register> Stg<R> {
+    pub fn subst_def(&mut self, assignments: &HashMap<Tmp, Asn<R>>, spills: &mut BTreeSet<ToSpill>) {
+        if let Stg::Tmp(tmp) = self {
+            match assignments[&*tmp] {
+                Asn::Reg(reg) => *self = Stg::Reg(reg),
+                Asn::Slot(slot_id) => {
+                    spills.insert(ToSpill::Def(*tmp, slot_id));
+                }
+            }
+        }
+    }
+    pub fn subst_use(&mut self, assignments: &HashMap<Tmp, Asn<R>>, spills: &mut BTreeSet<ToSpill>) {
+        if let Stg::Tmp(tmp) = self {
+            match assignments[&*tmp] {
+                Asn::Reg(reg) => *self = Stg::Reg(reg),
+                Asn::Slot(slot_id) => {
+                    spills.insert(ToSpill::Use(*tmp, slot_id));
+                }
+            }
+        }
+    }
+}
+
 impl<R: Debug> Debug for Stg<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Tmp(tmp) => write!(f, "{tmp:?}"),
-            Self::Reg(reg) => write!(f, "{reg:?}"),
+            Self::Tmp(tmp) => tmp.fmt(f),
+            Self::Reg(reg) => reg.fmt(f),
         }
     }
 }
@@ -44,7 +69,7 @@ pub trait CtrlFlow {
     fn ctrl_tx(&self) -> CtrlTx;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId(pub usize);
 
 /// "Assignment"

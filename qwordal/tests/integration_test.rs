@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use alyn_common::names::{Lbl, Tmp};
-use qwordal::{common::{CtrlFlow, CtrlTx, Stg}, DefOrUse, DefsUses, Instruction, Register};
+use qwordal::{common::{Asn, CtrlFlow, CtrlTx, Stg}, DefsUses, Instruction, Register, StgSubst, ToSpill};
 
 
 
@@ -69,23 +69,35 @@ impl DefsUses for Instr {
                 defs.extend([*dst]);
                 uses.extend([*src]);
             }
-            Instr::CmpBr(src1, src2, lbl) => {
+            Instr::CmpBr(src1, src2, _) => {
                 uses.extend([*src1, *src2]);
             }
-            Instr::Jump(lbl) => {}
+            Instr::Jump(_) => {}
         }
     }
+}
 
+impl StgSubst for Instr {
     fn substitute_tmp_for_reg(
         &mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
-        spills: &mut BTreeSet<DefOrUse>,
+        spills: &mut BTreeSet<ToSpill>,
     ) {
         match self {
-            Instr::BinOp(stg, stg1, stg2) => todo!(),
-            Instr::Move(stg, stg1) => todo!(),
-            Instr::CmpBr(stg, stg1, lbl) => todo!(),
-            Instr::Jump(lbl) => todo!(),
+            Instr::Move(dst, src) => {
+                dst.subst_def(assignments, spills);
+                src.subst_use(assignments, spills);
+            }
+            Instr::BinOp(dst, src1, src2) => {
+                dst.subst_def(assignments, spills);
+                src1.subst_use(assignments, spills);
+                src2.subst_use(assignments, spills);
+            }
+            Instr::CmpBr(src1, src2, _) => {
+                src1.subst_use(assignments, spills);
+                src2.subst_use(assignments, spills);
+            }
+            Instr::Jump(_) => {}
         }
     }
 }

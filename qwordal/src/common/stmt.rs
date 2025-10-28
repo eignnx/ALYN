@@ -4,10 +4,7 @@ use std::{
 };
 
 use crate::{
-    DefOrUse, DefsUses, Instruction,
-    alloc::Asn,
-    cfg::{ControlFlow, CtrlTx},
-    common::Stg,
+    common::{Asn, CtrlFlow, CtrlTx, Stg}, DefsUses, Instruction, StgSubst, ToSpill
 };
 use alyn_common::names::{Lbl, Tmp};
 
@@ -36,7 +33,7 @@ impl<I: Instruction> Instruction for Stmt<I> {
     }
 }
 
-impl<I: ControlFlow> ControlFlow for Stmt<I> {
+impl<I: CtrlFlow> CtrlFlow for Stmt<I> {
     fn ctrl_tx(&self) -> CtrlTx {
         match self {
             Stmt::Instr(instr) => instr.ctrl_tx(),
@@ -51,11 +48,13 @@ impl<I: DefsUses> DefsUses for Stmt<I> {
             instr.add_defs_uses(defs, uses);
         }
     }
+}
 
+impl<I: StgSubst> StgSubst for Stmt<I> {
     fn substitute_tmp_for_reg(
         &mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
-        spills: &mut BTreeSet<DefOrUse>,
+        spills: &mut BTreeSet<ToSpill>,
     ) {
         if let Self::Instr(instr) = self {
             instr.substitute_tmp_for_reg(assignments, spills);

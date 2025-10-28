@@ -6,8 +6,8 @@ use std::{
 
 use crate::{
     DefsUses, Instruction, Register,
-    cfg::{Cfg, ControlFlow, StmtIdx},
-    common::{Stg, Stmt},
+    cfg::{Cfg, StmtIdx},
+    common::{Stg, Stmt, CtrlFlow},
 };
 
 #[derive(Debug, Default)]
@@ -22,7 +22,7 @@ impl<R, I> LiveSets<R, I>
 where
     R: Register,
     I: Instruction<Reg = R>,
-    I: ControlFlow,
+    I: CtrlFlow,
     I: DefsUses,
 {
     pub fn new() -> Self {
