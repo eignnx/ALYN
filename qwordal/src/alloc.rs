@@ -1,6 +1,11 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use alyn_common::names::Tmp;
+
 use crate::{
-    Instruction,
-    common::{SlotId, Stg, Stmt},
+    Instruction, Register,
+    common::{Asn, SlotId, Stg, Stmt},
+    intfs::Intfs,
 };
 
 pub trait SlotAllocator {
@@ -32,4 +37,55 @@ pub trait InstrWrite: Instruction {
 
     fn emit_stack_store(dst_slot_idx: i32, src: Stg<Self::Reg>)
     -> impl Iterator<Item = Stmt<Self>>;
+}
+
+fn iter_slots<R>() -> impl Iterator<Item = Asn<R>> {
+    let mut i = 0;
+    std::iter::from_fn(move || {
+        let current = i;
+        i += 1;
+        Some(Asn::Slot(SlotId(current)))
+    })
+}
+
+fn iter_choices<R: Register>() -> impl Iterator<Item = Asn<R>> {
+    R::GPRS
+        .into_iter()
+        .copied()
+        .map(Asn::Reg)
+        .chain(iter_slots())
+}
+
+fn select_assignment<R: Register>(in_use: &BTreeSet<Asn<R>>) -> Asn<R> {
+    iter_choices()
+        .find(|choice| !in_use.contains(choice))
+        .expect("Should always find an available stack slot")
+}
+
+pub fn color_graph_greedily<R: Register>(
+    intfs: &Intfs<R>,
+    elimination_ordering: Vec<Tmp>,
+) -> BTreeMap<Tmp, Asn<R>> {
+    let mut assignments = BTreeMap::new();
+    let mut in_use: BTreeSet<Asn<R>> = BTreeSet::new();
+
+    for node in elimination_ordering {
+        in_use.clear();
+        for nbr in intfs.neighbors(node.into()) {
+            match nbr {
+                Stg::Reg(reg) => {
+                    in_use.insert(Asn::Reg(reg));
+                }
+                Stg::Tmp(nbr) => {
+                    if let Some(&a) = assignments.get(&nbr) {
+                        in_use.insert(a);
+                    }
+                }
+            }
+        }
+
+        assignments.insert(node, select_assignment(&in_use));
+    }
+
+    assignments
 }

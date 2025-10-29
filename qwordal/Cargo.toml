@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 alyn_common = { path = "../alyn_common" }
+priority-queue = "2.0.0"

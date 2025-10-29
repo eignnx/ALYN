@@ -17,6 +17,28 @@ pub enum Stg<R> {
     Reg(R),
 }
 
+impl<R> Stg<R> {
+    pub fn try_as_tmp(self) -> Option<Tmp> {
+        match self {
+            Stg::Tmp(tmp) => Some(tmp),
+            Stg::Reg(_) => None,
+        }
+    }
+
+    pub fn try_as_reg(self) -> Option<R> {
+        match self {
+            Stg::Reg(reg) => Some(reg),
+            Stg::Tmp(_) => None,
+        }
+    }
+}
+
+impl<R> From<Tmp> for Stg<R> {
+    fn from(tmp: Tmp) -> Self {
+        Self::Tmp(tmp)
+    }
+}
+
 impl<R: Register> Stg<R> {
     pub fn subst_def(
         &mut self,
@@ -85,7 +107,7 @@ pub struct SlotId(pub usize);
 
 /// "Assignment"
 /// The thing to which a temporary is assigned by the end of regalloc.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Asn<R> {
     Reg(R),
     /// A location on the stack relative to the base pointer.

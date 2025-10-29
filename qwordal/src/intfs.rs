@@ -72,6 +72,10 @@ impl<R: Copy + Eq + Ord> Intfs<R> {
         self.graph[&node].iter().copied()
     }
 
+    pub fn nodes(&self) -> impl Iterator<Item = Stg<R>> {
+        self.graph.keys().copied()
+    }
+
     pub fn remove_entry(&mut self, node: Stg<R>) -> Option<(Stg<R>, BTreeSet<Stg<R>>)> {
         self.graph.remove_entry(&node)
     }
