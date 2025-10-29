@@ -7,7 +7,7 @@ use std::{
 use crate::{
     DefsUses, Instruction, Register,
     cfg::{Cfg, StmtIdx},
-    common::{Stg, Stmt, CtrlFlow},
+    common::{CtrlFlow, Stg, Stmt},
 };
 
 #[derive(Debug, Default)]
@@ -112,7 +112,7 @@ where
     }
 }
 
-impl<R: Register, I> LiveSets<R, I> {
+impl<R: Copy + Ord, I> LiveSets<R, I> {
     pub fn get_live_ins(&self, id: StmtIdx) -> impl Iterator<Item = Stg<R>> {
         self.live_ins
             .get(&id)

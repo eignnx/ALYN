@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    common::{CtrlFlow, CtrlTx, Stg, Stmt}, Instruction
+    Instruction,
+    common::{CtrlFlow, CtrlTx, Stg, Stmt},
 };
 use alyn_common::names::{Lbl, Tmp};
 
@@ -14,7 +15,7 @@ pub struct Move<R> {
     pub stmt_idx: StmtIdx,
 }
 
-pub struct Cfg<R, I: CtrlFlow> {
+pub struct Cfg<R, I> {
     stmts: Vec<Stmt<I>>,
     pub entry: usize,
     exits: Vec<StmtIdx>,
@@ -88,7 +89,9 @@ impl<R, I: Instruction<Reg = R> + CtrlFlow> Cfg<R, I> {
             }
         }
     }
+}
 
+impl<R, I> Cfg<R, I> {
     #[track_caller]
     fn label_to_stmt_idx(&self, label: Lbl) -> StmtIdx {
         let Some(idx) = self.labels.get(&label) else {

@@ -2,14 +2,19 @@ use std::collections::{BTreeSet, HashMap};
 
 use alyn_common::names::Tmp;
 
-use crate::{alloc::{InstrWrite, SlotAllocator}, common::{Asn, Stg, Stmt}, DefsUses, Instruction, Register, StgSubst, ToSpill};
+use crate::{
+    DefsUses, Instruction, Register, StgSubst, ToSpill,
+    alloc::{InstrWrite, SlotAllocator},
+    common::{Asn, Stg, Stmt},
+};
 
 pub fn rewrite_with_spills<I>(
     program: impl IntoIterator<Item = Stmt<I>> + ExactSizeIterator,
     assignments: &HashMap<Tmp, Asn<I::Reg>>,
     slot_alloc: &mut impl SlotAllocator,
 ) -> (Vec<Stmt<I>>, bool)
-    where I: Instruction + DefsUses + InstrWrite + StgSubst
+where
+    I: Instruction + DefsUses + InstrWrite + StgSubst,
 {
     let max_expected_spills: usize = <I::Reg as Register>::GPR_SAVED_REGS.len();
     let mut new_program = Vec::with_capacity(program.len() + 2 * max_expected_spills);
@@ -31,12 +36,12 @@ pub fn rewrite_with_spills<I>(
                     // If it's a Use of X, insert Stmt::StackLoad(new_tmp, X_address) before
                     // and edit the using instruction.
                     before_buf.extend(slot_alloc.emit_stack_load(mk_fresh(tmp), src_slot_id));
-                },
+                }
                 ToSpill::Def(tmp, dst_slot_id) => {
                     // If it's a Def of X, edit the old stmt to Def `new_tmp`, and insert
                     // Stmt::StackStore(X_address, new_tmp) after.
                     after_buf.extend(slot_alloc.emit_stack_store(dst_slot_id, mk_fresh(tmp)));
-                },
+                }
             }
         }
         spills_buf.clear();

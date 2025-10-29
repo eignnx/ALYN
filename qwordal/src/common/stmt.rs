@@ -4,7 +4,8 @@ use std::{
 };
 
 use crate::{
-    common::{Asn, CtrlFlow, CtrlTx, Stg}, DefsUses, Instruction, StgSubst, ToSpill
+    DefsUses, Instruction, StgSubst, ToSpill,
+    common::{Asn, CtrlFlow, CtrlTx, Stg},
 };
 use alyn_common::names::{Lbl, Tmp};
 

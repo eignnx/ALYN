@@ -1,5 +1,6 @@
 use crate::{
-    common::{SlotId, Stg, Stmt}, Instruction
+    Instruction,
+    common::{SlotId, Stg, Stmt},
 };
 
 pub trait SlotAllocator {
@@ -25,18 +26,10 @@ pub trait SlotAllocator {
 }
 
 pub trait InstrWrite: Instruction {
-    fn emit_move(
-        dst: Stg<Self::Reg>,
-        src: Stg<Self::Reg>,
-    ) -> impl Iterator<Item = Stmt<Self>>;
+    fn emit_move(dst: Stg<Self::Reg>, src: Stg<Self::Reg>) -> impl Iterator<Item = Stmt<Self>>;
 
-    fn emit_stack_load(
-        dst: Stg<Self::Reg>,
-        src_slot_idx: i32,
-    ) -> impl Iterator<Item = Stmt<Self>>;
+    fn emit_stack_load(dst: Stg<Self::Reg>, src_slot_idx: i32) -> impl Iterator<Item = Stmt<Self>>;
 
-    fn emit_stack_store(
-        dst_slot_idx: i32,
-        src: Stg<Self::Reg>,
-    ) -> impl Iterator<Item = Stmt<Self>>;
+    fn emit_stack_store(dst_slot_idx: i32, src: Stg<Self::Reg>)
+    -> impl Iterator<Item = Stmt<Self>>;
 }

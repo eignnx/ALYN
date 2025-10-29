@@ -1,9 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
 
 use alyn_common::names::{Lbl, Tmp};
-use qwordal::{common::{Asn, CtrlFlow, CtrlTx, Stg}, DefsUses, Instruction, Register, StgSubst, ToSpill};
-
-
+use qwordal::{
+    DefsUses, Instruction, Register, StgSubst, ToSpill,
+    common::{Asn, CtrlFlow, CtrlTx, Stg},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Reg {

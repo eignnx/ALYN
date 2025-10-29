@@ -1,4 +1,7 @@
-use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+};
 
 mod stmt;
 
@@ -15,7 +18,11 @@ pub enum Stg<R> {
 }
 
 impl<R: Register> Stg<R> {
-    pub fn subst_def(&mut self, assignments: &HashMap<Tmp, Asn<R>>, spills: &mut BTreeSet<ToSpill>) {
+    pub fn subst_def(
+        &mut self,
+        assignments: &HashMap<Tmp, Asn<R>>,
+        spills: &mut BTreeSet<ToSpill>,
+    ) {
         if let Stg::Tmp(tmp) = self {
             match assignments[&*tmp] {
                 Asn::Reg(reg) => *self = Stg::Reg(reg),
@@ -25,7 +32,11 @@ impl<R: Register> Stg<R> {
             }
         }
     }
-    pub fn subst_use(&mut self, assignments: &HashMap<Tmp, Asn<R>>, spills: &mut BTreeSet<ToSpill>) {
+    pub fn subst_use(
+        &mut self,
+        assignments: &HashMap<Tmp, Asn<R>>,
+        spills: &mut BTreeSet<ToSpill>,
+    ) {
         if let Stg::Tmp(tmp) = self {
             match assignments[&*tmp] {
                 Asn::Reg(reg) => *self = Stg::Reg(reg),

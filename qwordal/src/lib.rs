@@ -12,6 +12,8 @@ use alyn_common::names::Tmp;
 pub mod alloc;
 pub mod cfg;
 pub mod common;
+pub mod elim_ord;
+pub mod intfs;
 pub mod liveness;
 pub mod spill;
 
@@ -60,4 +62,3 @@ pub trait StgSubst: Instruction {
         spills: &mut BTreeSet<ToSpill>,
     );
 }
-
