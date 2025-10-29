@@ -1,11 +1,9 @@
-use std::{collections::{BTreeMap, BTreeSet}, fmt::{Debug, Display}};
-
-use crate::{
-    DefsUses, Instruction,
-    cfg::Cfg,
-    common::Stg,
-    liveness::LiveSets,
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::{Debug, Display},
 };
+
+use crate::{DefsUses, Instruction, cfg::Cfg, common::Stg, liveness::LiveSets};
 
 /// Interferences
 pub struct Intfs<R> {
@@ -61,7 +59,7 @@ impl<R: Copy + Eq + Ord> Intfs<R> {
         }
     }
 
-    fn record_interference(&mut self, a: Stg<R>, b: Stg<R>) {
+    pub fn record_interference(&mut self, a: Stg<R>, b: Stg<R>) {
         self.graph.entry(a).or_default().insert(b);
         self.graph.entry(b).or_default().insert(a);
     }
@@ -72,6 +70,14 @@ impl<R: Copy + Eq + Ord> Intfs<R> {
 
     pub fn neighbors(&self, node: Stg<R>) -> impl Iterator<Item = Stg<R>> {
         self.graph[&node].iter().copied()
+    }
+
+    pub fn remove_entry(&mut self, node: Stg<R>) -> Option<(Stg<R>, BTreeSet<Stg<R>>)> {
+        self.graph.remove_entry(&node)
+    }
+
+    pub fn insert_entry(&mut self, (node, neighbors): (Stg<R>, BTreeSet<Stg<R>>)) {
+        self.graph.insert(node, neighbors);
     }
 }
 
@@ -90,4 +96,3 @@ impl<R: Debug> Display for Intfs<R> {
         Ok(())
     }
 }
-
