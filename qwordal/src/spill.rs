@@ -20,7 +20,7 @@ pub fn rewrite_with_spills<I>(
 
     let mut did_spill = false;
 
-    let mk_fresh = |to_spill| Tmp::fresh(&format!("spill<{to_spill:?}>"));
+    let mk_fresh = |to_spill| Stg::Tmp(Tmp::fresh(&format!("spill<{to_spill:?}>")));
 
     for mut stmt in program.into_iter().filter(|s| !s.is_trivial_move()) {
         stmt.substitute_tmp_for_reg(assignments, &mut spills_buf);
@@ -30,14 +30,12 @@ pub fn rewrite_with_spills<I>(
                 ToSpill::Use(tmp, src_slot_id) => {
                     // If it's a Use of X, insert Stmt::StackLoad(new_tmp, X_address) before
                     // and edit the using instruction.
-                    let dst = mk_fresh(tmp);
-                    before_buf.extend(slot_alloc.emit_stack_load(Stg::Tmp(dst), src_slot_id));
+                    before_buf.extend(slot_alloc.emit_stack_load(mk_fresh(tmp), src_slot_id));
                 },
                 ToSpill::Def(tmp, dst_slot_id) => {
                     // If it's a Def of X, edit the old stmt to Def `new_tmp`, and insert
                     // Stmt::StackStore(X_address, new_tmp) after.
-                    let src = mk_fresh(tmp);
-                    after_buf.extend(slot_alloc.emit_stack_store(dst_slot_id, Stg::Tmp(src)));
+                    after_buf.extend(slot_alloc.emit_stack_store(dst_slot_id, mk_fresh(tmp)));
                 },
             }
         }
