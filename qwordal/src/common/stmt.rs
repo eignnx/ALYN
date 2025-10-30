@@ -16,6 +16,18 @@ pub enum Stmt<I> {
     Label(Lbl),
 }
 
+impl<I> From<I> for Stmt<I> {
+    fn from(instr: I) -> Self {
+        Stmt::Instr(instr)
+    }
+}
+
+impl<I> Stmt<I> {
+    pub fn label(lbl: impl Into<Lbl>) -> Self {
+        Stmt::Label(lbl.into())
+    }
+}
+
 impl<I: Instruction> Instruction for Stmt<I> {
     type Reg = I::Reg;
 
@@ -52,13 +64,13 @@ impl<I: DefsUses> DefsUses for Stmt<I> {
 }
 
 impl<I: StgSubst> StgSubst for Stmt<I> {
-    fn substitute_tmp_for_reg(
+    fn subst_tmp(
         &mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
         spills: &mut BTreeSet<ToSpill>,
     ) {
         if let Self::Instr(instr) = self {
-            instr.substitute_tmp_for_reg(assignments, spills);
+            instr.subst_tmp(assignments, spills);
         }
     }
 }
@@ -66,8 +78,8 @@ impl<I: StgSubst> StgSubst for Stmt<I> {
 impl<I: Debug> Debug for Stmt<I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Instr(instr) => instr.fmt(f),
-            Self::Label(lbl) => lbl.fmt(f),
+            Self::Instr(instr) => write!(f, "    {instr:?}"),
+            Self::Label(lbl) => write!(f, "{lbl:?}:"),
         }
     }
 }

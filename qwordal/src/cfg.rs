@@ -69,8 +69,8 @@ impl<R, I: Instruction<Reg = R> + CtrlFlow> Cfg<R, I> {
     fn discover_edges(&mut self) {
         for (idx, stmt) in self.stmts.iter().enumerate() {
             match stmt {
-                Stmt::Label(lbl) => {
-                    self.labels.insert(*lbl, idx);
+                Stmt::Label(_lbl) => {
+                    self.edges.push((idx, idx + 1));
                 }
                 Stmt::Instr(instr) => match instr.ctrl_tx() {
                     CtrlTx::Exit => self.exits.push(idx),
@@ -114,8 +114,12 @@ impl<R, I> Cfg<R, I> {
             .filter_map(move |(from, to)| (*to == node_id).then_some(*from))
     }
 
-    pub fn stmts(&self) -> impl DoubleEndedIterator<Item = &Stmt<I>> + ExactSizeIterator {
-        self.stmts.iter()
+    pub fn stmts(&self) -> &[Stmt<I>] {
+        &self.stmts[..]
+    }
+
+    pub fn take_stmts(self) -> Vec<Stmt<I>> {
+        self.stmts
     }
 
     pub fn exits(&self) -> impl Iterator<Item = StmtIdx> {

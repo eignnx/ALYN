@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 alyn_common = { path = "../alyn_common" }
 priority-queue = "2.0.0"
+derive_more = { version = "2.0.1", features = [
+    "from", "try_from", "debug", "display"
+] }

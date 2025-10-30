@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use alyn_common::names::Tmp;
 
@@ -65,8 +65,8 @@ fn select_assignment<R: Register>(in_use: &BTreeSet<Asn<R>>) -> Asn<R> {
 pub fn color_graph_greedily<R: Register>(
     intfs: &Intfs<R>,
     elimination_ordering: Vec<Tmp>,
-) -> BTreeMap<Tmp, Asn<R>> {
-    let mut assignments = BTreeMap::new();
+) -> HashMap<Tmp, Asn<R>> {
+    let mut assignments = HashMap::new();
     let mut in_use: BTreeSet<Asn<R>> = BTreeSet::new();
 
     for node in elimination_ordering {

@@ -119,6 +119,7 @@ name = "qwordal"
 version = "0.1.0"
 dependencies = [
  "alyn_common",
+ "derive_more",
  "priority-queue",
 ]
 

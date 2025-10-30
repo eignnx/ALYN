@@ -10,7 +10,7 @@ use crate::{
     common::{CtrlFlow, Stg, Stmt},
 };
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 
 pub struct LiveSets<R, I> {
     live_ins: BTreeMap<StmtIdx, BTreeSet<Stg<R>>>,
@@ -33,15 +33,24 @@ where
         }
     }
 
+    pub fn build_from(cfg: &Cfg<R, I>) -> Self {
+        let mut this = Self::new();
+        this.compute_live_ins_live_outs(cfg);
+        this
+    }
+
     const MAX_ITERS: usize = 32;
 
     pub fn compute_live_ins_live_outs(&mut self, cfg: &Cfg<R, I>) {
         //// All function parameters need to be marked as live-in in the entry.
         let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
-        entry_live_ins.extend(cfg.params().map(Stg::Tmp));
+        entry_live_ins
+            .extend(cfg.params().zip(R::GPR_ARG_REGS.iter())
+            .map(|(_, &r)| Stg::Reg(r)));
 
-        // All callee-save (saved) registers need to be marked live-out on exit.
+        // All callee-save (saved) registers need to be marked live-in on entry and live-out on exit.
         let saved_regs = R::GPR_SAVED_REGS.iter().copied().map(Stg::Reg);
+        entry_live_ins.extend(saved_regs.clone());
         for exit_id in cfg.exits() {
             self.live_outs
                 .entry(exit_id)
@@ -53,7 +62,7 @@ where
         let mut uses_buf = BTreeSet::new();
         let mut recompute = false;
         for _ in 0..Self::MAX_ITERS {
-            for (idx, stmt) in cfg.stmts().enumerate().rev() {
+            for (idx, stmt) in cfg.stmts().iter().enumerate().rev() {
                 self.compute_live_outs(idx, cfg, &mut recompute);
                 self.compute_live_ins(idx, stmt, &mut defs_buf, &mut uses_buf, &mut recompute);
             }
@@ -114,37 +123,16 @@ where
 
 impl<R: Copy + Ord, I> LiveSets<R, I> {
     pub fn get_live_ins(&self, id: StmtIdx) -> impl Iterator<Item = Stg<R>> {
-        self.live_ins
-            .get(&id)
-            .map(|set| set.iter())
-            .into_iter()
-            .flatten()
-            .copied()
+        self.live_ins[&id].iter().copied()
     }
 
     pub fn get_live_outs(&self, id: StmtIdx) -> impl Iterator<Item = Stg<R>> {
-        self.live_outs
-            .get(&id)
-            .map(|set| set.iter())
-            .into_iter()
-            .flatten()
-            .copied()
-    }
-
-    pub fn all_tmps(&self) -> impl Iterator<Item = Stg<R>> {
-        let mut tmps = BTreeSet::new();
-        for live_set in self.live_ins.values() {
-            tmps.extend(live_set.iter().copied());
-        }
-        for live_set in self.live_outs.values() {
-            tmps.extend(live_set.iter().copied());
-        }
-        tmps.into_iter()
+        self.live_outs[&id].iter().copied()
     }
 }
 
 impl<R: Register, I: Instruction> LiveSets<R, I> {
-    pub fn display<'a>(&'a self, stmts: &'a [I]) -> impl Display + 'a {
+    pub fn display<'a>(&'a self, stmts: &'a [Stmt<I>]) -> impl Display + 'a {
         DisplayLiveSets {
             live_sets: self,
             stmts,
@@ -154,10 +142,10 @@ impl<R: Register, I: Instruction> LiveSets<R, I> {
 
 struct DisplayLiveSets<'a, R, I> {
     live_sets: &'a LiveSets<R, I>,
-    stmts: &'a [I],
+    stmts: &'a [Stmt<I>],
 }
 
-impl<'a, R, I> Display for DisplayLiveSets<'a, R, I>
+impl<'a, R, I > Display for DisplayLiveSets<'a, R, I>
 where
     R: Register,
     I: Debug,

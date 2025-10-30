@@ -56,7 +56,7 @@ pub trait StgSubst: Instruction {
     /// If a temporary has been assigned to a stack slot, then this method should skip replacement
     /// of the temporary, and instead insert a `Def` or `Use` into the spill set to indicate to
     /// calling code that a spill instruction is needed.
-    fn substitute_tmp_for_reg(
+    fn subst_tmp(
         &mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
         spills: &mut BTreeSet<ToSpill>,

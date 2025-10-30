@@ -107,7 +107,7 @@ pub struct SlotId(pub usize);
 
 /// "Assignment"
 /// The thing to which a temporary is assigned by the end of regalloc.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Asn<R> {
     Reg(R),
     /// A location on the stack relative to the base pointer.
