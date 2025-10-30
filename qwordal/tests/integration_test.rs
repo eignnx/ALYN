@@ -1,8 +1,18 @@
-use std::{collections::{BTreeSet, HashMap}, fmt::Debug};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+};
 
 use alyn_common::names::{Lbl, Tmp};
 use qwordal::{
-    alloc::{color_graph_greedily, InstrWrite, SlotAllocator}, cfg::Cfg, common::{Asn, CtrlFlow, CtrlTx, SlotId, Stg, Stmt}, elim_ord::simplicial_elimination_ordering, intfs::Intfs, liveness::LiveSets, spill::rewrite_with_spills, DefsUses, Instruction, Register, StgSubst, ToSpill
+    DefsUses, Instruction, Register, StgSubst, ToSpill,
+    alloc::{InstrWrite, SlotAllocator, color_graph_greedily},
+    cfg::Cfg,
+    common::{Asn, CtrlFlow, CtrlTx, SlotId, Stg, Stmt},
+    elim_ord::simplicial_elimination_ordering,
+    intfs::Intfs,
+    liveness::LiveSets,
+    spill::rewrite_with_spills,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,9 +85,11 @@ impl Instruction for Instr {
 impl CtrlFlow for Instr {
     fn ctrl_tx(&self) -> CtrlTx {
         match self {
-            Instr::LoadImm(..) | Instr::BinOp(..) | Instr::Move(..)
-            | Instr::StackLoad { .. } | Instr::StackStore { .. }
-                => CtrlTx::Advance,
+            Instr::LoadImm(..)
+            | Instr::BinOp(..)
+            | Instr::Move(..)
+            | Instr::StackLoad { .. }
+            | Instr::StackStore { .. } => CtrlTx::Advance,
             Instr::CmpBr(_, _, lbl) => CtrlTx::Branch(*lbl),
             Instr::Jump(lbl) => CtrlTx::Jump(*lbl),
             Instr::Ret => CtrlTx::Exit,
@@ -103,10 +115,10 @@ impl DefsUses for Instr {
                 uses.extend([*src1, *src2]);
             }
             Instr::Jump(_) | Instr::Ret => {}
-            Instr::StackStore { dst_idx, src } => {
+            Instr::StackStore { src, .. } => {
                 uses.extend([*src]);
             }
-            Instr::StackLoad { dst, src_idx } => {
+            Instr::StackLoad { dst, .. } => {
                 defs.extend([*dst]);
             }
         }
@@ -114,36 +126,41 @@ impl DefsUses for Instr {
 }
 
 impl StgSubst for Instr {
-    fn subst_tmp(
-        &mut self,
+    fn subst_tmp<'edit, 'instr: 'edit>(
+        &'instr mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
-        spills: &mut BTreeSet<ToSpill>,
-    ) {
+    ) -> Vec<ToSpill<'edit>>
+    where
+        'instr: 'edit,
+    {
+        let mut spills = vec![];
+
         match self {
             Instr::LoadImm(dst, _) => {
-                dst.subst_def(assignments, spills);
+                dst.subst_def(assignments, &mut spills);
             }
             Instr::Move(dst, src) => {
-                dst.subst_def(assignments, spills);
-                src.subst_use(assignments, spills);
+                dst.subst_def(assignments, &mut spills);
+                src.subst_use(assignments, &mut spills);
             }
             Instr::BinOp(dst, src1, src2) => {
-                dst.subst_def(assignments, spills);
-                src1.subst_use(assignments, spills);
-                src2.subst_use(assignments, spills);
+                dst.subst_def(assignments, &mut spills);
+                src1.subst_use(assignments, &mut spills);
+                src2.subst_use(assignments, &mut spills);
             }
             Instr::CmpBr(src1, src2, _) => {
-                src1.subst_use(assignments, spills);
-                src2.subst_use(assignments, spills);
+                src1.subst_use(assignments, &mut spills);
+                src2.subst_use(assignments, &mut spills);
             }
             Instr::Jump(_) | Instr::Ret => {}
-            Instr::StackStore { dst_idx, src } => {
-                src.subst_use(assignments, spills);
+            Instr::StackStore { src, .. } => {
+                src.subst_use(assignments, &mut spills);
             }
-            Instr::StackLoad { dst, src_idx } => {
-                dst.subst_def(assignments, spills);
+            Instr::StackLoad { dst, .. } => {
+                dst.subst_def(assignments, &mut spills);
             }
         }
+        spills
     }
 }
 
@@ -153,12 +170,24 @@ impl InstrWrite for Instr {
     }
 
     fn emit_stack_load(dst: Stg<Self::Reg>, src_slot_idx: i32) -> impl Iterator<Item = Stmt<Self>> {
-        [Instr::StackLoad { dst, src_idx: src_slot_idx }.into()].into_iter()
+        [Instr::StackLoad {
+            dst,
+            src_idx: src_slot_idx,
+        }
+        .into()]
+        .into_iter()
     }
 
-    fn emit_stack_store(dst_slot_idx: i32, src: Stg<Self::Reg>)
-    -> impl Iterator<Item = Stmt<Self>> {
-        [Instr::StackStore { dst_idx: dst_slot_idx, src }.into()].into_iter()
+    fn emit_stack_store(
+        dst_slot_idx: i32,
+        src: Stg<Self::Reg>,
+    ) -> impl Iterator<Item = Stmt<Self>> {
+        [Instr::StackStore {
+            dst_idx: dst_slot_idx,
+            src,
+        }
+        .into()]
+        .into_iter()
     }
 }
 
@@ -223,7 +252,8 @@ fn basic_coloring() {
     }
 
     let mut slot_alloc = MySlotAlloc::default();
-    let (new_program, did_spill) = rewrite_with_spills(cfg.take_stmts(), &assignments, &mut slot_alloc);
+    let (new_program, did_spill) =
+        rewrite_with_spills(cfg.take_stmts(), &assignments, &mut slot_alloc);
     dbg!(new_program);
     dbg!(did_spill);
 }

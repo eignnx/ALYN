@@ -44,9 +44,11 @@ where
     pub fn compute_live_ins_live_outs(&mut self, cfg: &Cfg<R, I>) {
         //// All function parameters need to be marked as live-in in the entry.
         let entry_live_ins = self.live_ins.entry(cfg.entry).or_default();
-        entry_live_ins
-            .extend(cfg.params().zip(R::GPR_ARG_REGS.iter())
-            .map(|(_, &r)| Stg::Reg(r)));
+        entry_live_ins.extend(
+            cfg.params()
+                .zip(R::GPR_ARG_REGS.iter())
+                .map(|(_, &r)| Stg::Reg(r)),
+        );
 
         // All callee-save (saved) registers need to be marked live-in on entry and live-out on exit.
         let saved_regs = R::GPR_SAVED_REGS.iter().copied().map(Stg::Reg);
@@ -145,7 +147,7 @@ struct DisplayLiveSets<'a, R, I> {
     stmts: &'a [Stmt<I>],
 }
 
-impl<'a, R, I > Display for DisplayLiveSets<'a, R, I>
+impl<'a, R, I> Display for DisplayLiveSets<'a, R, I>
 where
     R: Register,
     I: Debug,

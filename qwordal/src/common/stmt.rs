@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     fmt::{self, Debug},
 };
 
@@ -64,13 +64,17 @@ impl<I: DefsUses> DefsUses for Stmt<I> {
 }
 
 impl<I: StgSubst> StgSubst for Stmt<I> {
-    fn subst_tmp(
-        &mut self,
+    fn subst_tmp<'edit, 'instr: 'edit>(
+        &'instr mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
-        spills: &mut BTreeSet<ToSpill>,
-    ) {
+    ) -> Vec<ToSpill<'edit>>
+    where
+        'instr: 'edit,
+    {
         if let Self::Instr(instr) = self {
-            instr.subst_tmp(assignments, spills);
+            instr.subst_tmp(assignments)
+        } else {
+            vec![]
         }
     }
 }

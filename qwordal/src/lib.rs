@@ -1,10 +1,6 @@
 #![feature(associated_type_defaults)]
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    fmt::Debug,
-    hash::Hash,
-};
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::common::{Asn, SlotId, Stg};
 use alyn_common::names::Tmp;
@@ -45,9 +41,9 @@ pub trait DefsUses: Instruction {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ToSpill {
-    Def(Tmp, SlotId),
-    Use(Tmp, SlotId),
+pub enum ToSpill<'a> {
+    Def(&'a mut Tmp, SlotId),
+    Use(&'a mut Tmp, SlotId),
 }
 
 pub trait StgSubst: Instruction {
@@ -56,9 +52,10 @@ pub trait StgSubst: Instruction {
     /// If a temporary has been assigned to a stack slot, then this method should skip replacement
     /// of the temporary, and instead insert a `Def` or `Use` into the spill set to indicate to
     /// calling code that a spill instruction is needed.
-    fn subst_tmp(
-        &mut self,
+    fn subst_tmp<'edit, 'instr: 'edit>(
+        &'instr mut self,
         assignments: &HashMap<Tmp, Asn<Self::Reg>>,
-        spills: &mut BTreeSet<ToSpill>,
-    );
+    ) -> Vec<ToSpill<'edit>>
+    where
+        'instr: 'edit;
 }

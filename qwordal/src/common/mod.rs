@@ -40,31 +40,40 @@ impl<R> From<Tmp> for Stg<R> {
 }
 
 impl<R: Register> Stg<R> {
-    pub fn subst_def(
-        &mut self,
+    pub fn subst_def<'instr, 'buf>(
+        &'instr mut self,
         assignments: &HashMap<Tmp, Asn<R>>,
-        spills: &mut BTreeSet<ToSpill>,
-    ) {
-        if let Stg::Tmp(tmp) = self {
-            match assignments[&*tmp] {
-                Asn::Reg(reg) => *self = Stg::Reg(reg),
-                Asn::Slot(slot_id) => {
-                    spills.insert(ToSpill::Def(*tmp, slot_id));
-                }
+        spills: &'buf mut Vec<ToSpill<'instr>>,
+    ) where
+        'instr: 'buf,
+    {
+        let Stg::Tmp(tmp_cpy) = *self else { return };
+        match assignments[&tmp_cpy] {
+            Asn::Reg(reg) => *self = Stg::Reg(reg),
+            Asn::Slot(slot_id) => {
+                let Stg::Tmp(tmp_ref) = self else {
+                    unreachable!()
+                };
+                spills.extend([ToSpill::Def(tmp_ref, slot_id)]);
             }
         }
     }
-    pub fn subst_use(
-        &mut self,
+
+    pub fn subst_use<'instr, 'buf>(
+        &'instr mut self,
         assignments: &HashMap<Tmp, Asn<R>>,
-        spills: &mut BTreeSet<ToSpill>,
-    ) {
-        if let Stg::Tmp(tmp) = self {
-            match assignments[&*tmp] {
-                Asn::Reg(reg) => *self = Stg::Reg(reg),
-                Asn::Slot(slot_id) => {
-                    spills.insert(ToSpill::Use(*tmp, slot_id));
-                }
+        spills: &'buf mut Vec<ToSpill<'instr>>,
+    ) where
+        'instr: 'buf,
+    {
+        let Stg::Tmp(tmp_cpy) = *self else { return };
+        match assignments[&tmp_cpy] {
+            Asn::Reg(reg) => *self = Stg::Reg(reg),
+            Asn::Slot(slot_id) => {
+                let Stg::Tmp(tmp_ref) = self else {
+                    unreachable!()
+                };
+                spills.extend([ToSpill::Use(tmp_ref, slot_id)]);
             }
         }
     }
