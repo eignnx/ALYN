@@ -1,11 +1,11 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 use alyn_common::names::Tmp;
 
 use crate::{
     DefsUses, Instruction, Register, StgSubst, ToSpill,
     alloc::{InstrWrite, SlotAllocator},
-    common::{Asn, SlotId, Stg, Stmt},
+    common::{Asn, SlotId, Stmt},
 };
 
 pub fn rewrite_with_spills<I, It>(

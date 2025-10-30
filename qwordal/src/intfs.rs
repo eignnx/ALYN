@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt::{Debug, Display},
+    fmt::Debug,
 };
 
 use crate::{DefsUses, Instruction, cfg::Cfg, common::Stg, liveness::LiveSets};

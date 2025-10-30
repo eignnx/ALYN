@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    fmt::Debug,
-};
+use std::{collections::HashMap, fmt::Debug};
 
 mod stmt;
 
