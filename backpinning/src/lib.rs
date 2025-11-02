@@ -1,27 +1,8 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alyn_common::names::{Lbl, Tmp};
+use alyn_common::names::Tmp;
+use regalloc_common::{asn::Asn, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
 
-#[derive(Debug, Clone)]
-pub enum Stmt<I> {
-    Instr(I),
-    Label(Lbl),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SlotId(i32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Stg<R> {
-    Tmp(Tmp),
-    Reg(R),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Asn<R> {
-    Reg(R),
-    Slot(SlotId),
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Access<R> {
@@ -29,34 +10,15 @@ pub enum Access<R> {
     Write(Stg<R>),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum CtrlFlow {
-    Exit,
-    Advance,
-    Jump(Lbl),
-    CondBranch(Lbl),
-}
-
-pub trait Instruction: Clone + Debug {
-    type Reg;
+pub trait Accesses: Instruction {
     fn accesses(&self) -> Vec<Access<Self::Reg>>;
-    fn ctrl_flow(&self) -> CtrlFlow;
 }
 
-impl<I: Instruction> Instruction for Stmt<I> {
-    type Reg = I::Reg;
-
+impl<I: Accesses> Accesses for Stmt<I> {
     fn accesses(&self) -> Vec<Access<Self::Reg>> {
         match self {
             Stmt::Instr(instr) => instr.accesses(),
             Stmt::Label(_) => vec![],
-        }
-    }
-
-    fn ctrl_flow(&self) -> CtrlFlow {
-        match self {
-            Stmt::Instr(instr) => instr.ctrl_flow(),
-            Stmt::Label(_) => CtrlFlow::Advance,
         }
     }
 }
@@ -73,7 +35,7 @@ impl LiveRange {
     }
 }
 
-pub fn compute_live_ranges<R, I: Instruction<Reg = R>>(
+pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     stmts: &[Stmt<I>],
 ) -> HashMap<Tmp, Vec<LiveRange>> {
     let mut live_ranges = HashMap::<Tmp, Vec<LiveRange>>::new();
@@ -103,7 +65,7 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R>>(
     live_ranges
 }
 
-pub fn linear_scan<R, I: Instruction<Reg = R>>(stmts: Vec<Stmt<I>>) -> Vec<Stmt<I>> {
+pub fn linear_scan<R, I: Instruction<Reg = R> + GetCtrlFlow>(stmts: Vec<Stmt<I>>) -> Vec<Stmt<I>> {
     let mut working_set = HashMap::<Tmp, Asn<R>>::new();
     let mut new_program = Vec::new();
 
@@ -112,7 +74,8 @@ pub fn linear_scan<R, I: Instruction<Reg = R>>(stmts: Vec<Stmt<I>>) -> Vec<Stmt<
             CtrlFlow::Exit => todo!(),
             CtrlFlow::Advance => todo!(),
             CtrlFlow::Jump(lbl) => todo!(),
-            CtrlFlow::CondBranch(lbl) => todo!(),
+            CtrlFlow::Branch(lbl) => todo!(),
+            CtrlFlow::Switch(_) => todo!(),
         }
     }
 
@@ -146,11 +109,20 @@ pub fn print_program_with_live_ranges<I: Instruction>(stmts: &[Stmt<I>], live_ra
 
 #[cfg(test)]
 mod tests {
+    use regalloc_common::{ctrl_flow::GetCtrlFlow, Register};
+
     use super::*;
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
     enum Reg {
         T0, T1, T2,
+    }
+
+    impl Register for Reg {
+        const GPRS: &'static [Self] = &[];
+        const GPR_SAVED_REGS: &'static [Self] = &[];
+        const GPR_TEMP_REGS: &'static [Self] = &[];
+        const GPR_ARG_REGS: &'static [Self] = &[];
     }
 
     #[derive(Debug, Clone)]
@@ -161,6 +133,9 @@ mod tests {
 
     impl Instruction for Instr {
         type Reg = Reg;
+    }
+
+    impl Accesses for Instr {
 
         fn accesses(&self) -> Vec<Access<Self::Reg>> {
             match self {
@@ -168,11 +143,11 @@ mod tests {
                 Instr::Use(src) => vec![Access::Read(*src)],
             }
         }
+    }
 
-        fn ctrl_flow(&self) -> CtrlFlow {
-            match self {
-                _ => CtrlFlow::Advance,
-            }
+    impl GetCtrlFlow for Instr {
+        fn ctrl_flow(&self) -> regalloc_common::ctrl_flow::CtrlFlow {
+            todo!()
         }
     }
 

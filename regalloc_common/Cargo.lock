@@ -17,14 +17,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backpinning"
-version = "0.1.0"
-dependencies = [
- "alyn_common",
- "regalloc_common",
-]
-
-[[package]]
 name = "derive_more"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
