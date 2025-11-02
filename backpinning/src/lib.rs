@@ -39,16 +39,16 @@ pub enum CtrlFlow {
 
 pub trait Instruction: Clone + Debug {
     type Reg;
-    fn temporaries(&self) -> Vec<Access<Self::Reg>>;
+    fn accesses(&self) -> Vec<Access<Self::Reg>>;
     fn ctrl_flow(&self) -> CtrlFlow;
 }
 
 impl<I: Instruction> Instruction for Stmt<I> {
     type Reg = I::Reg;
 
-    fn temporaries(&self) -> Vec<Access<Self::Reg>> {
+    fn accesses(&self) -> Vec<Access<Self::Reg>> {
         match self {
-            Stmt::Instr(instr) => instr.temporaries(),
+            Stmt::Instr(instr) => instr.accesses(),
             Stmt::Label(_) => vec![],
         }
     }
@@ -81,7 +81,7 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R>>(
 
     for (i, stmt) in stmts.iter().enumerate().rev() {
         let Stmt::Instr(instr) = stmt else { continue };
-        for access in instr.temporaries() {
+        for access in instr.accesses() {
             match access {
                 Access::Read(Stg::Tmp(tmp)) => if !last_use.contains_key(&tmp) {
                     last_use.insert(tmp, i);
@@ -162,7 +162,7 @@ mod tests {
     impl Instruction for Instr {
         type Reg = Reg;
 
-        fn temporaries(&self) -> Vec<Access<Self::Reg>> {
+        fn accesses(&self) -> Vec<Access<Self::Reg>> {
             match self {
                 Instr::Def(dst) => vec![Access::Write(*dst)],
                 Instr::Use(src) => vec![Access::Read(*src)],
