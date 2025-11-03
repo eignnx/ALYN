@@ -9,6 +9,12 @@ pub enum Stg<R> {
     Reg(R),
 }
 
+impl<R> From<&str> for Stg<R> {
+    fn from(name: &str) -> Self {
+        Stg::Tmp(Tmp::from(name))
+    }
+}
+
 impl<R: Debug> Debug for Stg<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

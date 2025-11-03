@@ -90,45 +90,48 @@ pub fn print_program_with_live_ranges<I: Instruction>(stmts: &[Stmt<I>], live_ra
 
     let numcol_width = stmts.len().ilog10() as usize + 1;
 
-    print!("{:width$}", "", width=numcol_width + 2);
     for (tmp, len) in &tmps {
         print!("{:^width$} ", format!("{tmp:?}"), width=len);
     }
-    println!();
+    println!("{:width$}", "", width=numcol_width + 2);
     for (i, stmt) in stmts.iter().enumerate() {
         let mut draw_x_guide = false;
 
-        print!("{i:width$}: ", width=numcol_width);
         for (tmp, len) in &tmps {
             let ranges = &live_ranges[tmp];
             let contained = ranges.iter().any(|r| r.contains(i));
             if ranges.iter().any(|r| r.begin == i) {
                 draw_x_guide = true;
-                print!("{:┈<width$}┈", '╥', width=len);
+                print!("{:┄<width$}┄", '𜸛', width=len);
             } else if ranges.iter().any(|r| r.end == i) {
                 draw_x_guide = true;
-                print!("{:┈<width$}┈", '╨', width=len);
+                print!("{:┄<width$}┄", '𜸽', width=len);
             } else if draw_x_guide {
                 if contained {
-                    print!("{:┈<width$}┈", '╫', width=len);
+                    print!("{:┄<width$}┄", '𜸩', width=len);
                 } else {
-                    print!("{:┈<width$}┈", '┈', width=len);
+                    print!("{:┄<width$}┄", '┄', width=len);
                 }
             } else {
                 if contained {
-                    print!("{: <width$} ", '║', width=len);
+                    print!("{: <width$} ", '𜸩', width=len);
                 } else {
                     print!("{: <width$} ", '┊', width=len);
                 }
             }
         }
-        println!("  {stmt:?}");
+        if draw_x_guide {
+            print!("┈┼ ");
+        } else {
+            print!(" │ ");
+        }
+        println!("{i:0width$}: {stmt:?}", width=numcol_width);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use regalloc_common::{ctrl_flow::GetCtrlFlow, Register};
+    use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, Register};
 
     use super::*;
 
@@ -148,13 +151,15 @@ mod tests {
     enum Instr {
         Def(Stg<Reg>),
         Use(Stg<Reg>),
+        Move(Stg<Reg>, Stg<Reg>),
     }
 
     impl Debug for Instr {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Self::Def(x) => write!(f, "{x:?} ← ⋯"),
-                Self::Use(x) => write!(f, "⋯ ← {x:?}"),
+                Self::Def(x) => write!(f, "{x:?} ← 𜱪 "),
+                Self::Use(x) => write!(f, "𜱪  ← {x:?}"),
+                Self::Move(dst, src) => write!(f, "{dst:?} ← {src:?}"),
             }
         }
     }
@@ -164,17 +169,17 @@ mod tests {
     }
 
     impl Accesses for Instr {
-
         fn accesses(&self) -> Vec<Access<Self::Reg>> {
             match self {
                 Instr::Def(dst) => vec![Access::Write(*dst)],
                 Instr::Use(src) => vec![Access::Read(*src)],
+                Instr::Move(dst, src) => vec![Access::Write(*dst), Access::Read(*src)],
             }
         }
     }
 
     impl GetCtrlFlow for Instr {
-        fn ctrl_flow(&self) -> regalloc_common::ctrl_flow::CtrlFlow {
+        fn ctrl_flow(&self) -> CtrlFlow {
             todo!()
         }
     }
@@ -186,22 +191,20 @@ mod tests {
 
         let stmts = vec![
             S::Label("test".into()),
-            S::Instr(Def(Stg::Tmp("x".into()))),
-            S::Instr(Def(Stg::Tmp("y".into()))),
-            S::Instr(Use(Stg::Tmp("x".into()))),
-            S::Instr(Use(Stg::Tmp("y".into()))),
-            S::Instr(Def(Stg::Tmp("z".into()))),
-            S::Instr(Use(Stg::Tmp("y".into()))),
-            S::Instr(Use(Stg::Tmp("z".into()))),
+            S::Instr(Def("x".into())),
+            S::Instr(Def("y".into())),
+            S::Instr(Use("x".into())),
+            S::Instr(Use("y".into())),
+            S::Instr(Def("z".into())),
+            S::Instr(Use("y".into())),
+            S::Instr(Use("z".into())),
 
-            S::Instr(Def(Stg::Tmp("w".into()))),
-            S::Instr(Use(Stg::Tmp("z".into()))),
-            S::Instr(Use(Stg::Tmp("w".into()))),
+            S::Instr(Move("w".into(), "z".into())),
+            S::Instr(Use("w".into())),
 
-            S::Instr(Def(Stg::Tmp("x".into()))),
-            S::Instr(Use(Stg::Tmp("x".into()))),
+            S::Instr(Move("x".into(), "w".into())),
+            S::Instr(Use("x".into())),
         ];
-
 
         let live_ranges = compute_live_ranges(&stmts[..]);
         print_program_with_live_ranges(&stmts[..], &live_ranges);
