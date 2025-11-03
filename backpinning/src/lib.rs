@@ -191,7 +191,11 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
 
                 match phase {
                     InstrExePhase::Before => write!(f, "╫┈╮")?,
-                    InstrExePhase::During => write!(f, "╫┈{i:0width$}: {stmt:?}", width=numcol_width)?,
+                    InstrExePhase::During => if draw_x_guide {
+                        write!(f, "╫┈{i:0width$}: {stmt:?}", width=numcol_width)?;
+                    } else {
+                        write!(f, "╟┈{i:0width$}: {stmt:?}", width=numcol_width)?;
+                    },
                     InstrExePhase::After  => write!(f, "╫┈╯")?,
                 }
                 if phase == InstrExePhase::During {
