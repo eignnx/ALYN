@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::{self, Debug, Display}};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{asn::Asn, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
@@ -82,50 +82,64 @@ pub fn linear_scan<R, I: Instruction<Reg = R> + GetCtrlFlow>(stmts: Vec<Stmt<I>>
     new_program
 }
 
-pub fn print_program_with_live_ranges<I: Instruction>(stmts: &[Stmt<I>], live_ranges: &HashMap<Tmp, Vec<LiveRange>>) {
-    let mut tmps = live_ranges.keys()
-        .map(|t| (*t, format!("{t:?}").len()))
-        .collect::<Vec<_>>();
-    tmps.sort_unstable();
+pub struct DisplayLiveRanges<'a, I> {
+    stmts: &'a [Stmt<I>],
+    live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>,
+}
 
-    let numcol_width = stmts.len().ilog10() as usize + 1;
-
-    for (tmp, len) in &tmps {
-        print!("{:^width$} ", format!("{tmp:?}"), width=len);
+impl<'a, I> DisplayLiveRanges<'a, I> {
+    pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>) -> Self {
+        Self { stmts, live_ranges }
     }
-    println!("{:width$}", "", width=numcol_width + 2);
-    for (i, stmt) in stmts.iter().enumerate() {
-        let mut draw_x_guide = false;
+}
+
+impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut tmps = self.live_ranges.keys()
+            .map(|t| (*t, format!("{t:?}").len()))
+            .collect::<Vec<_>>();
+        tmps.sort_unstable();
+
+        let numcol_width = self.stmts.len().ilog10() as usize + 1;
 
         for (tmp, len) in &tmps {
-            let ranges = &live_ranges[tmp];
-            let contained = ranges.iter().any(|r| r.contains(i));
-            if ranges.iter().any(|r| r.begin == i) {
-                draw_x_guide = true;
-                print!("{:┄<width$}┄", '𜸛', width=len);
-            } else if ranges.iter().any(|r| r.end == i) {
-                draw_x_guide = true;
-                print!("{:┄<width$}┄", '𜸽', width=len);
-            } else if draw_x_guide {
-                if contained {
-                    print!("{:┄<width$}┄", '𜸩', width=len);
+            write!(f, "{:^width$} ", format!("{tmp:?}"), width=len)?;
+        }
+        writeln!(f, "{:width$}", "", width=numcol_width + 2)?;
+        for (i, stmt) in self.stmts.iter().enumerate() {
+            let mut draw_x_guide = false;
+
+            for (tmp, len) in &tmps {
+                let ranges = &self.live_ranges[tmp];
+                let contained = ranges.iter().any(|r| r.contains(i));
+                if ranges.iter().any(|r| r.begin == i) {
+                    draw_x_guide = true;
+                    write!(f, "{:┄<width$}┄", '𜸛', width=len)?;
+                } else if ranges.iter().any(|r| r.end == i) {
+                    draw_x_guide = true;
+                    write!(f, "{:┄<width$}┄", '𜸽', width=len)?;
+                } else if draw_x_guide {
+                    if contained {
+                        write!(f, "{:┄<width$}┄", '𜸩', width=len)?;
+                    } else {
+                        write!(f, "{:┄<width$}┄", '┄', width=len)?;
+                    }
                 } else {
-                    print!("{:┄<width$}┄", '┄', width=len);
-                }
-            } else {
-                if contained {
-                    print!("{: <width$} ", '𜸩', width=len);
-                } else {
-                    print!("{: <width$} ", '┊', width=len);
+                    if contained {
+                        write!(f, "{: <width$} ", '𜸩', width=len)?;
+                    } else {
+                        write!(f, "{: <width$} ", '┊', width=len)?;
+                    }
                 }
             }
+            if draw_x_guide {
+                write!(f, "┈┼ ")?;
+            } else {
+                write!(f, " │ ")?;
+            }
+            writeln!(f, "{i:0width$}: {stmt:?}", width=numcol_width)?;
         }
-        if draw_x_guide {
-            print!("┈┼ ");
-        } else {
-            print!(" │ ");
-        }
-        println!("{i:0width$}: {stmt:?}", width=numcol_width);
+        Ok(())
     }
 }
 
@@ -192,11 +206,11 @@ mod tests {
         let stmts = vec![
             S::Label("test".into()),
             S::Instr(Def("x".into())),
-            S::Instr(Def("y".into())),
+            S::Instr(Def("yeet".into())),
             S::Instr(Use("x".into())),
-            S::Instr(Use("y".into())),
+            S::Instr(Use("yeet".into())),
             S::Instr(Def("z".into())),
-            S::Instr(Use("y".into())),
+            S::Instr(Use("yeet".into())),
             S::Instr(Use("z".into())),
 
             S::Instr(Move("w".into(), "z".into())),
@@ -207,8 +221,6 @@ mod tests {
         ];
 
         let live_ranges = compute_live_ranges(&stmts[..]);
-        print_program_with_live_ranges(&stmts[..], &live_ranges);
-
-        println!("{live_ranges:?}");
+        println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
     }
 }
