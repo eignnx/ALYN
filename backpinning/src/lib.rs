@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::{self, Debug, Display}};
+use std::{cmp::Ordering, collections::HashMap, fmt::{self, Debug, Display}};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{asn::Asn, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
@@ -6,8 +6,8 @@ use regalloc_common::{asn::Asn, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, st
 
 #[derive(Debug, Clone, Copy)]
 pub enum Access<R> {
-    Read(Stg<R>),
-    Write(Stg<R>),
+    Read(Stg<R>, InstrExePhase),
+    Write(Stg<R>, InstrExePhase),
 }
 
 pub trait Accesses: Instruction {
@@ -23,15 +23,39 @@ impl<I: Accesses> Accesses for Stmt<I> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum InstrExePhase {
+    Before,
+    During,
+    After,
+}
+
+impl InstrExePhase {
+    pub const PHASES: [Self; 3] = [Self::Before, Self::During, Self::After];
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PrgPt {
+    stmt_idx: usize,
+    phase: InstrExePhase,
+}
+
+impl PrgPt {
+    pub fn new(stmt_idx: usize, phase: InstrExePhase) -> Self {
+        Self { stmt_idx, phase }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LiveRange {
-    begin: usize,
-    end: usize,
+    begin: PrgPt,
+    end: PrgPt,
 }
 
 impl LiveRange {
-    pub fn contains(&self, stmt_idx: usize) -> bool {
-        self.begin <= stmt_idx && stmt_idx <= self.end
+    pub fn contains(&self, pt: PrgPt) -> bool {
+        self.begin <= pt && pt <= self.end
     }
 }
 
@@ -39,25 +63,25 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     stmts: &[Stmt<I>],
 ) -> HashMap<Tmp, Vec<LiveRange>> {
     let mut live_ranges = HashMap::<Tmp, Vec<LiveRange>>::new();
-    let mut last_use = HashMap::<Tmp, usize>::new();
+    let mut last_use = HashMap::<Tmp, PrgPt>::new();
 
     for (i, stmt) in stmts.iter().enumerate().rev() {
         let Stmt::Instr(instr) = stmt else { continue };
         for access in instr.accesses() {
             match access {
-                Access::Read(Stg::Tmp(tmp)) => if !last_use.contains_key(&tmp) {
-                    last_use.insert(tmp, i);
+                Access::Read(Stg::Tmp(tmp), phase) => if !last_use.contains_key(&tmp) {
+                    last_use.insert(tmp, PrgPt::new(i, phase));
                 }
-                Access::Write(Stg::Tmp(tmp)) => {
+                Access::Write(Stg::Tmp(tmp), phase) => {
                     let Some(end) = last_use.remove(&tmp) else {
                         continue; // Never read from, so just ignore.
                     };
                     live_ranges.entry(tmp).or_default().push(LiveRange {
-                        begin: i,
+                        begin: PrgPt::new(i, phase),
                         end,
                     });
                 }
-                Access::Read(Stg::Reg(_)) | Access::Write(Stg::Reg(_)) => todo!(),
+                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => todo!(),
             }
         }
     }
@@ -73,8 +97,8 @@ pub fn linear_scan<R, I: Instruction<Reg = R> + GetCtrlFlow>(stmts: Vec<Stmt<I>>
         match stmt.ctrl_flow() {
             CtrlFlow::Exit => todo!(),
             CtrlFlow::Advance => todo!(),
-            CtrlFlow::Jump(lbl) => todo!(),
-            CtrlFlow::Branch(lbl) => todo!(),
+            CtrlFlow::Jump(_) => todo!(),
+            CtrlFlow::Branch(_) => todo!(),
             CtrlFlow::Switch(_) => todo!(),
         }
     }
@@ -102,43 +126,99 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
 
         let numcol_width = self.stmts.len().ilog10() as usize + 1;
 
-        for (tmp, len) in &tmps {
-            write!(f, "{:^width$} ", format!("{tmp:?}"), width=len)?;
+        write!(f, "  ")?;
+        for (iter, (tmp, len)) in tmps.iter().enumerate() {
+            if iter != 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{:<width$}", format!("{tmp:?}"), width=len)?;
         }
-        writeln!(f, "{:width$}", "", width=numcol_width + 2)?;
-        for (i, stmt) in self.stmts.iter().enumerate() {
-            let mut draw_x_guide = false;
+        writeln!(f, "   ")?;
 
-            for (tmp, len) in &tmps {
-                let ranges = &self.live_ranges[tmp];
-                let contained = ranges.iter().any(|r| r.contains(i));
-                if ranges.iter().any(|r| r.begin == i) {
-                    draw_x_guide = true;
-                    write!(f, "{:┄<width$}┄", '𜸛', width=len)?;
-                } else if ranges.iter().any(|r| r.end == i) {
-                    draw_x_guide = true;
-                    write!(f, "{:┄<width$}┄", '𜸽', width=len)?;
-                } else if draw_x_guide {
-                    if contained {
-                        write!(f, "{:┄<width$}┄", '𜸩', width=len)?;
+        write!(f, "╔═")?;
+        for (iter, (_, len)) in tmps.iter().enumerate() {
+            if iter != 0 {
+                write!(f, "═")?;
+            }
+            write!(f, "{:═<width$}", "╪", width=len)?;
+        }
+        writeln!(f, "══╗")?;
+
+        for (i, stmt) in self.stmts.iter().enumerate() {
+            for phase in InstrExePhase::PHASES {
+                let pt = PrgPt::new(i, phase);
+
+                if phase != InstrExePhase::During && tmps.iter().all(|(tmp, _)| {
+                    let ranges = &self.live_ranges[tmp];
+                    ranges.iter().all(|r| r.begin != pt && r.end != pt)
+                }) {
+                    continue;
+                }
+
+                write!(f, "║ ")?;
+
+                let mut draw_x_guide = false;
+
+                for (tmp, len) in &tmps {
+                    let ranges = &self.live_ranges[tmp];
+                    let contained = ranges.iter().any(|r| r.contains(pt));
+                    if ranges.iter().any(|r| r.begin == pt) {
+                        draw_x_guide = true;
+                        write!(f, "{:┄<width$}┄", '𜸛', width=len)?;
+                    } else if ranges.iter().any(|r| r.end == pt) {
+                        draw_x_guide = true;
+                        write!(f, "{:┄<width$}┄", '𜸽', width=len)?;
+                    } else if draw_x_guide {
+                        if contained {
+                            write!(f, "{:┄<width$}┄", '𜸩', width=len)?;
+                        } else {
+                            write!(f, "{:┄<width$}┄", '┄', width=len)?;
+                        }
                     } else {
-                        write!(f, "{:┄<width$}┄", '┄', width=len)?;
-                    }
-                } else {
-                    if contained {
-                        write!(f, "{: <width$} ", '𜸩', width=len)?;
-                    } else {
-                        write!(f, "{: <width$} ", '┊', width=len)?;
+                        if contained {
+                            write!(f, "{: <width$} ", '𜸩', width=len)?;
+                        } else {
+                            write!(f, "{: <width$} ", '┊', width=len)?;
+                        }
                     }
                 }
+
+                if draw_x_guide {
+                    write!(f, "┈")?;
+                } else {
+                    write!(f, " ")?;
+                }
+
+                match phase {
+                    InstrExePhase::Before => write!(f, "╫┈╮")?,
+                    InstrExePhase::During => write!(f, "╫┈{i:0width$}: {stmt:?}", width=numcol_width)?,
+                    InstrExePhase::After  => write!(f, "╫┈╯")?,
+                }
+                if phase == InstrExePhase::During {
+                }
+
+                writeln!(f)?;
             }
-            if draw_x_guide {
-                write!(f, "┈┼ ")?;
-            } else {
-                write!(f, " │ ")?;
-            }
-            writeln!(f, "{i:0width$}: {stmt:?}", width=numcol_width)?;
         }
+
+        write!(f, "╚═")?;
+        for (iter, (_, len)) in tmps.iter().enumerate() {
+            if iter != 0 {
+                write!(f, "═")?;
+            }
+            write!(f, "{:═<width$}", "╪", width=len)?;
+        }
+        writeln!(f, "══╝")?;
+
+        write!(f, "  ")?;
+        for (iter, (tmp, len)) in tmps.iter().enumerate() {
+            if iter != 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{:<width$}", format!("{tmp:?}"), width=len)?;
+        }
+        writeln!(f, "   ")?;
+
         Ok(())
     }
 }
@@ -185,9 +265,12 @@ mod tests {
     impl Accesses for Instr {
         fn accesses(&self) -> Vec<Access<Self::Reg>> {
             match self {
-                Instr::Def(dst) => vec![Access::Write(*dst)],
-                Instr::Use(src) => vec![Access::Read(*src)],
-                Instr::Move(dst, src) => vec![Access::Write(*dst), Access::Read(*src)],
+                Instr::Def(dst) => vec![Access::Write(*dst, InstrExePhase::After)],
+                Instr::Use(src) => vec![Access::Read(*src, InstrExePhase::During)],
+                Instr::Move(dst, src) => vec![
+                    Access::Write(*dst, InstrExePhase::After),
+                    Access::Read(*src, InstrExePhase::Before),
+                ],
             }
         }
     }
