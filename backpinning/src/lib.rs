@@ -88,19 +88,38 @@ pub fn print_program_with_live_ranges<I: Instruction>(stmts: &[Stmt<I>], live_ra
         .collect::<Vec<_>>();
     tmps.sort_unstable();
 
-    print!("    ");
+    let numcol_width = stmts.len().ilog10() as usize + 1;
+
+    print!("{:width$}", "", width=numcol_width + 2);
     for (tmp, len) in &tmps {
         print!("{:^width$} ", format!("{tmp:?}"), width=len);
     }
     println!();
     for (i, stmt) in stmts.iter().enumerate() {
-        print!("{i:02}: ");
+        let mut draw_x_guide = false;
+
+        print!("{i:width$}: ", width=numcol_width);
         for (tmp, len) in &tmps {
             let ranges = &live_ranges[tmp];
-            if ranges.iter().any(|r| r.contains(i)) {
-                print!("{:^width$} ", '|', width=len);
+            let contained = ranges.iter().any(|r| r.contains(i));
+            if ranges.iter().any(|r| r.begin == i) {
+                draw_x_guide = true;
+                print!("{:┈<width$}┈", '╥', width=len);
+            } else if ranges.iter().any(|r| r.end == i) {
+                draw_x_guide = true;
+                print!("{:┈<width$}┈", '╨', width=len);
+            } else if draw_x_guide {
+                if contained {
+                    print!("{:┈<width$}┈", '╫', width=len);
+                } else {
+                    print!("{:┈<width$}┈", '┈', width=len);
+                }
             } else {
-                print!("{:^width$} ", ' ', width=len);
+                if contained {
+                    print!("{: <width$} ", '║', width=len);
+                } else {
+                    print!("{: <width$} ", '┊', width=len);
+                }
             }
         }
         println!("  {stmt:?}");
@@ -125,10 +144,19 @@ mod tests {
         const GPR_ARG_REGS: &'static [Self] = &[];
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
     enum Instr {
         Def(Stg<Reg>),
         Use(Stg<Reg>),
+    }
+
+    impl Debug for Instr {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Def(x) => write!(f, "{x:?} ← ⋯"),
+                Self::Use(x) => write!(f, "⋯ ← {x:?}"),
+            }
+        }
     }
 
     impl Instruction for Instr {
@@ -166,9 +194,9 @@ mod tests {
             S::Instr(Use(Stg::Tmp("y".into()))),
             S::Instr(Use(Stg::Tmp("z".into()))),
 
-            S::Instr(Def(Stg::Tmp("qwerty".into()))),
+            S::Instr(Def(Stg::Tmp("w".into()))),
             S::Instr(Use(Stg::Tmp("z".into()))),
-            S::Instr(Use(Stg::Tmp("qwerty".into()))),
+            S::Instr(Use(Stg::Tmp("w".into()))),
 
             S::Instr(Def(Stg::Tmp("x".into()))),
             S::Instr(Use(Stg::Tmp("x".into()))),
