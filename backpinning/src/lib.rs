@@ -25,13 +25,12 @@ impl<I: Accesses> Accesses for Stmt<I> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstrExePhase {
-    Before,
-    During,
-    After,
+    ReadArgs,
+    WriteBack,
 }
 
 impl InstrExePhase {
-    pub const PHASES: [Self; 3] = [Self::Before, Self::During, Self::After];
+    pub const PHASES: [Self; 2] = [Self::ReadArgs, Self::WriteBack];
 }
 
 
@@ -148,7 +147,7 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
             for phase in InstrExePhase::PHASES {
                 let pt = PrgPt::new(i, phase);
 
-                if phase != InstrExePhase::During && tmps.iter().all(|(tmp, _)| {
+                if phase != InstrExePhase::ReadArgs && tmps.iter().all(|(tmp, _)| {
                     let ranges = &self.live_ranges[tmp];
                     ranges.iter().all(|r| r.begin != pt && r.end != pt)
                 }) {
@@ -190,15 +189,12 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                 }
 
                 match phase {
-                    InstrExePhase::Before => write!(f, "╫┈╮")?,
-                    InstrExePhase::During => if draw_x_guide {
+                    InstrExePhase::ReadArgs => if draw_x_guide {
                         write!(f, "╫┈{i:0width$}: {stmt:?}", width=numcol_width)?;
                     } else {
                         write!(f, "╟┈{i:0width$}: {stmt:?}", width=numcol_width)?;
                     },
-                    InstrExePhase::After  => write!(f, "╫┈╯")?,
-                }
-                if phase == InstrExePhase::During {
+                    InstrExePhase::WriteBack  => write!(f, "╫┈╯")?,
                 }
 
                 writeln!(f)?;
@@ -269,11 +265,11 @@ mod tests {
     impl Accesses for Instr {
         fn accesses(&self) -> Vec<Access<Self::Reg>> {
             match self {
-                Instr::Def(dst) => vec![Access::Write(*dst, InstrExePhase::After)],
-                Instr::Use(src) => vec![Access::Read(*src, InstrExePhase::During)],
+                Instr::Def(dst) => vec![Access::Write(*dst, InstrExePhase::WriteBack)],
+                Instr::Use(src) => vec![Access::Read(*src, InstrExePhase::ReadArgs)],
                 Instr::Move(dst, src) => vec![
-                    Access::Write(*dst, InstrExePhase::After),
-                    Access::Read(*src, InstrExePhase::Before),
+                    Access::Write(*dst, InstrExePhase::WriteBack),
+                    Access::Read(*src, InstrExePhase::ReadArgs),
                 ],
             }
         }

@@ -4,7 +4,7 @@ A register allocator based on [Traub, Halloway, and Smith's *Second-chance Binpa
 ## Interval Diagram
 Here is an example of a generated interval diagram. The instructions of the program text are shown on the right-hand side of the diagram, so it should be read top-to-bottom.
 
-There are (currently) three phases to an instruction's execution: before, during, and after. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `during` phase. A rounded corner (`┈╮`) drawn out of the top of an instruction is for the `before` phase, and out of the bottom (`┈╯`) is for the `after` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
+There are (currently) two phases to an instruction's execution: `ReadArgs` and `WriteBack`. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `ReadArgs` phase. A rounded corner (`┈╯`) drawn out of the bottom is for the `WriteBack` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
 
 ```
   %w %x %yeet %z
@@ -20,12 +20,10 @@ There are (currently) three phases to an instruction's execution: before, during
 ║ ┊  ┊  𜸩     𜸛┄┄┈╫┈╯
 ║ ┊  ┊  𜸽┄┄┄┄┄𜸩┄┄┈╫┈06: 𜱪  ← %yeet
 ║ ┊  ┊  ┊     𜸩   ╟┈07: 𜱪  ← %z
-║ ┊  ┊  ┊     𜸽┄┄┈╫┈╮
-║ ┊  ┊  ┊     ┊   ╟┈08: %w ← %z
+║ ┊  ┊  ┊     𜸽┄┄┈╫┈08: %w ← %z
 ║ 𜸛┄┄┄┄┄┄┄┄┄┄┄┄┄┄┈╫┈╯
 ║ 𜸩  ┊  ┊     ┊   ╟┈09: 𜱪  ← %w
-║ 𜸽┄┄┄┄┄┄┄┄┄┄┄┄┄┄┈╫┈╮
-║ ┊  ┊  ┊     ┊   ╟┈10: %x ← %w
+║ 𜸽┄┄┄┄┄┄┄┄┄┄┄┄┄┄┈╫┈10: %x ← %w
 ║ ┊  𜸛┄┄┄┄┄┄┄┄┄┄┄┈╫┈╯
 ║ ┊  𜸽┄┄┄┄┄┄┄┄┄┄┄┈╫┈11: 𜱪  ← %x
 ╚═╪══╪══╪═════╪═══╝
