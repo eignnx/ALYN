@@ -178,6 +178,13 @@ impl<'a, I> DisplayLiveRanges<'a, I> {
     pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>) -> Self {
         Self { stmts, live_ranges }
     }
+
+    const LR_BEGIN: char = '#';
+    const LR_END: char = '#';
+    const LR_LIVE: char = '#';
+    const LR_DEAD: char = '\'';
+    const DRAW_X_GUIDE: char = '.';
+    const LR_LIVE_CROSSES_X_GUIDE: char = '#';
 }
 
 impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
@@ -204,14 +211,14 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
         }
         writeln!(f, "   ")?;
 
-        write!(f, "╔═")?;
+        write!(f, ".-")?;
         for (iter, (_, len)) in tmps.iter().enumerate() {
             if iter != 0 {
-                write!(f, "═")?;
+                write!(f, "-")?;
             }
-            write!(f, "{:═<width$}", "╪", width=len)?;
+            write!(f, "{:-<width$}", "+", width=len)?;
         }
-        writeln!(f, "══╗")?;
+        writeln!(f, "--.")?;
 
         for (i, stmt) in self.stmts.iter().enumerate() {
             for phase in InstrExePhase::PHASES {
@@ -224,49 +231,54 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                     continue;
                 }
 
-                write!(f, "║ ")?;
+                write!(f, "| ")?;
 
                 let mut draw_x_guide = false;
+
+                // NOTE: can't use "dynamic" fill character, so gotta replace all `.`s with
+                // your chosen character.
+                let x = Self::DRAW_X_GUIDE;
 
                 for (tmp, len) in &tmps {
                     let ranges = &self.live_ranges[tmp];
                     let contained = ranges.iter().any(|r| r.contains(pt));
+
                     if ranges.iter().any(|r| r.begin == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:.<width$}.", '╥', width=len)?;
+                        write!(f, "{:.<width$}{x}", Self::LR_BEGIN, width=len)?;
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:.<width$}.", '╨', width=len)?;
+                        write!(f, "{:.<width$}{x}", Self::LR_END, width=len)?;
                     } else if draw_x_guide {
                         if contained {
-                            write!(f, "{:.<width$}.", '║', width=len)?;
+                            write!(f, "{:.<width$}{x}", Self::LR_LIVE_CROSSES_X_GUIDE, width=len)?;
                         } else {
-                            write!(f, "{:.<width$}.", '.', width=len)?;
+                            write!(f, "{x:.<width$}{x}", width=len)?;
                         }
                     } else {
                         if contained {
-                            write!(f, "{: <width$} ", '║', width=len)?;
+                            write!(f, "{: <width$} ", Self::LR_LIVE, width=len)?;
                         } else {
-                            write!(f, "{: <width$} ", '.', width=len)?;
+                            write!(f, "{: <width$} ", Self::LR_DEAD, width=len)?;
                         }
                     }
                 }
 
                 if draw_x_guide {
-                    write!(f, ".")?;
+                    write!(f, "{x}")?;
                 } else {
                     write!(f, " ")?;
                 }
 
                 match phase {
                     InstrExePhase::ReadArgs if draw_x_guide => {
-                        write!(f, "╫─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(f, "|─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
                     }
                     InstrExePhase::ReadArgs => {
-                        write!(f, "╫     {i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(f, "|     {i:0width$}: {stmt:?}", width=numcol_width)?;
                     }
                     InstrExePhase::WriteBack => {
-                        write!(f, "╫─(w)─┘")?;
+                        write!(f, "|─(w)─┘")?;
                     }
                 }
 
@@ -274,14 +286,14 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
             }
         }
 
-        write!(f, "╚═")?;
+        write!(f, "'-")?;
         for (iter, (_, len)) in tmps.iter().enumerate() {
             if iter != 0 {
-                write!(f, "═")?;
+                write!(f, "-")?;
             }
-            write!(f, "{:═<width$}", "╪", width=len)?;
+            write!(f, "{:-<width$}", "+", width=len)?;
         }
-        writeln!(f, "══╝")?;
+        writeln!(f, "--'")?;
 
         write!(f, "  ")?;
         for (iter, (tmp, len)) in tmps.iter().enumerate() {
