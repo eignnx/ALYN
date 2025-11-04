@@ -6,29 +6,29 @@ Here is an example of a generated interval diagram. The instructions of the prog
 
 There are (currently) two phases to an instruction's execution: `ReadArgs` and `WriteBack`. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `ReadArgs` phase. A corner (`─(w)─┘`) drawn out of the bottom is for the `WriteBack` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
 
-<pre>
+```
   %x %yeet %z %w
 ╔═╪══╪═════╪══╪═══╗
 ║ .  .     .  .   ╫     00: local<test>
 ║ .  .     .  .   ╫     01: %x ← _
-║ ╥┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╫─(w)─┘
+║ ╥...............╫─(w)─┘
 ║ ║  .     .  .   ╫     02: %yeet ← _
-║ ║  ╥┄┄┄┄┄┄┄┄┄┄┄┄╫─(w)─┘
-║ ╨┄┄║┄┄┄┄┄┄┄┄┄┄┄┄╫─(r)─03: _ ← %x
+║ ║  ╥............╫─(w)─┘
+║ ╨..║............╫─(r)─03: _ ← %x
 ║ .  ║     .  .   ╫     04: _ ← %yeet
 ║ .  ║     .  .   ╫     05: %z ← _
-║ .  ║     ╥┄┄┄┄┄┄╫─(w)─┘
-║ .  ╨┄┄┄┄┄║┄┄┄┄┄┄╫─(r)─06: _ ← %yeet
+║ .  ║     ╥......╫─(w)─┘
+║ .  ╨.....║......╫─(r)─06: _ ← %yeet
 ║ .  .     ║  .   ╫     07: _ ← %z
-║ .  .     ╨┄┄┄┄┄┄╫─(r)─08: %w ← %z
-║ .  .     .  ╥┄┄┄╫─(w)─┘
+║ .  .     ╨......╫─(r)─08: %w ← %z
+║ .  .     .  ╥...╫─(w)─┘
 ║ .  .     .  ║   ╫     09: _ ← %w
-║ .  .     .  ╨┄┄┄╫─(r)─10: %x ← %w
-║ ╥┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╫─(w)─┘
-║ ╨┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╫─(r)─11: _ ← %x
+║ .  .     .  ╨...╫─(r)─10: %x ← %w
+║ ╥...............╫─(w)─┘
+║ ╨...............╫─(r)─11: _ ← %x
 ╚═╪══╪═════╪══╪═══╝
   %x %yeet %z %w
-</pre>
+```
 
 ## Algorithm Overview
 (WIP: I'm still reading the paper, this is my current understanding)

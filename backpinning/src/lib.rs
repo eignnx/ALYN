@@ -233,15 +233,15 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                     let contained = ranges.iter().any(|r| r.contains(pt));
                     if ranges.iter().any(|r| r.begin == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:┄<width$}┄", '╥', width=len)?;
+                        write!(f, "{:.<width$}.", '╥', width=len)?;
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:┄<width$}┄", '╨', width=len)?;
+                        write!(f, "{:.<width$}.", '╨', width=len)?;
                     } else if draw_x_guide {
                         if contained {
-                            write!(f, "{:┄<width$}┄", '║', width=len)?;
+                            write!(f, "{:.<width$}.", '║', width=len)?;
                         } else {
-                            write!(f, "{:┄<width$}┄", '┄', width=len)?;
+                            write!(f, "{:.<width$}.", '.', width=len)?;
                         }
                     } else {
                         if contained {
@@ -253,7 +253,7 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                 }
 
                 if draw_x_guide {
-                    write!(f, "┄")?;
+                    write!(f, ".")?;
                 } else {
                     write!(f, " ")?;
                 }
