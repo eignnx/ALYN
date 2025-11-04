@@ -233,38 +233,41 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                     let contained = ranges.iter().any(|r| r.contains(pt));
                     if ranges.iter().any(|r| r.begin == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:┄<width$}┄", '𜸛', width=len)?;
+                        write!(f, "{:·<width$}·", '╥', width=len)?;
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:┄<width$}┄", '𜸽', width=len)?;
+                        write!(f, "{:·<width$}·", '╨', width=len)?;
                     } else if draw_x_guide {
                         if contained {
-                            write!(f, "{:┄<width$}┄", '𜸩', width=len)?;
+                            write!(f, "{:·<width$}·", '║', width=len)?;
                         } else {
-                            write!(f, "{:┄<width$}┄", '┄', width=len)?;
+                            write!(f, "{:·<width$}·", '·', width=len)?;
                         }
                     } else {
                         if contained {
-                            write!(f, "{: <width$} ", '𜸩', width=len)?;
+                            write!(f, "{: <width$} ", '║', width=len)?;
                         } else {
-                            write!(f, "{: <width$} ", '┊', width=len)?;
+                            write!(f, "{: <width$} ", '·', width=len)?;
                         }
                     }
                 }
 
                 if draw_x_guide {
-                    write!(f, "┈")?;
+                    write!(f, "─")?;
                 } else {
                     write!(f, " ")?;
                 }
 
                 match phase {
-                    InstrExePhase::ReadArgs => if draw_x_guide {
-                        write!(f, "╫┈{i:0width$}: {stmt:?}", width=numcol_width)?;
-                    } else {
-                        write!(f, "╟┈{i:0width$}: {stmt:?}", width=numcol_width)?;
-                    },
-                    InstrExePhase::WriteBack  => write!(f, "╫┈╯")?,
+                    InstrExePhase::ReadArgs if draw_x_guide => {
+                        write!(f, "╫─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
+                    }
+                    InstrExePhase::ReadArgs => {
+                        write!(f, "╫     {i:0width$}: {stmt:?}", width=numcol_width)?;
+                    }
+                    InstrExePhase::WriteBack => {
+                        write!(f, "╫─(w)─┘")?;
+                    }
                 }
 
                 writeln!(f)?;
@@ -330,15 +333,15 @@ mod tests {
     impl Debug for Instr {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                Self::Def(x) => write!(f, "{x:?} ← 𜱪 "),
-                Self::Use(x) => write!(f, "𜱪  ← {x:?}"),
+                Self::Def(x) => write!(f, "{x:?} ← _ "),
+                Self::Use(x) => write!(f, "_ ← {x:?}"),
                 Self::Move(dst, src) => write!(f, "{dst:?} ← {src:?}"),
                 Self::MoveImm(dst, imm) => write!(f, "{dst:?} ← {imm}"),
-                Self::BinOp(dst, src1, src2) => write!(f, "{dst:?} ← {src1:?} ⋄ {src2:?}"),
-                Self::BinOpImm(dst, src, imm) => write!(f, "{dst:?} ← {src:?} ⋄ {imm:?}"),
+                Self::BinOp(dst, src1, src2) => write!(f, "{dst:?} ← {src1:?} ± {src2:?}"),
+                Self::BinOpImm(dst, src, imm) => write!(f, "{dst:?} ← {src:?} ± {imm:?}"),
                 Self::Load(dst, src) => write!(f, "{dst:?} ← MEM[{src:?}]"),
                 Self::Store(dst, src) => write!(f, "MEM[{dst:?}] ← {src:?}"),
-                Self::CmpBranch(src1, src2, lbl) => write!(f, "branch to {lbl:?} if {src1:?} ≷ {src2:?}"),
+                Self::CmpBranch(src1, src2, lbl) => write!(f, "branch to {lbl:?} if {src1:?} <> {src2:?}"),
                 Self::Jmp(lbl) => write!(f, "jmp {lbl:?}"),
                 Self::Ret => write!(f, "ret"),
             }
@@ -485,7 +488,7 @@ mod tests {
         let x = "x".into();
         let elem = "elem".into();
         let mid = "mid".into();
-        let v_plus_mid = "v_plus_mid".into();
+        let v_plus_mid = "vmid".into();
         let retval = "retval".into();
 
         #[rustfmt::skip]

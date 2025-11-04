@@ -4,30 +4,30 @@ A register allocator based on [Traub, Halloway, and Smith's *Second-chance Binpa
 ## Interval Diagram
 Here is an example of a generated interval diagram. The instructions of the program text are shown on the right-hand side of the diagram, so it should be read top-to-bottom.
 
-There are (currently) two phases to an instruction's execution: `ReadArgs` and `WriteBack`. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `ReadArgs` phase. A rounded corner (`┈╯`) drawn out of the bottom is for the `WriteBack` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
+There are (currently) two phases to an instruction's execution: `ReadArgs` and `WriteBack`. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `ReadArgs` phase. A corner (`─(w)─┘`) drawn out of the bottom is for the `WriteBack` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
 
 ```
-  %w %x %yeet %z
-╔═╪══╪══╪═════╪═══╗
-║ ┊  ┊  ┊     ┊   ╟┈00: local<test>
-║ ┊  ┊  ┊     ┊   ╟┈01: %x ← 𜱪
-║ ┊  𜸛┄┄┄┄┄┄┄┄┄┄┄┈╫┈╯
-║ ┊  𜸩  ┊     ┊   ╟┈02: %yeet ← 𜱪
-║ ┊  𜸩  𜸛┄┄┄┄┄┄┄┄┈╫┈╯
-║ ┊  𜸽┄┄𜸩┄┄┄┄┄┄┄┄┈╫┈03: 𜱪  ← %x
-║ ┊  ┊  𜸩     ┊   ╟┈04: 𜱪  ← %yeet
-║ ┊  ┊  𜸩     ┊   ╟┈05: %z ← 𜱪
-║ ┊  ┊  𜸩     𜸛┄┄┈╫┈╯
-║ ┊  ┊  𜸽┄┄┄┄┄𜸩┄┄┈╫┈06: 𜱪  ← %yeet
-║ ┊  ┊  ┊     𜸩   ╟┈07: 𜱪  ← %z
-║ ┊  ┊  ┊     𜸽┄┄┈╫┈08: %w ← %z
-║ 𜸛┄┄┄┄┄┄┄┄┄┄┄┄┄┄┈╫┈╯
-║ 𜸩  ┊  ┊     ┊   ╟┈09: 𜱪  ← %w
-║ 𜸽┄┄┄┄┄┄┄┄┄┄┄┄┄┄┈╫┈10: %x ← %w
-║ ┊  𜸛┄┄┄┄┄┄┄┄┄┄┄┈╫┈╯
-║ ┊  𜸽┄┄┄┄┄┄┄┄┄┄┄┈╫┈11: 𜱪  ← %x
-╚═╪══╪══╪═════╪═══╝
-  %w %x %yeet %z
+  %x %yeet %z %w
+╔═╪══╪═════╪══╪═══╗
+║ ·  ·     ·  ·   ╫     00: local<test>
+║ ·  ·     ·  ·   ╫     01: %x ← _
+║ ╥··············─╫─(w)─┘
+║ ║  ·     ·  ·   ╫     02: %yeet ← _
+║ ║  ╥···········─╫─(w)─┘
+║ ╨··║···········─╫─(r)─03: _ ← %x
+║ ·  ║     ·  ·   ╫     04: _ ← %yeet
+║ ·  ║     ·  ·   ╫     05: %z ← _
+║ ·  ║     ╥·····─╫─(w)─┘
+║ ·  ╨·····║·····─╫─(r)─06: _ ← %yeet
+║ ·  ·     ║  ·   ╫     07: _ ← %z
+║ ·  ·     ╨·····─╫─(r)─08: %w ← %z
+║ ·  ·     ·  ╥··─╫─(w)─┘
+║ ·  ·     ·  ║   ╫     09: _ ← %w
+║ ·  ·     ·  ╨··─╫─(r)─10: %x ← %w
+║ ╥··············─╫─(w)─┘
+║ ╨··············─╫─(r)─11: _ ← %x
+╚═╪══╪═════╪══╪═══╝
+  %x %yeet %z %w
 ```
 
 ## Algorithm Overview
