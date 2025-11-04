@@ -6,7 +6,7 @@ Here is an example of a generated interval diagram. The instructions of the prog
 
 There are (currently) two phases to an instruction's execution: `ReadArgs` and `WriteBack`. When a line is drawn horizontally from the left of an instruction (see instruction `03` below) it signifies the `ReadArgs` phase. A corner (`─(w)─┘`) drawn out of the bottom is for the `WriteBack` phase. The dotted vertical lines represent a temporary's non-live interval, and the solid vertical lines represent live intervals.
 
-```
+<pre>
   %x %yeet %z %w
 ╔═╪══╪═════╪══╪═══╗
 ║ .  .     .  .   ╫     00: local<test>
@@ -28,7 +28,7 @@ There are (currently) two phases to an instruction's execution: `ReadArgs` and `
 ║ ╨┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄╫─(r)─11: _ ← %x
 ╚═╪══╪═════╪══╪═══╝
   %x %yeet %z %w
-```
+</pre>
 
 ## Algorithm Overview
 (WIP: I'm still reading the paper, this is my current understanding)
