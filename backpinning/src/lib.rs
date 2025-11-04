@@ -1,21 +1,37 @@
-use std::{cmp::Ordering, collections::HashMap, fmt::{self, Debug, Display}};
+use std::{collections::{HashMap, HashSet}, fmt::{self, Debug, Display}};
 
 use alyn_common::names::Tmp;
-use regalloc_common::{asn::Asn, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
+use regalloc_common::{asn::{Asn, SlotId}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, Instruction, Register};
 
 
-#[derive(Debug, Clone, Copy)]
-pub enum Access<R> {
-    Read(Stg<R>, InstrExePhase),
-    Write(Stg<R>, InstrExePhase),
+#[derive(Debug)]
+pub enum Access<'a, R> {
+    Read(&'a mut Stg<R>, InstrExePhase),
+    Write(&'a mut Stg<R>, InstrExePhase),
+}
+
+impl<'a, R: Copy> Access<'a, R> {
+    pub fn phase(&self) -> InstrExePhase {
+        match self {
+            Access::Read(_, phase) => *phase,
+            Access::Write(_, phase) => *phase,
+        }
+    }
+
+    pub fn stg_mut(&'a mut self) -> &'a mut Stg<R> {
+        match self {
+            Access::Read(stg, _) => *stg,
+            Access::Write(stg, _) => *stg,
+        }
+    }
 }
 
 pub trait Accesses: Instruction {
-    fn accesses(&self) -> Vec<Access<Self::Reg>>;
+    fn accesses<'a>(&'a mut self) -> Vec<Access<'a, Self::Reg>>;
 }
 
 impl<I: Accesses> Accesses for Stmt<I> {
-    fn accesses(&self) -> Vec<Access<Self::Reg>> {
+    fn accesses<'a>(&'a mut self) -> Vec<Access<'a, Self::Reg>> {
         match self {
             Stmt::Instr(instr) => instr.accesses(),
             Stmt::Label(_) => vec![],
@@ -65,22 +81,22 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     let mut last_use = HashMap::<Tmp, PrgPt>::new();
 
     for (i, stmt) in stmts.iter().enumerate().rev() {
-        let Stmt::Instr(instr) = stmt else { continue };
+        let Stmt::Instr(mut instr) = stmt.clone() else { continue };
         for access in instr.accesses() {
             match access {
                 Access::Read(Stg::Tmp(tmp), phase) => if !last_use.contains_key(&tmp) {
-                    last_use.insert(tmp, PrgPt::new(i, phase));
+                    last_use.insert(*tmp, PrgPt::new(i, phase));
                 }
                 Access::Write(Stg::Tmp(tmp), phase) => {
                     let Some(end) = last_use.remove(&tmp) else {
                         continue; // Never read from, so just ignore.
                     };
-                    live_ranges.entry(tmp).or_default().push(LiveRange {
+                    live_ranges.entry(*tmp).or_default().push(LiveRange {
                         begin: PrgPt::new(i, phase),
                         end,
                     });
                 }
-                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => todo!(),
+                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => {},
             }
         }
     }
@@ -88,17 +104,65 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     live_ranges
 }
 
-pub fn linear_scan<R, I: Instruction<Reg = R> + GetCtrlFlow>(stmts: Vec<Stmt<I>>) -> Vec<Stmt<I>> {
+pub fn reg_choice<R: Register>(tmp: Tmp, working_set: &mut HashMap<Tmp, Asn<R>>) -> Asn<R> {
+    let mut slot_id = 0usize;
+    let choices = R::GPRS.into_iter().copied().map(Asn::Reg).chain(
+        std::iter::from_fn(|| {
+            let chosen_slot = slot_id;
+            slot_id += 1;
+            Some(Asn::Slot(SlotId(chosen_slot)))
+        })
+    );
+
+    if let Some(asn) = working_set.get(&tmp) {
+        *asn
+    } else {
+        let in_use = working_set.values().copied().collect::<HashSet<_>>();
+        for choice in choices {
+            if !in_use.contains(&choice) {
+                working_set.insert(tmp, choice);
+                return choice;
+            }
+        }
+        unreachable!()
+    }
+}
+
+pub fn linear_scan<R, I>(stmts: Vec<Stmt<I>>, live_ranges: &HashMap<Tmp, Vec<LiveRange>>, slot_alloc: impl SlotAllocator) -> Vec<Stmt<I>>
+where
+    R: Register,
+    I: Instruction<Reg = R> + GetCtrlFlow + Accesses + InstrWrite
+{
     let mut working_set = HashMap::<Tmp, Asn<R>>::new();
     let mut new_program = Vec::new();
 
-    for stmt in stmts.iter().rev() {
-        match stmt.ctrl_flow() {
-            CtrlFlow::Exit => todo!(),
-            CtrlFlow::Advance => todo!(),
-            CtrlFlow::Jump(_) => todo!(),
-            CtrlFlow::Branch(_) => todo!(),
-            CtrlFlow::Switch(_) => todo!(),
+    for (i, mut stmt) in stmts.into_iter().enumerate() {
+        if let CtrlFlow::Advance = stmt.ctrl_flow() {
+            let mut spills_before = Vec::new();
+            let mut spills_after = Vec::new();
+
+            let mut accesses = stmt.accesses();
+            accesses.sort_by_key(Access::phase); // Necessary?
+            for stg in accesses.iter_mut().map(Access::stg_mut) {
+                match stg {
+                    Stg::Tmp(tmp) => {
+                        let choice = reg_choice(*tmp, &mut working_set);
+                        if let Asn::Reg(reg) = choice {
+                            *stg = Stg::Reg(reg);
+                        } else {
+                            //spills_before.extend(slot_alloc.emit_stack_load(dst, src_slot_id));
+                            todo!("spill")
+                        }
+
+                    }
+                    Stg::Reg(_) => todo!(),
+                }
+            }
+            new_program.extend(spills_before);
+            new_program.push(stmt);
+            new_program.extend(spills_after);
+        } else {
+            todo!();
         }
     }
 
@@ -225,6 +289,7 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
 
 #[cfg(test)]
 mod tests {
+    use alyn_common::names::Lbl;
     use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, Register};
 
     use super::*;
@@ -235,7 +300,7 @@ mod tests {
     }
 
     impl Register for Reg {
-        const GPRS: &'static [Self] = &[];
+        const GPRS: &'static [Self] = &[Reg::T0, Reg::T1, Reg::T2];
         const GPR_SAVED_REGS: &'static [Self] = &[];
         const GPR_TEMP_REGS: &'static [Self] = &[];
         const GPR_ARG_REGS: &'static [Self] = &[];
@@ -246,6 +311,14 @@ mod tests {
         Def(Stg<Reg>),
         Use(Stg<Reg>),
         Move(Stg<Reg>, Stg<Reg>),
+        MoveImm(Stg<Reg>, i32),
+        BinOp(Stg<Reg>, Stg<Reg>, Stg<Reg>),
+        BinOpImm(Stg<Reg>, Stg<Reg>, i32),
+        Load(Stg<Reg>, Stg<Reg>),
+        Store(Stg<Reg>, Stg<Reg>),
+        CmpBranch(Stg<Reg>, Stg<Reg>, Lbl),
+        Jmp(Lbl),
+        Ret,
     }
 
     impl Debug for Instr {
@@ -254,6 +327,14 @@ mod tests {
                 Self::Def(x) => write!(f, "{x:?} ← 𜱪 "),
                 Self::Use(x) => write!(f, "𜱪  ← {x:?}"),
                 Self::Move(dst, src) => write!(f, "{dst:?} ← {src:?}"),
+                Self::MoveImm(dst, imm) => write!(f, "{dst:?} ← {imm}"),
+                Self::BinOp(dst, src1, src2) => write!(f, "{dst:?} ← {src1:?} ⋄ {src2:?}"),
+                Self::BinOpImm(dst, src, imm) => write!(f, "{dst:?} ← {src:?} ⋄ {imm:?}"),
+                Self::Load(dst, src) => write!(f, "{dst:?} ← MEM[{src:?}]"),
+                Self::Store(dst, src) => write!(f, "MEM[{dst:?}] ← {src:?}"),
+                Self::CmpBranch(src1, src2, lbl) => write!(f, "branch to {lbl:?} if {src1:?} ≷ {src2:?}"),
+                Self::Jmp(lbl) => write!(f, "jmp {lbl:?}"),
+                Self::Ret => write!(f, "ret"),
             }
         }
     }
@@ -263,21 +344,62 @@ mod tests {
     }
 
     impl Accesses for Instr {
-        fn accesses(&self) -> Vec<Access<Self::Reg>> {
+        fn accesses<'a>(&'a mut self) -> Vec<Access<'a, Self::Reg>> {
             match self {
-                Instr::Def(dst) => vec![Access::Write(*dst, InstrExePhase::WriteBack)],
-                Instr::Use(src) => vec![Access::Read(*src, InstrExePhase::ReadArgs)],
+                Instr::Def(dst) => vec![Access::Write(dst, InstrExePhase::WriteBack)],
+                Instr::Use(src) => vec![Access::Read(src, InstrExePhase::ReadArgs)],
                 Instr::Move(dst, src) => vec![
-                    Access::Write(*dst, InstrExePhase::WriteBack),
-                    Access::Read(*src, InstrExePhase::ReadArgs),
+                    Access::Read(src, InstrExePhase::ReadArgs),
+                    Access::Write(dst, InstrExePhase::WriteBack),
                 ],
+                Instr::MoveImm(dst, _) => vec![Access::Write(dst, InstrExePhase::WriteBack)],
+                Instr::BinOp(dst, src1, src2) => vec![
+                    Access::Read(src1, InstrExePhase::ReadArgs),
+                    Access::Read(src2, InstrExePhase::ReadArgs),
+                    Access::Write(dst, InstrExePhase::WriteBack),
+                ],
+                Self::BinOpImm(dst, src, _) => vec![
+                    Access::Read(src, InstrExePhase::ReadArgs),
+                    Access::Write(dst, InstrExePhase::WriteBack),
+                ],
+                Instr::Load(dst, addr) => vec![
+                    Access::Read(addr, InstrExePhase::ReadArgs),
+                    Access::Write(dst, InstrExePhase::WriteBack),
+                ],
+                Instr::Store(addr, src) => vec![
+                    Access::Read(addr, InstrExePhase::ReadArgs),
+                    Access::Read(src, InstrExePhase::ReadArgs),
+                ],
+                Instr::CmpBranch(src1, src2, _) => vec![
+                    Access::Read(src1, InstrExePhase::ReadArgs),
+                    Access::Read(src2, InstrExePhase::ReadArgs),
+                ],
+                Instr::Jmp(_) | Instr::Ret => vec![],
             }
         }
     }
 
     impl GetCtrlFlow for Instr {
         fn ctrl_flow(&self) -> CtrlFlow {
-            todo!()
+            match self {
+                Instr::Def(..) |
+                Instr::Use(..) |
+                Instr::Move(..) |
+                Instr::MoveImm(..) |
+                Instr::BinOp(..) |
+                Instr::BinOpImm(..) |
+                Instr::Load(..) |
+                Instr::Store(..) => CtrlFlow::Advance,
+                Instr::CmpBranch(_, _, lbl) => CtrlFlow::Branch(*lbl),
+                Instr::Jmp(lbl) => CtrlFlow::Jump(*lbl),
+                Instr::Ret => CtrlFlow::Exit,
+            }
+        }
+    }
+
+    impl From<Instr> for Stmt<Instr> {
+        fn from(instr: Instr) -> Self {
+            Self::Instr(instr)
         }
     }
 
@@ -303,6 +425,91 @@ mod tests {
             S::Instr(Use("x".into())),
         ];
 
+        let live_ranges = compute_live_ranges(&stmts[..]);
+        println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
+    }
+
+     #[test]
+    fn knr_binsearch() {
+        // int binsearch(int x, int v[], int n) {
+        //     int low = 0;
+        //     int high = n - 1;
+        //     while (low <= high) {
+        //          int mid = (low + high) / 2;
+        //          int elem = v[mid];
+        //          if (x < elem)
+        //              high = mid - 1;
+        //          else if (x > elem)
+        //              low = mid + 1;
+        //          else
+        //              return mid;
+        //     }
+        //     return -1;
+        // }
+        //
+        // binsearch:
+        // mov %low <- 0;
+        // mov %high <- %n - 1;
+        // jmp loop_cond;
+        // loop_top:
+        //      mov %mid <- (%low + %high) / 2;
+        //      load %elem <- MEM[%v + %mid];
+        //      branch if %x >= %elem to else_if
+        //          %high <- %mid - 1;
+        //          jmp end_if;
+        //      else_if:
+        //      branch if x <= elem to else
+        //          %low <- %mid + 1;
+        //          jmp end_if;
+        //      else:
+        //          ret %mid;
+        //      end_if:
+        // loop_cond:
+        //      branch if %low <= %high to loop_top;
+        //  ret -1;
+        //
+
+        use Stmt as S;
+        use Instr::*;
+
+        let low = "low".into();
+        let high = "high".into();
+        let n = "n".into();
+        let v = "v".into();
+        let x = "x".into();
+        let elem = "elem".into();
+        let mid = "mid".into();
+        let v_plus_mid = "v_plus_mid".into();
+
+        #[rustfmt::skip]
+        let stmts = vec![
+            Def(x).into(), Def(v).into(), Def(n).into(),
+            S::Label(Lbl::subr("binsearch")),
+            MoveImm(low, 0).into(),
+            BinOpImm(high, n, 1).into(),
+            Jmp("loop_cond".into()).into(),
+            S::Label("loop_top".into()),
+                BinOp(mid, low, high).into(),
+                BinOp(v_plus_mid, v, mid).into(),
+                Load(elem, v_plus_mid).into(),
+                CmpBranch(x, elem, "else_if".into()).into(),
+                    BinOpImm(high, mid, 1).into(),
+                    Jmp("end_if".into()).into(),
+                S::Label("else_if".into()),
+                CmpBranch(x, elem, "else".into()).into(),
+                    BinOpImm(low, mid, 1).into(),
+                    Jmp("end_if".into()).into(),
+                S::Label("else".into()).into(),
+                    Move(Stg::Reg(Reg::T0), mid).into(),
+                    Ret.into(),
+                    Use(Stg::Reg(Reg::T0)).into(),
+                S::Label("end_if".into()).into(),
+            S::Label("loop_cond".into()).into(),
+                CmpBranch(low, high, "loop_top".into()).into(),
+            MoveImm(Stg::Reg(Reg::T0), -1).into(),
+            Ret.into(),
+            Use(Stg::Reg(Reg::T0)).into(),
+        ];
         let live_ranges = compute_live_ranges(&stmts[..]);
         println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
     }

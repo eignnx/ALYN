@@ -1,9 +1,9 @@
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SlotId(pub usize);
 
 /// "Assignment"
 /// The thing to which a temporary is assigned by the end of regalloc.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Asn<R> {
     /// The temporary has been allocated to a specific register.
     Reg(R),
