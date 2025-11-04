@@ -185,7 +185,13 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
         let mut tmps = self.live_ranges.keys()
             .map(|t| (*t, format!("{t:?}").len()))
             .collect::<Vec<_>>();
-        tmps.sort_unstable();
+        tmps.sort_unstable_by_key(|(tmp, _)| {
+            self.live_ranges[tmp]
+                .iter()
+                .map(|range| range.begin)
+                .min()
+                .unwrap()
+        });
 
         let numcol_width = self.stmts.len().ilog10() as usize + 1;
 
@@ -480,6 +486,7 @@ mod tests {
         let elem = "elem".into();
         let mid = "mid".into();
         let v_plus_mid = "v_plus_mid".into();
+        let retval = "retval".into();
 
         #[rustfmt::skip]
         let stmts = vec![
@@ -500,15 +507,15 @@ mod tests {
                     BinOpImm(low, mid, 1).into(),
                     Jmp("end_if".into()).into(),
                 S::Label("else".into()).into(),
-                    Move(Stg::Reg(Reg::T0), mid).into(),
+                    Move(retval, mid).into(),
                     Ret.into(),
-                    Use(Stg::Reg(Reg::T0)).into(),
+                    Use(retval).into(),
                 S::Label("end_if".into()).into(),
             S::Label("loop_cond".into()).into(),
                 CmpBranch(low, high, "loop_top".into()).into(),
-            MoveImm(Stg::Reg(Reg::T0), -1).into(),
+            MoveImm(retval, -1).into(),
             Ret.into(),
-            Use(Stg::Reg(Reg::T0)).into(),
+            Use(retval).into(),
         ];
         let live_ranges = compute_live_ranges(&stmts[..]);
         println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
