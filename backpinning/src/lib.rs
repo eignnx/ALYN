@@ -185,9 +185,10 @@ impl<'a, I> DisplayLiveRanges<'a, I> {
     const LR_DEAD: char = '\'';
     const DRAW_X_GUIDE: char = '.';
     const LR_LIVE_CROSSES_X_GUIDE: char = '#';
+    const LR_DEAD_CROSSES_X_GUIDE: char = '!';
 }
 
-impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
+impl<'a, I: Debug + GetCtrlFlow> Display for DisplayLiveRanges<'a, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut tmps = self.live_ranges.keys()
             .map(|t| (*t, format!("{t:?}").len()))
@@ -253,7 +254,7 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                         if contained {
                             write!(f, "{:.<width$}{x}", Self::LR_LIVE_CROSSES_X_GUIDE, width=len)?;
                         } else {
-                            write!(f, "{x:.<width$}{x}", width=len)?;
+                            write!(f, "{:.<width$}{x}", Self::LR_DEAD_CROSSES_X_GUIDE, width=len)?;
                         }
                     } else {
                         if contained {
@@ -283,6 +284,16 @@ impl<'a, I: Debug> Display for DisplayLiveRanges<'a, I> {
                 }
 
                 writeln!(f)?;
+            }
+            if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance) && i != self.stmts.len() - 1 {
+                write!(f, "+=")?;
+                for (iter, (_, len)) in tmps.iter().enumerate() {
+                    if iter != 0 {
+                        write!(f, "=")?;
+                    }
+                    write!(f, "{:=<width$}", "+", width=len)?;
+                }
+                writeln!(f, "==+")?;
             }
         }
 
@@ -523,14 +534,14 @@ mod tests {
                     Jmp("end_if".into()).into(),
                 S::Label("else".into()).into(),
                     Move(retval, mid).into(),
-                    Ret.into(),
                     Use(retval).into(),
+                    Ret.into(),
                 S::Label("end_if".into()).into(),
             S::Label("loop_cond".into()).into(),
                 CmpBranch(low, high, "loop_top".into()).into(),
             MoveImm(retval, -1).into(),
-            Ret.into(),
             Use(retval).into(),
+            Ret.into(),
         ];
         let live_ranges = compute_live_ranges(&stmts[..]);
         println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
