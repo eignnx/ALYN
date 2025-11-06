@@ -1,9 +1,21 @@
 #![feature(formatting_options)]
 
-use std::{collections::{HashMap, HashSet}, fmt::Debug};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use alyn_common::names::Tmp;
-use regalloc_common::{asn::{Asn, SlotId}, cfg::Cfg, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, DefsUses, Instruction, Register};
+use regalloc_common::{
+    DefsUses, Instruction, Register,
+    asn::{Asn, SlotId},
+    cfg::Cfg,
+    ctrl_flow::{CtrlFlow, GetCtrlFlow},
+    liveness::LiveSets,
+    slot_alloc::{InstrWrite, SlotAllocator},
+    stg::Stg,
+    stmt::Stmt,
+};
 
 pub mod diagram;
 
@@ -52,7 +64,6 @@ impl InstrExePhase {
     pub const PHASES: [Self; 2] = [Self::ReadArgs, Self::WriteBack];
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PrgPt {
     stmt_idx: usize,
@@ -84,11 +95,15 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     let mut last_use = HashMap::<Tmp, PrgPt>::new();
 
     for (i, stmt) in stmts.iter().enumerate().rev() {
-        let Stmt::Instr(mut instr) = stmt.clone() else { continue };
+        let Stmt::Instr(mut instr) = stmt.clone() else {
+            continue;
+        };
         for access in instr.accesses() {
             match access {
-                Access::Read(Stg::Tmp(tmp), phase) => if !last_use.contains_key(&tmp) {
-                    last_use.insert(*tmp, PrgPt::new(i, phase));
+                Access::Read(Stg::Tmp(tmp), phase) => {
+                    if !last_use.contains_key(&tmp) {
+                        last_use.insert(*tmp, PrgPt::new(i, phase));
+                    }
                 }
                 Access::Write(Stg::Tmp(tmp), phase) => {
                     let Some(end) = last_use.remove(&tmp) else {
@@ -99,7 +114,7 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
                         end,
                     });
                 }
-                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => {},
+                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => {}
             }
         }
     }
@@ -107,8 +122,11 @@ pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
     live_ranges
 }
 
-pub fn compute_live_ranges_2<R: Register, I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses>(
-    cfg: &Cfg<R, I>
+pub fn compute_live_ranges_2<
+    R: Register,
+    I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
+>(
+    cfg: &Cfg<R, I>,
 ) -> HashMap<Tmp, Vec<LiveRange>> {
     let mut live_ranges = HashMap::<Tmp, Vec<LiveRange>>::new();
     let mut last_use = HashMap::<Tmp, PrgPt>::new();
@@ -130,13 +148,15 @@ pub fn compute_live_ranges_2<R: Register, I: Instruction<Reg = R> + Accesses + G
 
 pub fn reg_choice<R: Register>(tmp: Tmp, working_set: &mut HashMap<Tmp, Asn<R>>) -> Asn<R> {
     let mut slot_id = 0usize;
-    let choices = R::GPRS.into_iter().copied().map(Asn::Reg).chain(
-        std::iter::from_fn(|| {
+    let choices = R::GPRS
+        .into_iter()
+        .copied()
+        .map(Asn::Reg)
+        .chain(std::iter::from_fn(|| {
             let chosen_slot = slot_id;
             slot_id += 1;
             Some(Asn::Slot(SlotId(chosen_slot)))
-        })
-    );
+        }));
 
     if let Some(asn) = working_set.get(&tmp) {
         *asn
@@ -152,10 +172,14 @@ pub fn reg_choice<R: Register>(tmp: Tmp, working_set: &mut HashMap<Tmp, Asn<R>>)
     }
 }
 
-pub fn linear_scan<R, I>(stmts: Vec<Stmt<I>>, live_ranges: &HashMap<Tmp, Vec<LiveRange>>, slot_alloc: impl SlotAllocator) -> Vec<Stmt<I>>
+pub fn linear_scan<R, I>(
+    stmts: Vec<Stmt<I>>,
+    live_ranges: &HashMap<Tmp, Vec<LiveRange>>,
+    slot_alloc: impl SlotAllocator,
+) -> Vec<Stmt<I>>
 where
     R: Register,
-    I: Instruction<Reg = R> + GetCtrlFlow + Accesses + InstrWrite
+    I: Instruction<Reg = R> + GetCtrlFlow + Accesses + InstrWrite,
 {
     let mut working_set = HashMap::<Tmp, Asn<R>>::new();
     let mut new_program = Vec::new();
@@ -177,7 +201,6 @@ where
                             //spills_before.extend(slot_alloc.emit_stack_load(dst, src_slot_id));
                             todo!("spill")
                         }
-
                     }
                     Stg::Reg(_) => todo!(),
                 }
@@ -192,4 +215,3 @@ where
 
     new_program
 }
-

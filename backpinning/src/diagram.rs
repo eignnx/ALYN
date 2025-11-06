@@ -2,7 +2,10 @@ use core::fmt;
 use std::{cell::LazyCell, collections::HashMap, fmt::Write, marker::PhantomData, sync::LazyLock};
 
 use alyn_common::names::Tmp;
-use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stmt::Stmt};
+use regalloc_common::{
+    ctrl_flow::{CtrlFlow, GetCtrlFlow},
+    stmt::Stmt,
+};
 
 use crate::{InstrExePhase, LiveRange, PrgPt};
 
@@ -34,7 +37,9 @@ pub struct DiagramCharSet {
 }
 
 static CHAR_SET: LazyLock<DiagramCharSet> = LazyLock::new(|| {
-    if let Ok(val) = std::env::var("CHARSET") && val == "ascii" {
+    if let Ok(val) = std::env::var("CHARSET")
+        && val == "ascii"
+    {
         DiagramCharSet {
             live_begin: '#',
             live_end: '#',
@@ -76,7 +81,9 @@ static CHAR_SET: LazyLock<DiagramCharSet> = LazyLock::new(|| {
 
 impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut tmps = self.live_ranges.keys()
+        let mut tmps = self
+            .live_ranges
+            .keys()
             .map(|t| (*t, format!("{t:?}").len()))
             .collect::<Vec<_>>();
         tmps.sort_unstable_by_key(|(tmp, _)| {
@@ -95,7 +102,7 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
             if iter != 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{:<width$}", format!("{tmp:?}"), width=len)?;
+            write!(f, "{:<width$}", format!("{tmp:?}"), width = len)?;
         }
         writeln!(f, "   ")?;
 
@@ -116,7 +123,6 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
 
         let mut stmts_iter = self.stmts.iter().enumerate().peekable();
         while let Some((i, stmt)) = stmts_iter.next() {
-
             if let Stmt::Label(lbl) = stmt {
                 let mut lbls = vec![lbl.to_string()];
                 while let Some((_, Stmt::Label(lbl))) = stmts_iter.peek() {
@@ -126,12 +132,13 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
                 let lbls_joined = format!("[{}]", lbls.join("; "));
 
                 let (left, fill, right) = CHAR_SET.bb_boundary;
-                let fill = fill
-                    .pad()
-                    .width(total_len as u16)
-                    .value(lbls_joined);
+                let fill = fill.pad().width(total_len as u16).value(lbls_joined);
 
-                writeln!(f, "{left}{fill}{right}     {i:0width$}", width=numcol_width)?;
+                writeln!(
+                    f,
+                    "{left}{fill}{right}     {i:0width$}",
+                    width = numcol_width
+                )?;
                 continue;
             }
 
@@ -140,14 +147,16 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
             for phase in InstrExePhase::PHASES {
                 let pt = PrgPt::new(i, phase);
 
-                if phase != InstrExePhase::ReadArgs && tmps.iter().all(|(tmp, _)| {
-                    let ranges = &self.live_ranges[tmp];
-                    ranges.iter().all(|r| r.begin != pt && r.end != pt)
-                }) {
+                if phase != InstrExePhase::ReadArgs
+                    && tmps.iter().all(|(tmp, _)| {
+                        let ranges = &self.live_ranges[tmp];
+                        ranges.iter().all(|r| r.begin != pt && r.end != pt)
+                    })
+                {
                     continue;
                 }
 
-                write!(f, "| ")?;
+                write!(f, "{} ", CHAR_SET.border_side)?;
 
                 let mut draw_x_guide = false;
 
@@ -161,17 +170,12 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
                         CHAR_SET.live_end
-                    } else if draw_x_guide {
-                        if live {
-                            CHAR_SET.live_crossing_x_guide
-                        } else {
-                            CHAR_SET.dead_crossing_x_guide
-                        }
                     } else {
-                        if live {
-                            CHAR_SET.live
-                        } else {
-                            CHAR_SET.dead
+                        match (draw_x_guide, live) {
+                            (true, true) => CHAR_SET.live_crossing_x_guide,
+                            (true, false) => CHAR_SET.dead_crossing_x_guide,
+                            (false, true) => CHAR_SET.live,
+                            (false, false) => CHAR_SET.dead,
                         }
                     };
 
@@ -194,10 +198,14 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
                 let side_crossing = CHAR_SET.border_side_crossing_x_guide;
                 match phase {
                     InstrExePhase::ReadArgs if draw_x_guide => {
-                        write!(f, "{side_crossing}─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(
+                            f,
+                            "{side_crossing}─(r)─{i:0width$}: {stmt:?}",
+                            width = numcol_width
+                        )?;
                     }
                     InstrExePhase::ReadArgs => {
-                        write!(f, "{side}     {i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(f, "{side}     {i:0width$}: {stmt:?}", width = numcol_width)?;
                     }
                     InstrExePhase::WriteBack => {
                         write!(f, "{side_crossing}─(w)─┘")?;
@@ -206,7 +214,10 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
 
                 writeln!(f)?;
 
-                if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance) && i != self.stmts.len() - 1 && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_)))) {
+                if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance)
+                    && i != self.stmts.len() - 1
+                    && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_))))
+                {
                     // end of basic block
                     let (left, fill, right) = CHAR_SET.bb_boundary;
                     let fill = fill.pad().width(total_len as u16);
@@ -235,7 +246,7 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
             if iter != 0 {
                 write!(f, " ")?;
             }
-            write!(f, "{:<width$}", format!("{tmp:?}"), width=len)?;
+            write!(f, "{:<width$}", format!("{tmp:?}"), width = len)?;
         }
         writeln!(f, "   ")?;
 

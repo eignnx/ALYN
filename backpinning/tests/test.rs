@@ -1,13 +1,20 @@
 use std::fmt::Debug;
 
 use alyn_common::names::Lbl;
-use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction, Register};
+use regalloc_common::{
+    Instruction, Register,
+    ctrl_flow::{CtrlFlow, GetCtrlFlow},
+    stg::Stg,
+    stmt::Stmt,
+};
 
 use backpinning::{diagram::DisplayLiveRanges, *};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Reg {
-    T0, T1, T2,
+    T0,
+    T1,
+    T2,
 }
 
 impl Register for Reg {
@@ -43,7 +50,9 @@ impl Debug for Instr {
             Self::BinOpImm(dst, src, imm) => write!(f, "{dst:?} ← {src:?} ± {imm:?}"),
             Self::Load(dst, src) => write!(f, "{dst:?} ← MEM[{src:?}]"),
             Self::Store(dst, src) => write!(f, "MEM[{dst:?}] ← {src:?}"),
-            Self::CmpBranch(src1, src2, lbl) => write!(f, "branch to {lbl:?} if {src1:?} <> {src2:?}"),
+            Self::CmpBranch(src1, src2, lbl) => {
+                write!(f, "branch to {lbl:?} if {src1:?} <> {src2:?}")
+            }
             Self::Jmp(lbl) => write!(f, "jmp {lbl:?}"),
             Self::Ret => write!(f, "ret"),
         }
@@ -93,14 +102,14 @@ impl Accesses for Instr {
 impl GetCtrlFlow for Instr {
     fn ctrl_flow(&self) -> CtrlFlow {
         match self {
-            Instr::Def(..) |
-            Instr::Use(..) |
-            Instr::Move(..) |
-            Instr::MoveImm(..) |
-            Instr::BinOp(..) |
-            Instr::BinOpImm(..) |
-            Instr::Load(..) |
-            Instr::Store(..) => CtrlFlow::Advance,
+            Instr::Def(..)
+            | Instr::Use(..)
+            | Instr::Move(..)
+            | Instr::MoveImm(..)
+            | Instr::BinOp(..)
+            | Instr::BinOpImm(..)
+            | Instr::Load(..)
+            | Instr::Store(..) => CtrlFlow::Advance,
             Instr::CmpBranch(_, _, lbl) => CtrlFlow::Branch(*lbl),
             Instr::Jmp(lbl) => CtrlFlow::Jump(*lbl),
             Instr::Ret => CtrlFlow::Exit,
@@ -116,8 +125,8 @@ impl From<Instr> for Stmt<Instr> {
 
 #[test]
 fn test_live_range_computation() {
-    use Stmt as S;
     use Instr::*;
+    use Stmt as S;
 
     let stmts = vec![
         S::Label("test".into()),
@@ -128,10 +137,8 @@ fn test_live_range_computation() {
         S::Instr(Def("z".into())),
         S::Instr(Use("yeet".into())),
         S::Instr(Use("z".into())),
-
         S::Instr(Move("w".into(), "z".into())),
         S::Instr(Use("w".into())),
-
         S::Instr(Move("x".into(), "w".into())),
         S::Instr(Use("x".into())),
     ];
@@ -140,7 +147,7 @@ fn test_live_range_computation() {
     println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
 }
 
-    #[test]
+#[test]
 fn knr_binsearch() {
     // int binsearch(int x, int v[], int n) {
     //     int low = 0;
@@ -180,8 +187,8 @@ fn knr_binsearch() {
     //  ret -1;
     //
 
-    use Stmt as S;
     use Instr::*;
+    use Stmt as S;
 
     let low = "low".into();
     let high = "high".into();
