@@ -1,4 +1,4 @@
-use std::{collections::{BTreeSet, HashMap}, ops::Range};
+use std::{collections::{BTreeSet, HashMap}, ops::{Index, Range}};
 
 use alyn_common::names::Lbl;
 use derive_more::{Add, From, Into};
@@ -182,30 +182,13 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
     }
 
     #[track_caller]
-    fn get_bb(&self, bb_idx: BbIdx) -> &Bb {
-        &self.bbs[bb_idx.0]
-    }
-
-    #[track_caller]
-    fn get_stmt(&self, stmt_idx: StmtIdx) -> &Stmt<I> {
-        &self.stmts[stmt_idx.0]
-    }
-
-    #[track_caller]
     pub fn successor_bbs(&self, bb_idx: BbIdx) -> impl Iterator<Item = BbIdx> + ExactSizeIterator {
-        self.get_bb(bb_idx).successors.iter().map(|stmt_idx| self.stmt_idx_to_bb_idx(*stmt_idx))
+        self[bb_idx].successors.iter().map(|stmt_idx| self.stmt_idx_to_bb_idx(*stmt_idx))
     }
-
-    //pub fn predecessors(&self, node_id: StmtIdx) -> impl Iterator<Item = StmtIdx> {
-    //    // TODO: faster impl here?
-    //    self.edges
-    //        .iter()
-    //        .filter_map(move |(from, to)| (*to == node_id).then_some(*from))
-    //}
 
     #[track_caller]
     pub fn bb_stmts(&self, bb_idx: BbIdx) -> impl Iterator<Item = &Stmt<I>> + ExactSizeIterator {
-        let instr_range = self.get_bb(bb_idx).instrs.clone();
+        let instr_range = self[bb_idx].instrs.clone();
         let instr_range = instr_range.start.0 .. instr_range.end.0;
         self.stmts[instr_range].iter()
     }
@@ -220,9 +203,9 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
     }
 
     pub fn bb_terminator(&self, bb_idx: BbIdx) -> Terminator<&I> {
-        match &self.get_bb(bb_idx).terminator {
+        match &self[bb_idx].terminator {
             Terminator::Instr(stmt_idx) => {
-                let Stmt::Instr(instr) = self.get_stmt(*stmt_idx) else { unreachable!() };
+                let Stmt::Instr(instr) = &self[*stmt_idx] else { unreachable!() };
                 Terminator::Instr(instr)
             }
             Terminator::FallThrough => Terminator::FallThrough,
@@ -231,11 +214,11 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
 
     /// The labels that refer to the start of this basic block;
     pub fn bb_labels(&self, bb_idx: BbIdx) -> impl Iterator<Item = Lbl> + ExactSizeIterator {
-        let bb = &self.get_bb(bb_idx);
+        let bb = &self[bb_idx];
         let lbls_start = bb.stmts.start;
         let lbls_end = bb.instrs.start;
         let lbls_range = lbls_start.0 .. lbls_end.0;
-        self.stmts[lbls_range].iter().map(|stmt| {
+        self[lbls_start..lbls_end].iter().map(|stmt| {
             let Stmt::Label(lbl) = stmt else { unreachable!() };
             *lbl
         })
@@ -259,5 +242,29 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
 
     pub fn move_stmts(&self) -> impl Iterator<Item = &Move<R>> {
         self.move_stmts.iter()
+    }
+}
+
+impl<'stmts, R, I> Index<Range<StmtIdx>> for Cfg<'stmts, R, I> {
+    type Output = [Stmt<I>];
+
+    fn index(&self, index: Range<StmtIdx>) -> &Self::Output {
+        &self.stmts[index.start.0 .. index.end.0]
+    }
+}
+
+impl<'stmts, R, I> Index<StmtIdx> for Cfg<'stmts, R, I> {
+    type Output = Stmt<I>;
+
+    fn index(&self, index: StmtIdx) -> &Self::Output {
+        &self.stmts[index.0]
+    }
+}
+
+impl<'stmts, R, I> Index<BbIdx> for Cfg<'stmts, R, I> {
+    type Output = Bb;
+
+    fn index(&self, index: BbIdx) -> &Self::Output {
+        &self.bbs[index.0]
     }
 }
