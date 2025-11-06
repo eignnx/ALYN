@@ -18,6 +18,7 @@ use regalloc_common::{
 };
 
 pub mod diagram;
+mod pad;
 
 #[derive(Debug)]
 pub enum Access<'a, R> {
