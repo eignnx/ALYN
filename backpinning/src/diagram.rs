@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, fmt::Write, marker::PhantomData};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stmt::Stmt};
@@ -26,6 +26,7 @@ pub trait DiagramCharSet {
     const DRAW_X_GUIDE: char;
     const LR_LIVE_CROSSES_X_GUIDE: char;
     const LR_DEAD_CROSSES_X_GUIDE: char;
+    const BB_BOUNDARY: char;
 }
 
 pub struct AsciiCharSet;
@@ -38,6 +39,7 @@ impl DiagramCharSet for AsciiCharSet {
     const DRAW_X_GUIDE: char = '.';
     const LR_LIVE_CROSSES_X_GUIDE: char = '#';
     const LR_DEAD_CROSSES_X_GUIDE: char = '!';
+    const BB_BOUNDARY: char = '-';
 }
 
 impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for DisplayLiveRanges<'a, I, CharSet> {
@@ -53,6 +55,7 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
                 .unwrap()
         });
 
+        let total_len = tmps.iter().map(|(_, len)| *len + 1).sum::<usize>() + 2;
         let numcol_width = self.stmts.len().ilog10() as usize + 1;
 
         write!(f, "  ")?;
@@ -73,7 +76,22 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
         }
         writeln!(f, "--.")?;
 
-        for (i, stmt) in self.stmts.iter().enumerate() {
+        let mut stmts_iter = self.stmts.iter().enumerate().peekable();
+        while let Some((i, stmt)) = stmts_iter.next() {
+
+            if let Stmt::Label(lbl) = stmt {
+                let mut lbls = vec![lbl.to_string()];
+                while let Some((_, Stmt::Label(lbl))) = stmts_iter.peek() {
+                    lbls.push(lbl.to_string());
+                    let _ = stmts_iter.next();
+                }
+                write!(f, ":{:-^width$}:", format!("[ {}: ]", lbls.join("; ")), width=total_len)?;
+                writeln!(f, "     {i:0width$}", width=numcol_width)?;
+                continue;
+            }
+
+            let x = CharSet::DRAW_X_GUIDE;
+
             for phase in InstrExePhase::PHASES {
                 let pt = PrgPt::new(i, phase);
 
@@ -88,33 +106,37 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
 
                 let mut draw_x_guide = false;
 
-                // NOTE: can't use "dynamic" fill character, so gotta replace all `.`s with
-                // your chosen character.
-                let x = CharSet::DRAW_X_GUIDE;
-
                 for (tmp, len) in &tmps {
                     let ranges = &self.live_ranges[tmp];
-                    let contained = ranges.iter().any(|r| r.contains(pt));
+                    let live = ranges.iter().any(|r| r.contains(pt));
 
-                    if ranges.iter().any(|r| r.begin == pt) {
+                    let mark = if ranges.iter().any(|r| r.begin == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:.<width$}{x}", CharSet::LR_BEGIN, width=len)?;
+                        CharSet::LR_BEGIN
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
-                        write!(f, "{:.<width$}{x}", CharSet::LR_END, width=len)?;
+                        CharSet::LR_END
                     } else if draw_x_guide {
-                        if contained {
-                            write!(f, "{:.<width$}{x}", CharSet::LR_LIVE_CROSSES_X_GUIDE, width=len)?;
+                        if live {
+                            CharSet::LR_LIVE_CROSSES_X_GUIDE
                         } else {
-                            write!(f, "{:.<width$}{x}", CharSet::LR_DEAD_CROSSES_X_GUIDE, width=len)?;
+                            CharSet::LR_DEAD_CROSSES_X_GUIDE
                         }
                     } else {
-                        if contained {
-                            write!(f, "{: <width$} ", CharSet::LR_LIVE, width=len)?;
+                        if live {
+                            CharSet::LR_LIVE
                         } else {
-                            write!(f, "{: <width$} ", CharSet::LR_DEAD, width=len)?;
+                            CharSet::LR_DEAD
                         }
-                    }
+                    };
+
+                    let pad = if draw_x_guide { x } else { ' ' }
+                        .pad()
+                        .align('<')
+                        .width(*len as u16 + 1)
+                        .value(mark);
+
+                    write!(f, "{pad}")?;
                 }
 
                 if draw_x_guide {
@@ -136,16 +158,11 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
                 }
 
                 writeln!(f)?;
-            }
-            if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance) && i != self.stmts.len() - 1 {
-                write!(f, "+=")?;
-                for (iter, (_, len)) in tmps.iter().enumerate() {
-                    if iter != 0 {
-                        write!(f, "=")?;
-                    }
-                    write!(f, "{:=<width$}", "+", width=len)?;
+
+                if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance) && i != self.stmts.len() - 1 && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_)))) {
+                    // end of basic block
+                    writeln!(f, ":{}:", CharSet::BB_BOUNDARY.pad().width(total_len as u16))?;
                 }
-                writeln!(f, "==+")?;
             }
         }
 
@@ -167,6 +184,86 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
         }
         writeln!(f, "   ")?;
 
+        Ok(())
+    }
+}
+
+pub trait PadWith: Sized {
+    fn pad(self) -> PadOpts;
+}
+
+impl PadWith for char {
+    fn pad(self) -> PadOpts {
+        PadOpts::default()
+            .alignment(fmt::Alignment::Center)
+            .fill(self)
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct PadOpts {
+    options: fmt::FormattingOptions,
+}
+
+impl fmt::Display for PadOpts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value(""))
+    }
+}
+
+impl PadOpts {
+    pub fn fill(mut self, fill: char) -> Self {
+        self.options.fill(fill);
+        self
+    }
+
+    pub fn width(mut self, width: u16) -> Self {
+        self.options.width(Some(width));
+        self
+    }
+    pub fn alignment(mut self, alignment: fmt::Alignment) -> Self {
+        self.options.align(Some(alignment));
+        self
+    }
+
+    pub fn align(mut self, align: char) -> Self {
+        self.options.align(match align {
+            '<' => Some(fmt::Alignment::Left),
+            '>' => Some(fmt::Alignment::Right),
+            '^' => Some(fmt::Alignment::Center),
+            ' ' => None,
+            _ => panic!("invalid alignment character '{align}'"),
+        });
+        self
+    }
+
+    pub fn value<T>(self, value: T) -> Pad<T> {
+        Pad {
+            value,
+            options: self.options,
+        }
+    }
+}
+
+pub struct Pad<T> {
+    value: T,
+    options: fmt::FormattingOptions,
+}
+
+impl<T: fmt::Debug> fmt::Debug for Pad<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rendered = format!("{:?}", self.value);
+        let mut f = self.options.create_formatter(f);
+        f.pad(rendered.as_ref())?;
+        Ok(())
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Pad<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rendered = format!("{}", self.value);
+        let mut f = self.options.create_formatter(f);
+        f.pad(rendered.as_ref())?;
         Ok(())
     }
 }

@@ -1,4 +1,6 @@
-use std::{collections::{HashMap, HashSet}, fmt::{self, Debug, Display}};
+#![feature(formatting_options)]
+
+use std::{collections::{HashMap, HashSet}, fmt::Debug};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{asn::{Asn, SlotId}, cfg::Cfg, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, DefsUses, Instruction, Register};
