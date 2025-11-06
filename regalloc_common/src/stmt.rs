@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 use alyn_common::names::Lbl;
 
 use crate::{
-    ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, Instruction
+    ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, DefsUses, Instruction
 };
 
 /// Wrapper around instruction so that `I` doesn't need to have it's own `Label` variant.
@@ -37,6 +37,17 @@ impl<I: GetCtrlFlow> GetCtrlFlow for Stmt<I> {
             Stmt::Instr(instr) => instr.ctrl_flow(),
             Stmt::Label(_) => CtrlFlow::Advance,
         }
+    }
+}
+
+impl<I: DefsUses> DefsUses for Stmt<I> {
+    fn defs_uses<'a>(&'a mut self) -> impl Iterator<Item=crate::DefUse<'a, Self::Reg>> {
+        let mut out = Vec::new();
+        match self {
+            Stmt::Instr(instr) => out.extend(instr.defs_uses()),
+            Stmt::Label(_) => {},
+        }
+        out.into_iter()
     }
 }
 

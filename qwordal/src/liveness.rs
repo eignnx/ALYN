@@ -11,7 +11,6 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-
 pub struct LiveSets<R, I> {
     live_ins: BTreeMap<StmtIdx, BTreeSet<Stg<R>>>,
     live_outs: BTreeMap<StmtIdx, BTreeSet<Stg<R>>>,

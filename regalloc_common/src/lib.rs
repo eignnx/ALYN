@@ -9,6 +9,8 @@ pub mod stg;
 pub mod slot_alloc;
 pub mod ctrl_flow;
 pub mod asn;
+pub mod liveness;
+pub mod cfg;
 
 pub trait Register: Copy + 'static + Debug + Ord + Eq + Hash {
     /// A list of all the available general-purpose registers.
@@ -26,3 +28,11 @@ pub trait Instruction: Debug + Clone {
     fn is_subr_call(&self) -> bool { false }
 }
 
+pub enum DefUse<'a, R> {
+    Def(&'a mut Stg<R>),
+    Use(&'a mut Stg<R>),
+}
+
+pub trait DefsUses: Instruction {
+    fn defs_uses<'a>(&'a mut self) -> impl Iterator<Item=DefUse<'a, Self::Reg>>;
+}
