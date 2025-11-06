@@ -1,48 +1,79 @@
 use core::fmt;
-use std::{collections::HashMap, fmt::Write, marker::PhantomData};
+use std::{cell::LazyCell, collections::HashMap, fmt::Write, marker::PhantomData, sync::LazyLock};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stmt::Stmt};
 
 use crate::{InstrExePhase, LiveRange, PrgPt};
 
-pub struct DisplayLiveRanges<'a, I, CharSet> {
+pub struct DisplayLiveRanges<'a, I> {
     stmts: &'a [Stmt<I>],
     live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>,
-    _char_set: PhantomData<CharSet>,
 }
 
-impl<'a, I, CharSet: DiagramCharSet> DisplayLiveRanges<'a, I, CharSet> {
+impl<'a, I> DisplayLiveRanges<'a, I> {
     pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>) -> Self {
-        Self { stmts, live_ranges, _char_set: PhantomData }
+        Self { stmts, live_ranges }
     }
 }
 
-pub trait DiagramCharSet {
-    const LR_BEGIN: char;
-    const LR_END: char;
-    const LR_LIVE: char;
-    const LR_DEAD: char;
-    const DRAW_X_GUIDE: char;
-    const LR_LIVE_CROSSES_X_GUIDE: char;
-    const LR_DEAD_CROSSES_X_GUIDE: char;
-    const BB_BOUNDARY: char;
+pub struct DiagramCharSet {
+    live_begin: char,
+    live_end: char,
+    live: char,
+    dead: char,
+    x_guide: char,
+    live_crossing_x_guide: char,
+    dead_crossing_x_guide: char,
+    bb_boundary: (char, char, char),
+    border_top: (char, char, char),
+    border_bottom: (char, char, char),
+    border_crossing_lifeline: char,
+    border_side: char,
+    border_side_crossing_x_guide: char,
 }
 
-pub struct AsciiCharSet;
+static CHAR_SET: LazyLock<DiagramCharSet> = LazyLock::new(|| {
+    if let Ok(val) = std::env::var("CHARSET") && val == "ascii" {
+        DiagramCharSet {
+            live_begin: '#',
+            live_end: '#',
+            live: '#',
+            dead: '\'',
+            x_guide: '.',
+            live_crossing_x_guide: '#',
+            dead_crossing_x_guide: '!',
+            bb_boundary: (':', '-', ':'),
+            border_top: ('.', '-', '.'),
+            border_bottom: ('\'', '-', '\''),
+            border_crossing_lifeline: '+',
+            border_side: '|',
+            border_side_crossing_x_guide: '|',
+        }
+    } else {
+        DiagramCharSet {
+            live_begin: '▄',
+            live_end: '▀',
+            live: '█',
+            dead: '╵',
+            //dead: '┊',
+            //dead: '·',
+            x_guide: '┄',
+            live_crossing_x_guide: '█',
+            dead_crossing_x_guide: '┼',
+            //dead_crossing_x_guide: '·',
+            //dead_crossing_x_guide: '┄',
+            bb_boundary: ('╞', '═', '╡'),
+            border_top: ('╒', '═', '╕'),
+            border_bottom: ('╘', '═', '╛'),
+            border_crossing_lifeline: '╪',
+            border_side: '│',
+            border_side_crossing_x_guide: '┼',
+        }
+    }
+});
 
-impl DiagramCharSet for AsciiCharSet {
-    const LR_BEGIN: char = '#';
-    const LR_END: char = '#';
-    const LR_LIVE: char = '#';
-    const LR_DEAD: char = '\'';
-    const DRAW_X_GUIDE: char = '.';
-    const LR_LIVE_CROSSES_X_GUIDE: char = '#';
-    const LR_DEAD_CROSSES_X_GUIDE: char = '!';
-    const BB_BOUNDARY: char = '-';
-}
-
-impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for DisplayLiveRanges<'a, I, CharSet> {
+impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut tmps = self.live_ranges.keys()
             .map(|t| (*t, format!("{t:?}").len()))
@@ -67,14 +98,20 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
         }
         writeln!(f, "   ")?;
 
-        write!(f, ".-")?;
+        let (left, fill, right) = CHAR_SET.border_top;
+        write!(f, "{left}{fill}")?;
         for (iter, (_, len)) in tmps.iter().enumerate() {
             if iter != 0 {
-                write!(f, "-")?;
+                write!(f, "{fill}")?;
             }
-            write!(f, "{:-<width$}", "+", width=len)?;
+            let fill = fill
+                .pad()
+                .align('<')
+                .width(*len as u16)
+                .value(CHAR_SET.border_crossing_lifeline);
+            write!(f, "{fill}")?;
         }
-        writeln!(f, "--.")?;
+        writeln!(f, "{fill}{fill}{right}")?;
 
         let mut stmts_iter = self.stmts.iter().enumerate().peekable();
         while let Some((i, stmt)) = stmts_iter.next() {
@@ -85,12 +122,19 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
                     lbls.push(lbl.to_string());
                     let _ = stmts_iter.next();
                 }
-                write!(f, ":{:-^width$}:", format!("[ {}: ]", lbls.join("; ")), width=total_len)?;
-                writeln!(f, "     {i:0width$}", width=numcol_width)?;
+                let lbls_joined = format!("[{}]", lbls.join("; "));
+
+                let (left, fill, right) = CHAR_SET.bb_boundary;
+                let fill = fill
+                    .pad()
+                    .width(total_len as u16)
+                    .value(lbls_joined);
+
+                writeln!(f, "{left}{fill}{right}     {i:0width$}", width=numcol_width)?;
                 continue;
             }
 
-            let x = CharSet::DRAW_X_GUIDE;
+            let x = CHAR_SET.x_guide;
 
             for phase in InstrExePhase::PHASES {
                 let pt = PrgPt::new(i, phase);
@@ -112,21 +156,21 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
 
                     let mark = if ranges.iter().any(|r| r.begin == pt) {
                         draw_x_guide = true;
-                        CharSet::LR_BEGIN
+                        CHAR_SET.live_begin
                     } else if ranges.iter().any(|r| r.end == pt) {
                         draw_x_guide = true;
-                        CharSet::LR_END
+                        CHAR_SET.live_end
                     } else if draw_x_guide {
                         if live {
-                            CharSet::LR_LIVE_CROSSES_X_GUIDE
+                            CHAR_SET.live_crossing_x_guide
                         } else {
-                            CharSet::LR_DEAD_CROSSES_X_GUIDE
+                            CHAR_SET.dead_crossing_x_guide
                         }
                     } else {
                         if live {
-                            CharSet::LR_LIVE
+                            CHAR_SET.live
                         } else {
-                            CharSet::LR_DEAD
+                            CHAR_SET.dead
                         }
                     };
 
@@ -145,15 +189,17 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
                     write!(f, " ")?;
                 }
 
+                let side = CHAR_SET.border_side;
+                let side_crossing = CHAR_SET.border_side_crossing_x_guide;
                 match phase {
                     InstrExePhase::ReadArgs if draw_x_guide => {
-                        write!(f, "|─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(f, "{side_crossing}─(r)─{i:0width$}: {stmt:?}", width=numcol_width)?;
                     }
                     InstrExePhase::ReadArgs => {
-                        write!(f, "|     {i:0width$}: {stmt:?}", width=numcol_width)?;
+                        write!(f, "{side}     {i:0width$}: {stmt:?}", width=numcol_width)?;
                     }
                     InstrExePhase::WriteBack => {
-                        write!(f, "|─(w)─┘")?;
+                        write!(f, "{side_crossing}─(w)─┘")?;
                     }
                 }
 
@@ -161,19 +207,27 @@ impl<'a, I: fmt::Debug + GetCtrlFlow, CharSet: DiagramCharSet> fmt::Display for 
 
                 if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance) && i != self.stmts.len() - 1 && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_)))) {
                     // end of basic block
-                    writeln!(f, ":{}:", CharSet::BB_BOUNDARY.pad().width(total_len as u16))?;
+                    let (left, fill, right) = CHAR_SET.bb_boundary;
+                    let fill = fill.pad().width(total_len as u16);
+                    writeln!(f, "{left}{fill}{right}")?;
                 }
             }
         }
 
-        write!(f, "'-")?;
+        let (left, fill, right) = CHAR_SET.border_bottom;
+        write!(f, "{left}{fill}")?;
         for (iter, (_, len)) in tmps.iter().enumerate() {
             if iter != 0 {
-                write!(f, "-")?;
+                write!(f, "{fill}")?;
             }
-            write!(f, "{:-<width$}", "+", width=len)?;
+            let fill = fill
+                .pad()
+                .width(*len as u16)
+                .align('<')
+                .value(CHAR_SET.border_crossing_lifeline);
+            write!(f, "{fill}")?;
         }
-        writeln!(f, "--'")?;
+        writeln!(f, "{fill}{fill}{right}")?;
 
         write!(f, "  ")?;
         for (iter, (tmp, len)) in tmps.iter().enumerate() {

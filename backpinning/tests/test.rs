@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use alyn_common::names::Lbl;
 use regalloc_common::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction, Register};
 
-use backpinning::{diagram::{AsciiCharSet, DisplayLiveRanges}, *};
+use backpinning::{diagram::DisplayLiveRanges, *};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Reg {
@@ -137,7 +137,7 @@ fn test_live_range_computation() {
     ];
 
     let live_ranges = compute_live_ranges(&stmts[..]);
-    println!("{}", DisplayLiveRanges::<_, AsciiCharSet>::new(&stmts[..], &live_ranges));
+    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
 }
 
     #[test]
@@ -223,5 +223,5 @@ fn knr_binsearch() {
         Ret.into(),
     ];
     let live_ranges = compute_live_ranges(&stmts[..]);
-    println!("{}", DisplayLiveRanges::<_, AsciiCharSet>::new(&stmts[..], &live_ranges));
+    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
 }
