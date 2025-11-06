@@ -1,7 +1,7 @@
 #![feature(formatting_options)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::Debug,
 };
 
@@ -128,15 +128,32 @@ pub fn compute_live_ranges_2<
     I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
 >(
     cfg: &Cfg<R, I>,
-) -> HashMap<Tmp, Vec<LiveRange>> {
-    let mut live_ranges = HashMap::<Tmp, Vec<LiveRange>>::new();
-    let mut last_use = HashMap::<Tmp, PrgPt>::new();
+) -> HashMap<Stg<R>, Vec<LiveRange>> {
+    let mut live_ranges = HashMap::<Stg<R>, Vec<LiveRange>>::new();
 
     let live_sets = LiveSets::build_from(cfg, []);
 
-    for (idx, stmt) in cfg.stmts().enumerate().rev() {
+    for (idx, stmt) in cfg.stmts().enumerate() {
+        for access in stmt.accesses() {
+
+        }
         match stmt.ctrl_flow() {
-            CtrlFlow::Advance => todo!(),
+            _ if matches!(stmt, Stmt::Label(lbl)) => {
+                for live in live_sets.live_outs(idx) {
+                    let ranges = live_ranges.entry(*live).or_default();
+                    ranges.push(LiveRange {
+                        begin: idx,
+                        end: idx,
+                    });
+                }
+            }
+            CtrlFlow::Advance => {
+                for live in live_sets.live_outs(idx) {
+                    let ranges = live_ranges.entry(*live).or_default();
+
+                }
+            }
+
             CtrlFlow::Exit => todo!(),
             CtrlFlow::Jump(lbl) => todo!(),
             CtrlFlow::Switch(lbls) => todo!(),
