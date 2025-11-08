@@ -3,7 +3,7 @@ use std::fmt::{self, Debug};
 use alyn_common::names::Lbl;
 
 use crate::{
-    ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, DefsUses, Instruction
+    ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, DefUseMut, DefsUses, DefsUsesMut, Instruction
 };
 
 /// Wrapper around instruction so that `I` doesn't need to have it's own `Label` variant.
@@ -40,14 +40,23 @@ impl<I: GetCtrlFlow> GetCtrlFlow for Stmt<I> {
     }
 }
 
-impl<I: DefsUses> DefsUses for Stmt<I> {
-    fn defs_uses<'a>(&'a mut self) -> impl Iterator<Item=crate::DefUse<'a, Self::Reg>> {
+impl<I: DefsUsesMut> DefsUsesMut for Stmt<I> {
+    fn defs_uses_mut<'a>(&'a mut self) -> impl Iterator<Item=DefUseMut<'a, Self::Reg>> {
         let mut out = Vec::new();
         match self {
-            Stmt::Instr(instr) => out.extend(instr.defs_uses()),
+            Stmt::Instr(instr) => out.extend(instr.defs_uses_mut()),
             Stmt::Label(_) => {},
         }
         out.into_iter()
+    }
+}
+
+impl<I: DefsUses> DefsUses for Stmt<I> {
+    fn defs_uses(&self, out: &mut impl Extend<crate::DefUse<Self::Reg>>) {
+        match self {
+            Stmt::Instr(instr) => instr.defs_uses(out),
+            Stmt::Label(_) => {},
+        }
     }
 }
 

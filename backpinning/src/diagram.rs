@@ -37,7 +37,7 @@ pub struct DiagramCharSet {
 }
 
 static CHAR_SET: LazyLock<DiagramCharSet> = LazyLock::new(|| {
-    if let Ok(val) = std::env::var("CHARSET")
+    if let Ok(val) = std::env::var("ALYN_LIVENESS_DIAGRAM_CHARSET")
         && val == "ascii"
     {
         DiagramCharSet {

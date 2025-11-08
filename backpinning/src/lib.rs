@@ -135,7 +135,10 @@ pub fn compute_live_ranges_2<
 
     for (idx, stmt) in cfg.stmts().enumerate() {
         for access in stmt.accesses() {
-
+            match access {
+                Access::Read(stg, instr_exe_phase) => todo!(),
+                Access::Write(stg, instr_exe_phase) => todo!(),
+            }
         }
         match stmt.ctrl_flow() {
             _ if matches!(stmt, Stmt::Label(lbl)) => {

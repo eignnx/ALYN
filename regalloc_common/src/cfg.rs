@@ -1,15 +1,18 @@
 use std::{collections::{BTreeSet, HashMap}, ops::{Index, Range}};
 
 use alyn_common::names::Lbl;
-use derive_more::{Add, From, Into};
+use derive_more::{Add, From};
 
 use crate::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
 
-#[derive(Debug, Clone, Copy, Add, From, Into, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StmtIdx(usize);
-#[derive(Debug, Clone, Copy, Add, From, Into, PartialEq, Eq, PartialOrd, Ord, Hash)]
+
+#[derive(Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BbIdx(usize);
 
+/// TODO: remove this from the CFG module, since it's just extra information that the CFG shouldn't
+/// have to care about in general.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Move<R> {
     pub dst: Stg<R>,
@@ -31,6 +34,10 @@ pub struct Cfg<'stmts, R, I> {
     /// Maps `Lbl`s to (the index of) the `Bb` they begin.
     lbls_to_bb_idxs: HashMap<Lbl, BbIdx>,
 
+    /// The predecessors of a basic block (those blocks from which a block may be entered) are
+    /// difficult to compute, so we'll save them as we find them.
+    bb_predecessors: HashMap<BbIdx, BTreeSet<BbIdx>>,
+
     move_stmts: Vec<Move<R>>,
 }
 
@@ -39,20 +46,37 @@ pub enum Terminator<I> {
     FallThrough,
 }
 
+impl<I> Terminator<I> {
+    pub fn is_instr(&self) -> bool {
+        matches!(self, Self::Instr(_))
+    }
+}
+
 /// Basic Block
 pub struct Bb {
     /// All Stmts in the block, including labels and terminators.
     stmts: Range<StmtIdx>,
 
     /// The non-terminator, non-label statements.
-    instrs: Range<StmtIdx>,
+    body_instrs: Range<StmtIdx>,
 
     /// The final statement. It jumps to another block or exits.
     terminator: Terminator<StmtIdx>,
 
-    /// The indices of the statements that the basic block goes to next (or empty if
+    /// The indices of the *statements* that the basic block goes to next (or empty if
     /// terminator does `CtrlFlow::Exit`).
     successors: BTreeSet<StmtIdx>,
+}
+
+impl Bb {
+    pub fn instrs_range(&self) -> Range<StmtIdx> {
+        let start = self.body_instrs.start;
+        let end = {
+            let term_count = if self.terminator.is_instr() { 1 } else { 0 };
+            self.body_instrs.end + term_count.into()
+        };
+        start..end
+    }
 }
 
 impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
@@ -66,6 +90,7 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
             exit_bbs: Default::default(),
             lbls_to_stmt_idxs: Default::default(),
             lbls_to_bb_idxs: Default::default(),
+            bb_predecessors: Default::default(),
             move_stmts: Default::default(),
         };
 
@@ -133,7 +158,7 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
                         }
                         (_, flow) => {
                             let stmts = bb_stmts_start..bb_instrs_start;
-                            let instrs = bb_instrs_start..idx;
+                            let body_instrs = bb_instrs_start..idx;
                             let mut successors = BTreeSet::<StmtIdx>::new();
                             let mut terminator = Terminator::Instr(idx);
 
@@ -162,7 +187,12 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
                                 }
                             }
 
-                            self.bbs.push(Bb { stmts, instrs, terminator, successors });
+                            for succ_stmt_idx in successors.iter() {
+                                let succ_bb_idx = self.stmt_idx_to_bb_idx(*succ_stmt_idx);
+                                self.bb_predecessors.entry(succ_bb_idx).or_default().insert(curr_bb_idx);
+                            }
+
+                            self.bbs.push(Bb { stmts, body_instrs, terminator, successors });
 
                             state = State::NewBb;
                         }
@@ -182,22 +212,30 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
     }
 
     #[track_caller]
+    pub fn predecessor_bbs(&self, bb_idx: BbIdx) -> impl Iterator<Item = BbIdx> + ExactSizeIterator {
+        self.bb_predecessors[&bb_idx].iter().cloned()
+    }
+
+    #[track_caller]
     pub fn successor_bbs(&self, bb_idx: BbIdx) -> impl Iterator<Item = BbIdx> + ExactSizeIterator {
         self[bb_idx].successors.iter().map(|stmt_idx| self.stmt_idx_to_bb_idx(*stmt_idx))
     }
 
     #[track_caller]
-    pub fn bb_stmts(&self, bb_idx: BbIdx) -> impl Iterator<Item = &Stmt<I>> + ExactSizeIterator {
-        let instr_range = self[bb_idx].instrs.clone();
+    pub fn bb_stmts(&self, bb_idx: BbIdx) -> impl Iterator<Item = &Stmt<I>> + DoubleEndedIterator {
+        let instr_range = self[bb_idx].body_instrs.clone();
         let instr_range = instr_range.start.0 .. instr_range.end.0;
         self.stmts[instr_range].iter()
     }
 
-    /// Returns an iterator of *non-terminator*, *non-label* instructions.
+    /// Returns an iterator of *non-label* instructions, which includes the terminator (if present).
     #[track_caller]
-    pub fn bb_instrs(&self, bb_idx: BbIdx) -> impl Iterator<Item = &I> + ExactSizeIterator {
-        self.bb_stmts(bb_idx).map(|stmt| {
-            let Stmt::Instr(instr) = stmt else { unreachable!() };
+    pub fn bb_instrs(&self, bb_idx: BbIdx) -> impl Iterator<Item = &I> + DoubleEndedIterator {
+        let bb = &self[bb_idx];
+        self[bb.instrs_range()].iter().map(|stmt| {
+            let Stmt::Instr(instr) = stmt else {
+                unreachable!()
+            };
             instr
         })
     }
@@ -216,12 +254,16 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
     pub fn bb_labels(&self, bb_idx: BbIdx) -> impl Iterator<Item = Lbl> + ExactSizeIterator {
         let bb = &self[bb_idx];
         let lbls_start = bb.stmts.start;
-        let lbls_end = bb.instrs.start;
-        let lbls_range = lbls_start.0 .. lbls_end.0;
+        let lbls_end = bb.body_instrs.start;
         self[lbls_start..lbls_end].iter().map(|stmt| {
             let Stmt::Label(lbl) = stmt else { unreachable!() };
             *lbl
         })
+    }
+
+    pub fn bbs(&self) -> impl Iterator<Item = BbIdx> + ExactSizeIterator {
+        let n_bbs = self.bbs.len() - 1;
+        (0..n_bbs).map(|i| i.into())
     }
 
     pub fn stmts(&self) -> &[Stmt<I>] {
