@@ -1,20 +1,13 @@
 #![feature(formatting_options)]
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::Debug,
 };
 
 use alyn_common::names::Tmp;
 use regalloc_common::{
-    DefsUses, Instruction, Register,
-    asn::{Asn, SlotId},
-    cfg::Cfg,
-    ctrl_flow::{CtrlFlow, GetCtrlFlow},
-    liveness::LiveSets,
-    slot_alloc::{InstrWrite, SlotAllocator},
-    stg::Stg,
-    stmt::Stmt,
+    asn::{Asn, SlotId}, cfg::{Cfg, StmtIdx}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, DefsUses, Instruction, Register
 };
 
 pub mod diagram;
@@ -67,12 +60,12 @@ impl InstrExePhase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PrgPt {
-    stmt_idx: usize,
+    stmt_idx: StmtIdx,
     phase: InstrExePhase,
 }
 
 impl PrgPt {
-    pub fn new(stmt_idx: usize, phase: InstrExePhase) -> Self {
+    pub fn new(stmt_idx: StmtIdx, phase: InstrExePhase) -> Self {
         Self { stmt_idx, phase }
     }
 }
@@ -89,33 +82,33 @@ impl LiveRange {
     }
 }
 
-pub fn compute_live_ranges<R, I: Instruction<Reg = R> + Accesses>(
+pub fn compute_live_ranges<R: Register, I: Instruction<Reg = R> + Accesses>(
     stmts: &[Stmt<I>],
-) -> HashMap<Tmp, Vec<LiveRange>> {
-    let mut live_ranges = HashMap::<Tmp, Vec<LiveRange>>::new();
-    let mut last_use = HashMap::<Tmp, PrgPt>::new();
+) -> HashMap<Stg<R>, Vec<LiveRange>> {
+    let mut live_ranges = HashMap::<Stg<R>, Vec<LiveRange>>::new();
+    let mut last_use = HashMap::<Stg<R>, PrgPt>::new();
 
     for (i, stmt) in stmts.iter().enumerate().rev() {
+        let i = StmtIdx::from(i);
         let Stmt::Instr(mut instr) = stmt.clone() else {
             continue;
         };
         for access in instr.accesses() {
             match access {
-                Access::Read(Stg::Tmp(tmp), phase) => {
-                    if !last_use.contains_key(&tmp) {
-                        last_use.insert(*tmp, PrgPt::new(i, phase));
+                Access::Read(stg, phase) => {
+                    if !last_use.contains_key(&stg) {
+                        last_use.insert(*stg, PrgPt::new(i, phase));
                     }
                 }
-                Access::Write(Stg::Tmp(tmp), phase) => {
-                    let Some(end) = last_use.remove(&tmp) else {
+                Access::Write(stg, phase) => {
+                    let Some(end) = last_use.remove(&stg) else {
                         continue; // Never read from, so just ignore.
                     };
-                    live_ranges.entry(*tmp).or_default().push(LiveRange {
+                    live_ranges.entry(*stg).or_default().push(LiveRange {
                         begin: PrgPt::new(i, phase),
                         end,
                     });
                 }
-                Access::Read(Stg::Reg(_), _) | Access::Write(Stg::Reg(_), _) => {}
             }
         }
     }
@@ -128,39 +121,37 @@ pub fn compute_live_ranges_2<
     I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
 >(
     cfg: &Cfg<R, I>,
+    live_sets: &LiveSets<R, I>,
 ) -> HashMap<Stg<R>, Vec<LiveRange>> {
     let mut live_ranges = HashMap::<Stg<R>, Vec<LiveRange>>::new();
 
-    let live_sets = LiveSets::build_from(cfg, []);
+    for bb_idx in cfg.bbs() {
+        let mut live_set = live_sets.live_outs(bb_idx).clone();
+        let mut live_ends = HashMap::<Stg<R>, PrgPt>::new();
 
-    for (idx, stmt) in cfg.stmts().enumerate() {
-        for access in stmt.accesses() {
-            match access {
-                Access::Read(stg, instr_exe_phase) => todo!(),
-                Access::Write(stg, instr_exe_phase) => todo!(),
-            }
+        for live in live_set.iter().copied() {
+            let last_idx_in_bb = cfg[bb_idx].instrs_range().end;
+            // TODO: WriteBack is correct here?
+            live_ends.insert(live, PrgPt::new(last_idx_in_bb, InstrExePhase::WriteBack));
         }
-        match stmt.ctrl_flow() {
-            _ if matches!(stmt, Stmt::Label(lbl)) => {
-                for live in live_sets.live_outs(idx) {
-                    let ranges = live_ranges.entry(*live).or_default();
-                    ranges.push(LiveRange {
-                        begin: idx,
-                        end: idx,
-                    });
+
+        for (stmt_idx, instr) in cfg.bb_instrs_indexed(bb_idx).rev() {
+            for access in instr.clone().accesses() {
+                match access {
+                    Access::Read(stg, phase) => {
+                        live_set.insert(*stg);
+                        live_ends.entry(*stg).or_insert(PrgPt::new(stmt_idx, phase));
+                    }
+                    Access::Write(stg, phase) => {
+                        let true = live_set.remove(stg) else {
+                            todo!("is this ok? just continue?")
+                        };
+                        let end = live_ends.remove(stg).unwrap();
+                        let begin = PrgPt::new(stmt_idx, phase);
+                        live_ranges.entry(*stg).or_default().push(LiveRange { begin, end })
+                    }
                 }
             }
-            CtrlFlow::Advance => {
-                for live in live_sets.live_outs(idx) {
-                    let ranges = live_ranges.entry(*live).or_default();
-
-                }
-            }
-
-            CtrlFlow::Exit => todo!(),
-            CtrlFlow::Jump(lbl) => todo!(),
-            CtrlFlow::Switch(lbls) => todo!(),
-            CtrlFlow::Branch(lbl) => todo!(),
         }
     }
 

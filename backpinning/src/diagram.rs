@@ -3,19 +3,18 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use alyn_common::names::Tmp;
 use regalloc_common::{
-    ctrl_flow::{CtrlFlow, GetCtrlFlow},
-    stmt::Stmt,
+    cfg::StmtIdx, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Register
 };
 
 use crate::{pad::PadWith, InstrExePhase, LiveRange, PrgPt};
 
-pub struct DisplayLiveRanges<'a, I> {
+pub struct DisplayLiveRanges<'a, R, I> {
     stmts: &'a [Stmt<I>],
-    live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>,
+    live_ranges: &'a HashMap<Stg<R>, Vec<LiveRange>>,
 }
 
-impl<'a, I> DisplayLiveRanges<'a, I> {
-    pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Tmp, Vec<LiveRange>>) -> Self {
+impl<'a, R, I> DisplayLiveRanges<'a, R, I> {
+    pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Stg<R>, Vec<LiveRange>>) -> Self {
         Self { stmts, live_ranges }
     }
 }
@@ -79,7 +78,7 @@ static CHAR_SET: LazyLock<DiagramCharSet> = LazyLock::new(|| {
     }
 });
 
-impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> {
+impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, R, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut tmps = self
             .live_ranges
@@ -123,6 +122,7 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
 
         let mut stmts_iter = self.stmts.iter().enumerate().peekable();
         while let Some((i, stmt)) = stmts_iter.next() {
+            let i = StmtIdx::from(i);
             if let Stmt::Label(lbl) = stmt {
                 let mut lbls = vec![lbl.to_string()];
                 while let Some((_, Stmt::Label(lbl))) = stmts_iter.peek() {
@@ -215,7 +215,7 @@ impl<'a, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, I> 
                 writeln!(f)?;
 
                 if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance)
-                    && i != self.stmts.len() - 1
+                    && i != StmtIdx::from(self.stmts.len() - 1)
                     && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_))))
                 {
                     // end of basic block

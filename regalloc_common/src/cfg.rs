@@ -5,10 +5,12 @@ use derive_more::{Add, From};
 
 use crate::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
 
-#[derive(Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display("{_0}")]
 pub struct StmtIdx(usize);
 
-#[derive(Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[display("BB{_0}")]
 pub struct BbIdx(usize);
 
 /// TODO: remove this from the CFG module, since it's just extra information that the CFG shouldn't
@@ -202,6 +204,7 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
         }
     }
 
+    #[track_caller]
     fn stmt_idx_to_bb_idx(&self, stmt_idx: StmtIdx) -> BbIdx {
         for (bb_idx, bb) in self.bbs.iter().enumerate() {
             if bb.stmts.contains(&stmt_idx) {
@@ -228,9 +231,13 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
         self.stmts[instr_range].iter()
     }
 
-    /// Returns an iterator of *non-label* instructions, which includes the terminator (if present).
+    /// Returns an iterator of *non-label* instructions in the given basic block. This includes the
+    /// terminator (if present).
     #[track_caller]
-    pub fn bb_instrs(&self, bb_idx: BbIdx) -> impl Iterator<Item = &I> + DoubleEndedIterator {
+    pub fn bb_instrs(
+        &self,
+        bb_idx: BbIdx,
+    ) -> impl Iterator<Item = &I> + DoubleEndedIterator + ExactSizeIterator {
         let bb = &self[bb_idx];
         self[bb.instrs_range()].iter().map(|stmt| {
             let Stmt::Instr(instr) = stmt else {
@@ -238,6 +245,25 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
             };
             instr
         })
+    }
+
+    /// Returns an iterator of *non-label* instructions in the given basic block. This includes the
+    /// terminator (if present). Also yields the *global* StmtIdx of the instruction.
+    pub fn bb_instrs_indexed(
+        &self,
+        bb_idx: BbIdx,
+    ) -> impl Iterator<Item = (StmtIdx, &I)> + DoubleEndedIterator + ExactSizeIterator {
+        let bb = &self[bb_idx];
+        self[bb.instrs_range()]
+            .iter()
+            .enumerate()
+            .map(|(local_stmt_idx, stmt)| {
+                let Stmt::Instr(instr) = stmt else {
+                    unreachable!()
+                };
+                let global_stmt_idx = bb.body_instrs.start + StmtIdx(local_stmt_idx);
+                (global_stmt_idx, instr)
+            })
     }
 
     pub fn bb_terminator(&self, bb_idx: BbIdx) -> Terminator<&I> {
@@ -268,6 +294,10 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
 
     pub fn stmts(&self) -> &[Stmt<I>] {
         &self.stmts[..]
+    }
+
+    pub fn stmts_indexed(&self) -> impl Iterator<Item = (StmtIdx, &Stmt<I>)> + DoubleEndedIterator + ExactSizeIterator {
+        self.stmts.iter().enumerate().map(|(i, stmt)| (StmtIdx(i), stmt))
     }
 
     pub fn entry(&self) -> BbIdx {

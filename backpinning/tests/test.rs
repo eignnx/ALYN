@@ -2,10 +2,7 @@ use std::fmt::Debug;
 
 use alyn_common::names::Lbl;
 use regalloc_common::{
-    Instruction, Register,
-    ctrl_flow::{CtrlFlow, GetCtrlFlow},
-    stg::Stg,
-    stmt::Stmt,
+    cfg::Cfg, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, stg::Stg, stmt::Stmt, CloneableInstr, DefUseMut, DefsUses, DefsUsesMut, Instruction, Register
 };
 
 use backpinning::{diagram::DisplayLiveRanges, *};
@@ -96,6 +93,21 @@ impl Accesses for Instr {
             ],
             Instr::Jmp(_) | Instr::Ret => vec![],
         }
+    }
+}
+
+impl DefsUsesMut for Instr {
+    fn defs_uses_mut<'a>(&'a mut self) -> impl Iterator<Item=DefUseMut<'a, Self::Reg>> {
+        self.accesses().into_iter().map(|u| match u {
+            Access::Read(stg, _) => DefUseMut::Use(stg),
+            Access::Write(stg, _) => DefUseMut::Def(stg),
+        })
+    }
+}
+
+impl DefsUses for Instr {
+    fn defs_uses(&self, out: &mut impl Extend<regalloc_common::DefUse<Self::Reg>>) {
+        CloneableInstr(self).defs_uses(out);
     }
 }
 
@@ -230,5 +242,10 @@ fn knr_binsearch() {
         Ret.into(),
     ];
     let live_ranges = compute_live_ranges(&stmts[..]);
+    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+    let cfg = Cfg::build_from(&stmts[..]);
+    let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
+    let live_ranges = compute_live_ranges_2(&cfg, &live_sets);
     println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
 }
