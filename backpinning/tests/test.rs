@@ -2,7 +2,12 @@ use std::fmt::Debug;
 
 use alyn_common::names::Lbl;
 use regalloc_common::{
-    cfg::Cfg, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, stg::Stg, stmt::Stmt, CloneableInstr, DefUseMut, DefsUses, DefsUsesMut, Instruction, Register
+    CloneableInstr, DefUseMut, DefsUses, DefsUsesMut, Instruction, Register,
+    cfg::Cfg,
+    ctrl_flow::{CtrlFlow, GetCtrlFlow},
+    liveness::LiveSets,
+    stg::Stg,
+    stmt::Stmt,
 };
 
 use backpinning::{diagram::DisplayLiveRanges, *};
@@ -97,7 +102,7 @@ impl Accesses for Instr {
 }
 
 impl DefsUsesMut for Instr {
-    fn defs_uses_mut<'a>(&'a mut self) -> impl Iterator<Item=DefUseMut<'a, Self::Reg>> {
+    fn defs_uses_mut<'a>(&'a mut self) -> impl Iterator<Item = DefUseMut<'a, Self::Reg>> {
         self.accesses().into_iter().map(|u| match u {
             Access::Read(stg, _) => DefUseMut::Use(stg),
             Access::Write(stg, _) => DefUseMut::Def(stg),

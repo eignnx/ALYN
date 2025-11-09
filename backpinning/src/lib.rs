@@ -7,7 +7,14 @@ use std::{
 
 use alyn_common::names::Tmp;
 use regalloc_common::{
-    asn::{Asn, SlotId}, cfg::{Cfg, StmtIdx}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, DefsUses, Instruction, Register
+    DefsUses, Instruction, Register,
+    asn::{Asn, SlotId},
+    cfg::{Cfg, StmtIdx},
+    ctrl_flow::{CtrlFlow, GetCtrlFlow},
+    liveness::LiveSets,
+    slot_alloc::{InstrWrite, SlotAllocator},
+    stg::Stg,
+    stmt::Stmt,
 };
 
 pub mod diagram;
@@ -165,7 +172,10 @@ pub fn compute_live_ranges_2<
                         live_set.remove(stg);
                         let end = live_ends.remove(stg).unwrap();
                         let begin = PrgPt::new(stmt_idx, phase);
-                        live_ranges.entry(*stg).or_default().push(LiveRange { begin, end })
+                        live_ranges
+                            .entry(*stg)
+                            .or_default()
+                            .push(LiveRange { begin, end })
                     }
                 }
             }
