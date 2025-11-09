@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, marker::PhantomData, sync::LazyLock};
+use std::{collections::{BTreeMap, BTreeSet}, fmt, marker::PhantomData, sync::LazyLock};
 
 use crate::{cfg::{BbIdx, Cfg}, ctrl_flow::GetCtrlFlow, stg::Stg, DefUse, DefsUses, Instruction, Register};
 
@@ -29,7 +29,7 @@ where
     let mut live_set = live_outs.clone();
     let mut defs_uses = Vec::new();
 
-    for instr in cfg.bb_instrs(bb_idx).rev() {
+    for instr in cfg.bb_stmts(bb_idx).rev() {
         instr.defs_uses(&mut defs_uses);
         for def_use in defs_uses.drain(..) {
             match def_use {

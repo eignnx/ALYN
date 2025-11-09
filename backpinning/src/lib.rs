@@ -116,6 +116,25 @@ pub fn compute_live_ranges<R: Register, I: Instruction<Reg = R> + Accesses>(
     live_ranges
 }
 
+pub fn display_bb_live_ins_outs<
+    R: Register,
+    I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
+>(
+    cfg: &Cfg<R, I>,
+    live_sets: &LiveSets<R, I>,
+) {
+    for bb_idx in cfg.bbs() {
+        println!("live-ins: {:?}", live_sets.live_ins(bb_idx));
+        println!("{:-^40}", format!("{bb_idx}"));
+        for (idx, stmt) in cfg.bb_stmts_indexed(bb_idx) {
+            println!("{idx}: {stmt:?}");
+        }
+        println!("{:-^40}", "");
+        println!("live-outs: {:?}", live_sets.live_outs(bb_idx));
+        println!();
+    }
+}
+
 pub fn compute_live_ranges_2<
     R: Register,
     I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
@@ -143,9 +162,7 @@ pub fn compute_live_ranges_2<
                         live_ends.entry(*stg).or_insert(PrgPt::new(stmt_idx, phase));
                     }
                     Access::Write(stg, phase) => {
-                        let true = live_set.remove(stg) else {
-                            todo!("is this ok? just continue?")
-                        };
+                        live_set.remove(stg);
                         let end = live_ends.remove(stg).unwrap();
                         let begin = PrgPt::new(stmt_idx, phase);
                         live_ranges.entry(*stg).or_default().push(LiveRange { begin, end })

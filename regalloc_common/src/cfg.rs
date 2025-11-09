@@ -1,16 +1,18 @@
-use std::{collections::{BTreeSet, HashMap}, ops::{Index, Range}};
+use std::{collections::{BTreeSet, HashMap}, fmt::Debug, ops::{Index, Range}};
 
 use alyn_common::names::Lbl;
 use derive_more::{Add, From};
 
 use crate::{ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
 
-#[derive(derive_more::Display, Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[display("{_0}")]
+#[debug("stmt#{_0}")]
 pub struct StmtIdx(usize);
 
-#[derive(derive_more::Display, Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[display("BB{_0}")]
+#[debug("BB{_0}")]
 pub struct BbIdx(usize);
 
 /// TODO: remove this from the CFG module, since it's just extra information that the CFG shouldn't
@@ -43,6 +45,7 @@ pub struct Cfg<'stmts, R, I> {
     move_stmts: Vec<Move<R>>,
 }
 
+#[derive(Debug)]
 pub enum Terminator<I> {
     Instr(I),
     FallThrough,
@@ -55,6 +58,7 @@ impl<I> Terminator<I> {
 }
 
 /// Basic Block
+#[derive(Debug)]
 pub struct Bb {
     /// All Stmts in the block, including labels and terminators.
     stmts: Range<StmtIdx>,
@@ -73,11 +77,11 @@ pub struct Bb {
 impl Bb {
     pub fn instrs_range(&self) -> Range<StmtIdx> {
         let start = self.body_instrs.start;
-        let end = {
+        let last = {
             let term_count = if self.terminator.is_instr() { 1 } else { 0 };
             self.body_instrs.end + term_count.into()
         };
-        start..end
+        start..(last )
     }
 }
 
@@ -123,7 +127,6 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
     }
 
     fn gather_into_bbs(&mut self) {
-        let mut stmts_iter = self.stmts.iter().enumerate().peekable();
 
         enum State {
             NewBb,
@@ -133,9 +136,13 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
 
         let mut state = State::NewBb;
 
+        let mut stmts_iter = self.stmts.iter().enumerate().peekable();
+        let mut global_successors = BTreeSet::<(BbIdx, StmtIdx)>::new();
+
         while let Some((idx, stmt)) = stmts_iter.peek().cloned() {
             let idx = StmtIdx(idx);
             let curr_bb_idx = BbIdx(self.bbs.len());
+
             match state {
                 State::NewBb => {
                     state = State::GatheringLabels { bb_stmts_start: idx };
@@ -148,38 +155,52 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
                     } else {
                         state = State::GatheringNonTermInstrs {
                             bb_stmts_start,
-                            bb_instrs_start: bb_stmts_start,
+                            bb_instrs_start: idx,
                         };
                     }
                 }
 
                 State::GatheringNonTermInstrs { bb_stmts_start, bb_instrs_start } => {
                     match (stmt, stmt.ctrl_flow()) {
+
+                        // Regular instructions: just step forward.
                         (Stmt::Instr(_), CtrlFlow::Advance) => {
                             let _ = stmts_iter.next();
                         }
-                        (_, flow) => {
-                            let stmts = bb_stmts_start..bb_instrs_start;
+
+                        // Encountered a label: end current Bb, start a new one.
+                        (Stmt::Label(lbl), _) => {
+                            let terminator = Terminator::FallThrough;
+
+                            // Do *not* include the current index in this Bb.
+                            let stmts = bb_stmts_start..idx;
                             let body_instrs = bb_instrs_start..idx;
-                            let mut successors = BTreeSet::<StmtIdx>::new();
+
+                            let successor = self.lbls_to_stmt_idxs[lbl];
+                            global_successors.insert((curr_bb_idx, successor));
+                            let successors = BTreeSet::from([successor]);
+
+                            self.bbs.push(Bb { stmts, body_instrs, terminator, successors });
+
+                            state = State::NewBb;
+                        }
+
+                        // Some kind of jump instruction
+                        (_, flow) => {
+                            let _ = stmts_iter.next();
                             let mut terminator = Terminator::Instr(idx);
+                            let mut successors = BTreeSet::<StmtIdx>::new();
 
                             match flow {
-                                CtrlFlow::Advance => {
-                                    let Stmt::Label(lbl) = stmt else { panic!() };
-                                    successors.insert(self.lbls_to_stmt_idxs[lbl]);
-                                    let _ = stmts_iter.next();
-                                }
+                                CtrlFlow::Advance => unreachable!(),
                                 CtrlFlow::Exit => {
                                     self.exit_bbs.insert(curr_bb_idx);
                                 }
                                 CtrlFlow::Jump(lbl) => {
                                     successors.insert(self.lbls_to_stmt_idxs[&lbl]);
-                                    let _ = stmts_iter.next();
                                 }
                                 CtrlFlow::Switch(lbls) => {
                                     successors.extend(lbls.iter().map(|lbl| self.lbls_to_stmt_idxs[lbl]));
-                                    let _ = stmts_iter.next();
                                 }
                                 CtrlFlow::Branch(lbl) => {
                                     terminator = Terminator::FallThrough;
@@ -189,9 +210,13 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
                                 }
                             }
 
+                            // Add 1 to include current instr in this Bb.
+                            let stmts = bb_stmts_start..(idx + 1.into());
+                            // Do *not* include the terminator in the body instructions range.
+                            let body_instrs = bb_instrs_start..idx;
+
                             for succ_stmt_idx in successors.iter() {
-                                let succ_bb_idx = self.stmt_idx_to_bb_idx(*succ_stmt_idx);
-                                self.bb_predecessors.entry(succ_bb_idx).or_default().insert(curr_bb_idx);
+                                global_successors.insert((curr_bb_idx, *succ_stmt_idx));
                             }
 
                             self.bbs.push(Bb { stmts, body_instrs, terminator, successors });
@@ -201,6 +226,11 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
                     }
                 }
             }
+        }
+
+        for (bb_idx, succ_stmt_idx) in global_successors {
+            let succ_bb_idx = self.stmt_idx_to_bb_idx(succ_stmt_idx);
+            self.bb_predecessors.entry(succ_bb_idx).or_default().insert(bb_idx);
         }
     }
 
@@ -226,9 +256,14 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
 
     #[track_caller]
     pub fn bb_stmts(&self, bb_idx: BbIdx) -> impl Iterator<Item = &Stmt<I>> + DoubleEndedIterator {
-        let instr_range = self[bb_idx].body_instrs.clone();
-        let instr_range = instr_range.start.0 .. instr_range.end.0;
-        self.stmts[instr_range].iter()
+        let stmts_range = self[bb_idx].stmts.clone();
+        self[stmts_range].iter()
+    }
+
+    #[track_caller]
+    pub fn bb_stmts_indexed(&self, bb_idx: BbIdx) -> impl Iterator<Item = (StmtIdx, &Stmt<I>)> + DoubleEndedIterator {
+        let stmts_range = self[bb_idx].stmts.clone();
+        (stmts_range.start.0 .. stmts_range.end.0).map(StmtIdx).zip(self[stmts_range].iter())
     }
 
     /// Returns an iterator of *non-label* instructions in the given basic block. This includes the
@@ -241,7 +276,7 @@ impl<'stmt, R, I: Instruction<Reg = R> + GetCtrlFlow> Cfg<'stmt, R, I> {
         let bb = &self[bb_idx];
         self[bb.instrs_range()].iter().map(|stmt| {
             let Stmt::Instr(instr) = stmt else {
-                unreachable!()
+                panic!("expected statement, got label: {stmt:?}")
             };
             instr
         })

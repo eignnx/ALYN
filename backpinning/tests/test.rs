@@ -246,6 +246,7 @@ fn knr_binsearch() {
     println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let cfg = Cfg::build_from(&stmts[..]);
     let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
+    backpinning::display_bb_live_ins_outs(&cfg, &live_sets);
     let live_ranges = compute_live_ranges_2(&cfg, &live_sets);
     println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
 }

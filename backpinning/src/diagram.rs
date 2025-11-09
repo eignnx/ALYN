@@ -214,6 +214,7 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveR
 
                 writeln!(f)?;
 
+                // Draw basic block boundary
                 if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance)
                     && i != StmtIdx::from(self.stmts.len() - 1)
                     && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_))))
