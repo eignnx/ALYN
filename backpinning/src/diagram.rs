@@ -1,18 +1,14 @@
 use core::fmt;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{collections::{BTreeSet, HashMap}, sync::LazyLock};
 
 use regalloc_common::{
-    Instruction, Register,
-    cfg::StmtIdx,
-    ctrl_flow::{CtrlFlow, GetCtrlFlow},
-    stg::Stg,
-    stmt::Stmt,
+    cfg::{BbIdx, Cfg, StmtIdx}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction, Register
 };
 
 use crate::{InstrExePhase, LiveRange, PrgPt, pad::PadWith};
 
 pub struct DisplayLiveRanges<'a, R, I> {
-    stmts: &'a [Stmt<I>],
+    cfg: &'a Cfg<'a, R, I>,
     live_ranges: &'a HashMap<Stg<R>, Vec<LiveRange>>,
 
     /// The usize represents the length of the string representation of the Stg<R>.
@@ -39,7 +35,7 @@ impl<T: fmt::Debug> Column<T> {
 }
 
 impl<'a, R: Register, I: Instruction<Reg = R>> DisplayLiveRanges<'a, R, I> {
-    pub fn new(stmts: &'a [Stmt<I>], live_ranges: &'a HashMap<Stg<R>, Vec<LiveRange>>) -> Self {
+    pub fn new(cfg: &'a Cfg<'a, R, I>, live_ranges: &'a HashMap<Stg<R>, Vec<LiveRange>>) -> Self {
         let mut columns = live_ranges
             .keys()
             .map(|stg| Column::new(*stg))
@@ -58,10 +54,10 @@ impl<'a, R: Register, I: Instruction<Reg = R>> DisplayLiveRanges<'a, R, I> {
             .map(|col| col.width() as u16 + 1)
             .sum::<u16>()
             + 2;
-        let numcol_width = stmts.len().ilog10() as usize + 1;
+        let numcol_width = cfg.stmts().len().ilog10() as usize + 1;
 
         Self {
-            stmts,
+            cfg,
             live_ranges,
             columns,
             diagram_width,
@@ -129,32 +125,98 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> DisplayLiveRanges<'a, R, I> {
         &self,
         f: &mut fmt::Formatter,
         phase: InstrExePhase,
+        phases_mentioned: &BTreeSet<InstrExePhase>,
         i: StmtIdx,
-        stmt: &Stmt<I>,
+        instr: &I,
         draw_x_guide: bool,
     ) -> fmt::Result {
         let side = CHAR_SET.border_side;
         let side_crossing = CHAR_SET.border_side_crossing_x_guide;
-        match phase {
-            InstrExePhase::ReadArgs if draw_x_guide => {
-                write!(
-                    f,
-                    "{side_crossing}─(r)─{i:0width$}: {stmt:?}",
-                    width = self.numcol_width
-                )?;
+        let ncolwidth = self.numcol_width;
+
+        let anchored_phase = InstrExePhase::ReadArgs;
+        let anchored_phase_index = InstrExePhase::PHASES.iter().position(|p| *p == anchored_phase).unwrap();
+        let Some(offset) = phases_mentioned.iter().position(|p| *p == phase).map(|idx| idx.abs_diff(anchored_phase_index)) else {
+            match phase {
+                InstrExePhase::JustBefore => {
+                    write!(f, "(b)")?;
+                }
+                InstrExePhase::ReadArgs => {
+                    write!(f, "(R)─{i:0ncolwidth$}: {instr:?}")?;
+                }
+                InstrExePhase::WriteBack => {
+                    write!(f, "(W)")?;
+                }
+                InstrExePhase::JustAfter => {
+                    write!(f, "(a)")?;
+                }
             }
-            InstrExePhase::ReadArgs => {
-                write!(
-                    f,
-                    "{side}     {i:0width$}: {stmt:?}",
-                    width = self.numcol_width
-                )?;
+            //write!(f, "{side}     {i:0ncolwidth$}: {stmt:?}")?;
+            return Ok(());
+        };
+
+
+        if draw_x_guide {
+            write!(f, "{side_crossing}─")?;
+            match phase {
+                InstrExePhase::JustBefore => {
+                    write!(f, "{:─<offset$}(b)─┐", "")?;
+                }
+                InstrExePhase::ReadArgs => {
+                    write!(f, "{:─<offset$}(R)─{i:0ncolwidth$}: {instr:?}", "")?;
+                }
+                InstrExePhase::WriteBack => {
+                    write!(f, "{:─<offset$}(W)─┘", "")?;
+                }
+                InstrExePhase::JustAfter => {
+                    write!(f, "{:─<offset$}(a)─┘", "")?;
+                }
             }
-            InstrExePhase::WriteBack => {
-                write!(f, "{side_crossing}─(w)─┘")?;
+        } else {
+            if phase == anchored_phase {
+                write!(f, "{side}     {i:0ncolwidth$}: {instr:?}")?;
             }
         }
         Ok(())
+    }
+
+    fn is_endpoint_on_row(&self, pt: PrgPt) -> bool {
+        self.columns.iter().any(|col| {
+            let ranges = &self.live_ranges[&col.value];
+            ranges.iter().any(|r| r.begin == pt) || ranges.iter().any(|r| r.end == pt)
+        })
+    }
+
+    fn cols_with_endpoint_on_row(&self, pt: PrgPt) -> impl Iterator<Item = &Column<Stg<R>>> {
+        self.columns.iter().filter(move |col| {
+            let ranges = &self.live_ranges[&col.value];
+            ranges.iter().any(|r| r.begin == pt) || ranges.iter().any(|r| r.end == pt)
+        })
+    }
+
+    fn endpoints_at_stmt_idx(&self, stmt_idx: StmtIdx) -> impl Iterator<Item = (&Column<Stg<R>>, InstrExePhase)> {
+        self.columns.iter().flat_map(move |col| {
+            InstrExePhase::PHASES.iter().filter_map(move |phase| {
+                let ranges = &self.live_ranges[&col.value];
+                let pt = PrgPt::new(stmt_idx, *phase);
+                if ranges.iter().any(|r| r.begin == pt) || ranges.iter().any(|r| r.end == pt) {
+                    Some((col, *phase))
+                } else {
+                    None
+                }
+            })
+        })
+    }
+
+    /// Which phases have some endpoint on a given statement?
+    fn marked_phases_at_stmt_idx(&self, stmt_idx: StmtIdx) -> impl Iterator<Item = InstrExePhase> {
+        InstrExePhase::PHASES.iter().copied().filter(move |&phase| {
+            self.columns.iter().any(move |col| {
+                let ranges = &self.live_ranges[&col.value];
+                let pt = PrgPt::new(stmt_idx, phase);
+                ranges.iter().any(|r| r.begin == pt) || ranges.iter().any(|r| r.end == pt)
+            })
+        })
     }
 }
 
@@ -162,93 +224,74 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveR
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.draw_top_header(f)?;
 
-        let mut stmts_iter = self.stmts.iter().enumerate().peekable();
-        while let Some((i, stmt)) = stmts_iter.next() {
-            let i = StmtIdx::from(i);
+        for bb_idx in self.cfg.bbs() {
 
-            if let Stmt::Label(lbl) = stmt {
-                let mut lbls = vec![lbl.to_string()];
-                while let Some((_, Stmt::Label(lbl))) = stmts_iter.peek() {
-                    lbls.push(lbl.to_string());
-                    let _ = stmts_iter.next();
-                }
-                let lbls_joined = format!("[{}]", lbls.join("; "));
-
-                let (left, fill, right) = CHAR_SET.bb_boundary;
-                let fill = fill.pad().width(self.diagram_width).value(lbls_joined);
-
-                writeln!(
-                    f,
-                    "{left}{fill}{right}     {i:0width$}",
-                    width = self.numcol_width
-                )?;
-                continue;
-            }
-
-            for phase in InstrExePhase::PHASES {
-                let pt = PrgPt::new(i, phase);
-
-                if phase != InstrExePhase::ReadArgs
-                    && self.columns.iter().all(|col| {
-                        let ranges = &self.live_ranges[&col.value];
-                        ranges.iter().all(|r| r.begin != pt && r.end != pt)
-                    })
-                {
-                    continue;
-                }
-
-                write!(f, "{} ", CHAR_SET.border_side)?;
-
-                let mut draw_x_guide = false;
-
-                for col in &self.columns {
-                    let ranges = &self.live_ranges[&col.value];
-                    let live = ranges.iter().any(|r| r.contains(pt));
-
-                    let mark = if ranges.iter().any(|r| r.begin == pt) {
-                        draw_x_guide = true;
-                        CHAR_SET.live_begin
-                    } else if ranges.iter().any(|r| r.end == pt) {
-                        draw_x_guide = true;
-                        CHAR_SET.live_end
-                    } else {
-                        match (draw_x_guide, live) {
-                            (true, true) => CHAR_SET.live_crossing_x_guide,
-                            (true, false) => CHAR_SET.dead_crossing_x_guide,
-                            (false, true) => CHAR_SET.live,
-                            (false, false) => CHAR_SET.dead,
-                        }
-                    };
-
-                    let pad = if draw_x_guide { CHAR_SET.x_guide } else { ' ' }
-                        .pad()
-                        .align('<')
-                        .width(col.width() as u16 + 1)
-                        .value(mark);
-
-                    write!(f, "{pad}")?;
-                }
-
-                if draw_x_guide {
-                    write!(f, "{}", CHAR_SET.x_guide)?;
-                } else {
-                    write!(f, " ")?;
-                }
-
-                self.draw_stmt_sidebar(f, phase, i, stmt, draw_x_guide)?;
-
-                writeln!(f)?;
-
-                // Draw basic block boundary
-                if !matches!(stmt.ctrl_flow(), CtrlFlow::Advance)
-                    && i != StmtIdx::from(self.stmts.len() - 1)
-                    && !matches!(stmts_iter.peek(), Some((_, Stmt::Label(_))))
-                {
-                    // end of basic block
+            let lbls = self.cfg.bb_labels(bb_idx).map(|l| l.to_string()).collect::<Vec<_>>();
+            if lbls.is_empty() {
+                if bb_idx != BbIdx::from(0) {
+                    // Draw basic block boundary
                     let (left, fill, right) = CHAR_SET.bb_boundary;
                     let fill = fill.pad().width(self.diagram_width);
-                    writeln!(f, "{left}{fill}{right}")?;
+                    writeln!(f, "{left}{fill}{right} {bb_idx}")?;
                 }
+            } else {
+                let lbls_joined = format!("[{}]", lbls.join("; "));
+                let (left, fill, right) = CHAR_SET.bb_boundary;
+                let padded = fill.pad().width(self.diagram_width).value(lbls_joined);
+                writeln!(f, "{left}{padded}{right} {bb_idx}")?;
+            }
+
+            for (i, stmt) in self.cfg.bb_instrs_indexed(bb_idx) {
+                let phases_mentioned = self.marked_phases_at_stmt_idx(i).collect::<BTreeSet<_>>();
+
+                for phase in InstrExePhase::PHASES {
+                    let pt = PrgPt::new(i, phase);
+
+                    write!(f, "{} ", CHAR_SET.border_side)?;
+
+                    let mut draw_x_guide = false;
+
+                    for col in &self.columns {
+                        let ranges = &self.live_ranges[&col.value];
+                        let live = ranges.iter().any(|r| r.contains(pt));
+
+                        let mark = if ranges.iter().any(|r| r.begin == pt) {
+                            draw_x_guide = true;
+                            CHAR_SET.live_begin
+                        } else if ranges.iter().any(|r| r.end == pt) {
+                            draw_x_guide = true;
+                            CHAR_SET.live_end
+                        } else {
+                            match (draw_x_guide, live) {
+                                (true, true) => CHAR_SET.live_crossing_x_guide,
+                                (true, false) => CHAR_SET.dead_crossing_x_guide,
+                                (false, true) => CHAR_SET.live,
+                                (false, false) => CHAR_SET.dead,
+                            }
+                        };
+
+                        let pad = if draw_x_guide { CHAR_SET.x_guide } else { ' ' }
+                            .pad()
+                            .align('<')
+                            .width(col.width() as u16 + 1)
+                            .value(mark);
+
+                        write!(f, "{pad}")?;
+                    }
+
+                    if draw_x_guide {
+                        write!(f, "{}", CHAR_SET.x_guide)?;
+                    } else {
+                        write!(f, " ")?;
+                    }
+
+
+                    self.draw_stmt_sidebar(f, phase, &phases_mentioned, i, stmt, draw_x_guide)?;
+
+                    writeln!(f)?;
+
+                }
+                //////////
             }
         }
 

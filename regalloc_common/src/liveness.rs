@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, fmt, marker::PhantomData, sync::LazyLock};
+use std::{collections::{BTreeMap, BTreeSet}, marker::PhantomData, sync::LazyLock};
 
 use crate::{cfg::{BbIdx, Cfg}, ctrl_flow::GetCtrlFlow, stg::Stg, DefUse, DefsUses, Instruction, Register};
 

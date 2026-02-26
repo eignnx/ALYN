@@ -7,14 +7,7 @@ use std::{
 
 use alyn_common::names::Tmp;
 use regalloc_common::{
-    DefsUses, Instruction, Register,
-    asn::{Asn, SlotId},
-    cfg::{Cfg, StmtIdx},
-    ctrl_flow::{CtrlFlow, GetCtrlFlow},
-    liveness::LiveSets,
-    slot_alloc::{InstrWrite, SlotAllocator},
-    stg::Stg,
-    stmt::Stmt,
+    asn::{Asn, SlotId}, cfg::{Cfg, StmtIdx}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, liveness::LiveSets, slot_alloc::{InstrWrite, SlotAllocator}, stg::Stg, stmt::Stmt, DefsUses, Instruction, Register
 };
 
 pub mod diagram;
@@ -57,12 +50,19 @@ impl<I: Accesses> Accesses for Stmt<I> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum InstrExePhase {
+    JustBefore,
     ReadArgs,
     WriteBack,
+    JustAfter,
 }
 
 impl InstrExePhase {
-    pub const PHASES: [Self; 2] = [Self::ReadArgs, Self::WriteBack];
+    pub const PHASES: [Self; 4] = [
+        Self::JustBefore,
+        Self::ReadArgs,
+        Self::WriteBack,
+        Self::JustAfter,
+    ];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -133,11 +133,39 @@ pub fn display_bb_live_ins_outs<
     for bb_idx in cfg.bbs() {
         println!("live-ins: {:?}", live_sets.live_ins(bb_idx));
         println!("{:-^40}", format!("{bb_idx}"));
-        for (idx, stmt) in cfg.bb_stmts_indexed(bb_idx) {
-            println!("{idx}: {stmt:?}");
+
+        let lbls_it = cfg.bb_labels(bb_idx);
+        if lbls_it.len() > 0 {
+            print!("[ ");
+            for (i, lbl) in lbls_it.enumerate() {
+                if i > 0 {
+                    print!("; ");
+                }
+                print!("{lbl}");
+            }
+            println!(" ]");
         }
+
+        for (idx, instr) in cfg.bb_instrs_indexed(bb_idx) {
+            println!("{idx}: {instr:?}");
+        }
+
+        if let Some((idx, term)) = cfg.bb_terminator_indexed(bb_idx) {
+            println!("{idx}: {term:?}");
+        }
+
         println!("{:-^40}", "");
         println!("live-outs: {:?}", live_sets.live_outs(bb_idx));
+        if cfg.successor_bbs(bb_idx).len() > 0 {
+            print!("--> [ ");
+            for (i, succ) in cfg.successor_bbs(bb_idx).enumerate() {
+                if i > 0 {
+                    print!("; ");
+                }
+                print!("{succ}");
+            }
+            println!(" ]");
+        }
         println!();
     }
 }
@@ -158,7 +186,7 @@ pub fn compute_live_ranges_2<
         for live in live_set.iter().copied() {
             let last_idx_in_bb = cfg[bb_idx].instrs_range().end;
             // TODO: WriteBack is correct here?
-            live_ends.insert(live, PrgPt::new(last_idx_in_bb, InstrExePhase::WriteBack));
+            live_ends.insert(live, PrgPt::new(last_idx_in_bb, InstrExePhase::JustAfter));
         }
 
         for (stmt_idx, instr) in cfg.bb_instrs_indexed(bb_idx).rev() {

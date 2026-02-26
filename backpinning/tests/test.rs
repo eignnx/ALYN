@@ -161,7 +161,8 @@ fn test_live_range_computation() {
     ];
 
     let live_ranges = compute_live_ranges(&stmts[..]);
-    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
+    let cfg = Cfg::build_from(&stmts[..]);
+    println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
 }
 
 #[test]
@@ -246,12 +247,17 @@ fn knr_binsearch() {
         Use(retval).into(),
         Ret.into(),
     ];
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 1 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_ranges = compute_live_ranges(&stmts[..]);
-    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
-    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let cfg = Cfg::build_from(&stmts[..]);
+    println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
+
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
     backpinning::display_bb_live_ins_outs(&cfg, &live_sets);
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+
+    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_ranges = compute_live_ranges_2(&cfg, &live_sets);
-    println!("{}", DisplayLiveRanges::new(&stmts[..], &live_ranges));
+    println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
 }
