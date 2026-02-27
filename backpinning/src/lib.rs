@@ -107,39 +107,6 @@ impl LiveRange {
     }
 }
 
-pub fn compute_live_ranges<R: Register, I: Instruction<Reg = R> + Accesses>(
-    stmts: &[Stmt<I>],
-) -> HashMap<Stg<R>, Vec<LiveRange>> {
-    let mut live_ranges = HashMap::<Stg<R>, Vec<LiveRange>>::new();
-    let mut last_use = HashMap::<Stg<R>, PrgPt>::new();
-
-    for (i, stmt) in stmts.iter().enumerate().rev() {
-        let i = StmtIdx::from(i);
-        let Stmt::Instr(mut instr) = stmt.clone() else {
-            continue;
-        };
-        for access in instr.accesses() {
-            match access {
-                Access::Read(stg, phase) => {
-                    if !last_use.contains_key(&stg) {
-                        last_use.insert(*stg, PrgPt::new(i, phase));
-                    }
-                }
-                Access::Write(stg, phase) => {
-                    let Some(end) = last_use.remove(&stg) else {
-                        continue; // Never read from, so just ignore.
-                    };
-                    let here = PrgPt::new(i, phase);
-                    let lr = LiveRange { begin: here, end };
-                    live_ranges.entry(*stg).or_default().push(lr);
-                }
-            }
-        }
-    }
-
-    live_ranges
-}
-
 pub fn display_bb_live_ins_outs<
     R: Register,
     I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
@@ -187,7 +154,7 @@ pub fn display_bb_live_ins_outs<
     }
 }
 
-pub fn compute_live_ranges_2<
+pub fn compute_live_ranges<
     R: Register,
     I: Instruction<Reg = R> + Accesses + GetCtrlFlow + DefsUses,
 >(

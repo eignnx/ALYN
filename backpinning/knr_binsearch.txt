@@ -7,7 +7,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-  live_ends: {%v: a@stmt#2, %x: a@stmt#2}
+  live_ends: {%x: a@stmt#2, %v: a@stmt#2}
   live_set: {%v, %x}
 2: %n ← _ 	[Write(%n, WriteBack)]
 
@@ -19,51 +19,51 @@ running 1 test
   live_set: {}
 0: %x ← _ 	[Write(%x, WriteBack)]
 
-  live_ends: {%high: a@stmt#6, %low: a@stmt#6, %v: a@stmt#6, %x: a@stmt#6}
+  live_ends: {%x: a@stmt#6, %v: a@stmt#6, %high: a@stmt#6, %low: a@stmt#6}
   live_set: {%high, %low, %v, %x}
 6: jmp local<loop_cond>	[]
 
-  live_ends: {%low: a@stmt#6, %n: R@stmt#5, %v: a@stmt#6, %x: a@stmt#6}
+  live_ends: {%x: a@stmt#6, %v: a@stmt#6, %n: R@stmt#5, %low: a@stmt#6}
   live_set: {%low, %n, %v, %x}
 5: %high ← %n ± 1	[Read(%n, ReadArgs), Write(%high, WriteBack)]
 
-  live_ends: {%n: R@stmt#5, %v: a@stmt#6, %x: a@stmt#6}
+  live_ends: {%x: a@stmt#6, %v: a@stmt#6, %n: R@stmt#5}
   live_set: {%n, %v, %x}
 4: %low ← 0	[Write(%low, WriteBack)]
 
-  live_ends: {%low: a@stmt#11, %v: a@stmt#11, %elem: a@stmt#11, %mid: a@stmt#11, %high: a@stmt#11, %x: a@stmt#11}
+  live_ends: {%high: a@stmt#11, %low: a@stmt#11, %mid: a@stmt#11, %v: a@stmt#11, %x: a@stmt#11, %elem: a@stmt#11}
   live_set: {%elem, %high, %low, %mid, %v, %x}
 11: branch to local<else_if> if %x <> %elem	[Read(%x, ReadArgs), Read(%elem, ReadArgs)]
 
-  live_ends: {%low: a@stmt#11, %v: a@stmt#11, %mid: a@stmt#11, %vmid: R@stmt#10, %high: a@stmt#11, %x: a@stmt#11}
+  live_ends: {%vmid: R@stmt#10, %high: a@stmt#11, %low: a@stmt#11, %mid: a@stmt#11, %v: a@stmt#11, %x: a@stmt#11}
   live_set: {%high, %low, %mid, %v, %vmid, %x}
 10: %elem ← MEM[%vmid]	[Read(%vmid, ReadArgs), Write(%elem, WriteBack)]
 
-  live_ends: {%low: a@stmt#11, %v: a@stmt#11, %mid: a@stmt#11, %high: a@stmt#11, %x: a@stmt#11}
+  live_ends: {%high: a@stmt#11, %low: a@stmt#11, %mid: a@stmt#11, %v: a@stmt#11, %x: a@stmt#11}
   live_set: {%high, %low, %mid, %v, %x}
 9: %vmid ← %v ± %mid	[Read(%v, ReadArgs), Read(%mid, ReadArgs), Write(%vmid, WriteBack)]
 
-  live_ends: {%low: a@stmt#11, %v: a@stmt#11, %high: a@stmt#11, %x: a@stmt#11}
+  live_ends: {%high: a@stmt#11, %low: a@stmt#11, %v: a@stmt#11, %x: a@stmt#11}
   live_set: {%high, %low, %v, %x}
 8: %mid ← %low ± %high	[Read(%low, ReadArgs), Read(%high, ReadArgs), Write(%mid, WriteBack)]
 
-  live_ends: {%x: a@stmt#13, %low: a@stmt#13, %v: a@stmt#13, %high: a@stmt#13}
+  live_ends: {%high: a@stmt#13, %low: a@stmt#13, %x: a@stmt#13, %v: a@stmt#13}
   live_set: {%high, %low, %v, %x}
 13: jmp local<end_if>	[]
 
-  live_ends: {%mid: R@stmt#12, %x: a@stmt#13, %low: a@stmt#13, %v: a@stmt#13}
+  live_ends: {%low: a@stmt#13, %x: a@stmt#13, %mid: R@stmt#12, %v: a@stmt#13}
   live_set: {%low, %mid, %v, %x}
 12: %high ← %mid ± 1	[Read(%mid, ReadArgs), Write(%high, WriteBack)]
 
-  live_ends: {%high: a@stmt#15, %v: a@stmt#15, %x: a@stmt#15, %elem: R@stmt#15, %mid: a@stmt#15}
+  live_ends: {%high: a@stmt#15, %elem: R@stmt#15, %x: a@stmt#15, %v: a@stmt#15, %mid: a@stmt#15}
   live_set: {%elem, %high, %mid, %v, %x}
 15: branch to local<else> if %x <> %elem	[Read(%x, ReadArgs), Read(%elem, ReadArgs)]
 
-  live_ends: {%x: a@stmt#17, %v: a@stmt#17, %high: a@stmt#17, %low: a@stmt#17}
+  live_ends: {%high: a@stmt#17, %low: a@stmt#17, %v: a@stmt#17, %x: a@stmt#17}
   live_set: {%high, %low, %v, %x}
 17: jmp local<end_if>	[]
 
-  live_ends: {%mid: R@stmt#16, %x: a@stmt#17, %v: a@stmt#17, %high: a@stmt#17}
+  live_ends: {%high: a@stmt#17, %mid: R@stmt#16, %v: a@stmt#17, %x: a@stmt#17}
   live_set: {%high, %mid, %v, %x}
 16: %low ← %mid ± 1	[Read(%mid, ReadArgs), Write(%low, WriteBack)]
 
@@ -79,7 +79,7 @@ running 1 test
   live_set: {%mid}
 19: %retval ← %mid	[Read(%mid, ReadArgs), Write(%retval, WriteBack)]
 
-  live_ends: {%low: a@stmt#24, %v: a@stmt#24, %high: a@stmt#24, %x: a@stmt#24}
+  live_ends: {%high: a@stmt#24, %low: a@stmt#24, %x: a@stmt#24, %v: a@stmt#24}
   live_set: {%high, %low, %v, %x}
 24: branch to local<loop_top> if %low <> %high	[Read(%low, ReadArgs), Read(%high, ReadArgs)]
 
@@ -96,7 +96,6 @@ running 1 test
 25: %retval ← -1	[Write(%retval, WriteBack)]
   %x %v %n %low %high %mid %vmid %elem %retval   
 ╒═╪══╪══╪══╪════╪═════╪════╪═════╪═════╪════════╕
-╞═══════════════════════════════════════════════╡ BB8
 │ ╵  ╵  ╵  ╵    ╵     ╵    ╵     ╵     ╵        (b)
 │ ╵  ╵  ╵  ╵    ╵     ╵    ╵     ╵     ╵        (R)─00: %x ← _ 
 │ ▄╴╴┼╴╴┼╴╴┼╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴╴╴╴┼──(W)─┘
@@ -180,6 +179,7 @@ running 1 test
 │ █  █  ╵  █    █     ╵    ╵     ╵     ╵        (R)─24: branch to local<loop_top> if %low <> %high
 │ █  █  ╵  █    █     ╵    ╵     ╵     ╵        (W)
 │ ▀╴╴▀╴╴┼╴╴▀╴╴╴╴▀╴╴╴╴╴┼╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴┼╴╴╴╴╴╴╴╴┼─(a)─┘
+╞═══════════════════════════════════════════════╡ BB0
 │ ╵  ╵  ╵  ╵    ╵     ╵    ╵     ╵     ╵        (b)
 │ ╵  ╵  ╵  ╵    ╵     ╵    ╵     ╵     ╵        (R)─25: %retval ← -1
 │ ╵  ╵  ╵  ╵    ╵     ╵    ╵     ╵     ▄╴╴╴╴╴╴╴╴┼──(W)─┘

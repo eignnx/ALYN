@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::fmt::Debug;
 
 use alyn_common::names::Lbl;
@@ -158,10 +160,12 @@ fn test_live_range_computation() {
         S::Instr(Use("w".into())),
         S::Instr(Move("x".into(), "w".into())),
         S::Instr(Use("x".into())),
+        S::Instr(Ret),
     ];
 
-    let live_ranges = compute_live_ranges(&stmts[..]);
     let cfg = Cfg::build_from(&stmts[..]);
+    let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
+    let live_ranges = compute_live_ranges(&cfg, &live_sets);
     println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
 }
 
@@ -248,17 +252,7 @@ fn knr_binsearch() {
         Ret.into(),
     ];
     let cfg = Cfg::build_from(&stmts[..]);
-
-    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 1 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-    //let live_ranges = compute_live_ranges(&stmts[..]);
-    //println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
-
-    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
-    //backpinning::display_bb_live_ins_outs(&cfg, &live_sets);
-    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-
-    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-    let live_ranges = compute_live_ranges_2(&cfg, &live_sets);
+    let live_ranges = compute_live_ranges(&cfg, &live_sets);
     println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
 }
