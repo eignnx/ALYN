@@ -2,7 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{Debug, Display},
 };
 
 use alyn_common::names::Tmp;
@@ -56,6 +56,18 @@ pub enum InstrExePhase {
     JustAfter,
 }
 
+impl Display for InstrExePhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let char = match self {
+            InstrExePhase::JustBefore => 'b',
+            InstrExePhase::ReadArgs => 'R',
+            InstrExePhase::WriteBack => 'W',
+            InstrExePhase::JustAfter => 'a',
+        };
+        write!(f, "{char}")
+    }
+}
+
 impl InstrExePhase {
     pub const PHASES: [Self; 4] = [
         Self::JustBefore,
@@ -65,10 +77,16 @@ impl InstrExePhase {
     ];
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PrgPt {
     stmt_idx: StmtIdx,
     phase: InstrExePhase,
+}
+
+impl Debug for PrgPt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{:?}", self.phase, self.stmt_idx)
+    }
 }
 
 impl PrgPt {
@@ -111,10 +129,9 @@ pub fn compute_live_ranges<R: Register, I: Instruction<Reg = R> + Accesses>(
                     let Some(end) = last_use.remove(&stg) else {
                         continue; // Never read from, so just ignore.
                     };
-                    live_ranges.entry(*stg).or_default().push(LiveRange {
-                        begin: PrgPt::new(i, phase),
-                        end,
-                    });
+                    let here = PrgPt::new(i, phase);
+                    let lr = LiveRange { begin: here, end };
+                    live_ranges.entry(*stg).or_default().push(lr);
                 }
             }
         }
@@ -183,23 +200,27 @@ pub fn compute_live_ranges_2<
         let mut live_set = live_sets.live_outs(bb_idx).clone();
         let mut live_ends = HashMap::<Stg<R>, PrgPt>::new();
 
+        // For each live-out, set it's end point within the `Bb` to be `JustAfter` the last statement
+        // of the `Bb`.
         for live in live_set.iter().copied() {
-            let last_idx_in_bb = cfg[bb_idx].instrs_range().end;
-            // TODO: WriteBack is correct here?
+            let last_idx_in_bb = cfg[bb_idx].instrs_range().end - 1.into();
             live_ends.insert(live, PrgPt::new(last_idx_in_bb, InstrExePhase::JustAfter));
         }
 
+        // Now process (in reverse order) each instruction in the `Bb`.
         for (stmt_idx, instr) in cfg.bb_instrs_indexed(bb_idx).rev() {
             for access in instr.clone().accesses() {
                 match access {
                     Access::Read(stg, phase) => {
-                        live_set.insert(*stg);
-                        live_ends.entry(*stg).or_insert(PrgPt::new(stmt_idx, phase));
+                        live_set.insert(*stg); // `stg` must be live at this point
+                        live_ends
+                            .entry(*stg) // If `stg` is not in the map, insert this as last use.
+                            .or_insert(PrgPt::new(stmt_idx, phase));
                     }
                     Access::Write(stg, phase) => {
-                        live_set.remove(stg);
-                        let end = live_ends.remove(stg).unwrap();
-                        let begin = PrgPt::new(stmt_idx, phase);
+                        live_set.remove(stg); // Above this point, `stg`'s value is irrelevant.
+                        let end = live_ends.remove(stg).unwrap(); // Get it's end
+                        let begin = PrgPt::new(stmt_idx, phase); // Here is it's start
                         live_ranges
                             .entry(*stg)
                             .or_default()
@@ -207,6 +228,21 @@ pub fn compute_live_ranges_2<
                     }
                 }
             }
+
+            // NOTE: We're iterating over instrs in reverse order through the `Bb`! 
+            println!();
+            println!("  live_ends: {:?}", live_ends); // State before the instr
+            println!("  live_set: {:?}", live_set);   // State before the instr
+            println!("{stmt_idx}: {instr:?}\t{:?}", instr.clone().accesses());
+        }
+
+        // If there's anything left in `live_ends`, it needs it's own live range for this `Bb`.
+        for (stg, end) in live_ends {
+            let begin_idx = cfg.bb_instrs_indexed(bb_idx).next().unwrap().0;
+            let begin = PrgPt::new(begin_idx, InstrExePhase::JustBefore);
+            live_ranges.entry(stg)
+                .or_default()
+                .push(LiveRange { begin, end });
         }
     }
 

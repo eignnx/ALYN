@@ -247,15 +247,16 @@ fn knr_binsearch() {
         Use(retval).into(),
         Ret.into(),
     ];
-    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 1 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
-    let live_ranges = compute_live_ranges(&stmts[..]);
     let cfg = Cfg::build_from(&stmts[..]);
-    println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
 
-    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 1 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+    //let live_ranges = compute_live_ranges(&stmts[..]);
+    //println!("{}", DisplayLiveRanges::new(&cfg, &live_ranges));
+
+    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_sets = LiveSets::build_from(&cfg, [].into_iter(), [].into_iter());
-    backpinning::display_bb_live_ins_outs(&cfg, &live_sets);
-    println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
+    //backpinning::display_bb_live_ins_outs(&cfg, &live_sets);
+    //println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
 
     println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% VERSION 2 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");
     let live_ranges = compute_live_ranges_2(&cfg, &live_sets);

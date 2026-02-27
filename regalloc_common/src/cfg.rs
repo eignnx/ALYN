@@ -1,18 +1,18 @@
 use std::{collections::{BTreeSet, HashMap}, fmt::Debug, ops::{Index, Range}};
 
 use alyn_common::names::Lbl;
-use derive_more::{Add, From};
+use derive_more::{Add, From, Sub};
 
 use crate::{cfg::bbs::{Bb, Terminator}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction};
 
 mod bbs;
 
-#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[display("{_0}")]
 #[debug("stmt#{_0}")]
 pub struct StmtIdx(usize);
 
-#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(derive_more::Display, derive_more::Debug, Clone, Copy, Add, Sub, From, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[display("BB{_0}")]
 #[debug("BB{_0}")]
 pub struct BbIdx(usize);

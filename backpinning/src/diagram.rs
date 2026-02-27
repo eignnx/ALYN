@@ -224,11 +224,12 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveR
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.draw_top_header(f)?;
 
+        let mut first_iter = true;
         for bb_idx in self.cfg.bbs() {
 
             let lbls = self.cfg.bb_labels(bb_idx).map(|l| l.to_string()).collect::<Vec<_>>();
             if lbls.is_empty() {
-                if bb_idx != BbIdx::from(0) {
+                if !first_iter {
                     // Draw basic block boundary
                     let (left, fill, right) = CHAR_SET.bb_boundary;
                     let fill = fill.pad().width(self.diagram_width);
@@ -291,8 +292,8 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveR
                     writeln!(f)?;
 
                 }
-                //////////
             }
+            first_iter = false;
         }
 
         self.draw_bottom_header(f)?;
