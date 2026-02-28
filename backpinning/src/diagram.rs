@@ -2,7 +2,7 @@ use core::fmt;
 use std::{collections::{BTreeSet, HashMap}, sync::LazyLock};
 
 use regalloc_common::{
-    cfg::{BbIdx, Cfg, StmtIdx}, ctrl_flow::{CtrlFlow, GetCtrlFlow}, stg::Stg, stmt::Stmt, Instruction, Register
+    cfg::{Cfg, StmtIdx}, ctrl_flow::GetCtrlFlow, stg::Stg, Instruction, Register
 };
 
 use crate::{InstrExePhase, LiveRange, PrgPt, pad::PadWith};
@@ -134,9 +134,17 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> DisplayLiveRanges<'a, R, I> {
         let side_crossing = CHAR_SET.border_side_crossing_x_guide;
         let ncolwidth = self.numcol_width;
 
-        let anchored_phase = InstrExePhase::ReadArgs;
-        let anchored_phase_index = InstrExePhase::PHASES.iter().position(|p| *p == anchored_phase).unwrap();
-        let Some(offset) = phases_mentioned.iter().position(|p| *p == phase).map(|idx| idx.abs_diff(anchored_phase_index)) else {
+        let anchored_phase_index = InstrExePhase::PHASES
+            .iter()
+            .position(|p| *p == ANCHORED_PHASE)
+            .unwrap();
+
+        let opt_offset = phases_mentioned
+            .iter()
+            .position(|p| *p == phase)
+            .map(|idx| idx.abs_diff(anchored_phase_index));
+
+        let Some(offset) = opt_offset else {
             match phase {
                 InstrExePhase::JustBefore => {
                     write!(f, "(b)")?;
@@ -173,7 +181,7 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> DisplayLiveRanges<'a, R, I> {
                 }
             }
         } else {
-            if phase == anchored_phase {
+            if phase == ANCHORED_PHASE {
                 write!(f, "{side}     {i:0ncolwidth$}: {instr:?}")?;
             }
         }
@@ -220,6 +228,8 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> DisplayLiveRanges<'a, R, I> {
     }
 }
 
+const ANCHORED_PHASE: InstrExePhase = InstrExePhase::ReadArgs;
+
 impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveRanges<'a, R, I> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.draw_top_header(f)?;
@@ -246,6 +256,10 @@ impl<'a, R: Register, I: fmt::Debug + GetCtrlFlow> fmt::Display for DisplayLiveR
                 let phases_mentioned = self.marked_phases_at_stmt_idx(i).collect::<BTreeSet<_>>();
 
                 for phase in InstrExePhase::PHASES {
+                    if !phases_mentioned.contains(&phase) && phase != ANCHORED_PHASE {
+                        // Nothing interesting happens in this phase; skip.
+                        continue;
+                    }
                     let pt = PrgPt::new(i, phase);
 
                     write!(f, "{} ", CHAR_SET.border_side)?;

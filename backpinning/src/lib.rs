@@ -195,12 +195,6 @@ pub fn compute_live_ranges<
                     }
                 }
             }
-
-            // NOTE: We're iterating over instrs in reverse order through the `Bb`! 
-            println!();
-            println!("  live_ends: {:?}", live_ends); // State before the instr
-            println!("  live_set: {:?}", live_set);   // State before the instr
-            println!("{stmt_idx}: {instr:?}\t{:?}", instr.clone().accesses());
         }
 
         // If there's anything left in `live_ends`, it needs it's own live range for this `Bb`.
